@@ -5,9 +5,9 @@ A machine is a folder under `machines/` named after the machine. Every kind has
 
 | Kind | C++ the machine supplies | Example |
 | --- | --- | --- |
-| `synth` | `engine.cpp` with `Voice`/`Shared` state, `display.cpp` and `panel.svg.fragment` | [2op FM](../machines/fm2op/engine.cpp), [Macro Osc](../machines/macroosc/engine.cpp) |
-| `sample` | `sample.cpp` with `Voice` state; the stock sample page is its screen | [Timestretch](../machines/timestretch/sample.cpp) |
-| `effect` | `fx.cpp` with `State`; the stock FX page is its screen | [Ring Mod](../machines/ringmod/fx.cpp) |
+| `synth` | `engine.cpp` with `Voice`/`Shared` state, `display.cpp` and `panel.svg.fragment` | [2op FM](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/fm2op/engine.cpp), [Macro Osc](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/macroosc/engine.cpp) |
+| `sample` | `sample.cpp` with `Voice` state; the stock sample page is its screen | [Timestretch](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/timestretch/sample.cpp) |
+| `effect` | `fx.cpp` with `State`; the stock FX page is its screen | [Ring Mod](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/ringmod/fx.cpp) |
 
 The [first-machine walkthrough](first-machine.md) creates a standalone synth
 and previews it without native integration. SDK adapters own allocation,
@@ -75,7 +75,7 @@ about the same on any computer:
 CPU estimate (host-timed; not measured on the device): Karplus about 7,700 Blackfin instructions per voice block at its heaviest setting. Aim for at most 15,000; for scale, 2op FM about 14,000, Macro Osc (Braids) about 9,000
 ```
 
-| Per 64-sample block | Aim for at most | Likely to drop audio above | Bundled machines |
+| Per 64-sample block | Aim for at most | Likely to drop audio above | Core machines |
 | --- | --- | --- | --- |
 | A synth voice | 15,000 | 24,000 | 2op FM about 14,000, Macro Osc (Braids) about 9,000 |
 | An effect, once per track | 30,000 | 48,000 | Ring Mod about 10,500 |
@@ -97,13 +97,13 @@ host does fast and the Blackfin does not:
 ## Definition
 
 Every machine kind keeps its controls in `definition.json` (for example
-[2op FM's](../machines/fm2op/definition.json)); the
+[2op FM's](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/fm2op/definition.json)); the
 [validator](../tooling/definitions.py) rejects missing or unknown fields.
 
 | Field | Contract |
 | --- | --- |
 | `schema` | 1 |
-| `id` | The machine's name, equal to a bundled machine's folder name; also its C++ namespace |
+| `id` | The machine's name; also its C++ namespace |
 | `name` | Display name |
 | `parameters` | Ordered controls, each with `id`, `label`, `default`, `mapping`, `display`: four to eight for a synth (see [alternate controls](#alternate-controls)), one to eight for a sample engine or effect. Labels are at most eight letters, digits or spaces |
 | `presets` | Named maps containing exactly the declared controls; may be empty |
@@ -133,7 +133,7 @@ inputs carry each position's shown value, its parameter index (`shown`) and
 every parameter's value (`slots`), so a [header value](display.md#frame)
 can format whichever is shown while dials follow their own parameters.
 Browser previews show the parameter last edited at each position. See
-[Macro Osc](../machines/macroosc/definition.json), whose fourth encoder
+[Macro Osc](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/macroosc/definition.json), whose fourth encoder
 switches between FM ratio and depth.
 
 On custom synth engine pages, Shift + turn edits the same visible parameter
@@ -312,7 +312,7 @@ Stock's page reads slots 0 to 3 as pitch, start, end and play mode. The SDK
 replaces pitch and play mode with the panel's, so only slots 1 and 2, the start
 and end trim overlays, reach stock directly; slot 0 keeps stock's ten-cent pitch
 editing, -12..12 semitones. The machine defines the remaining slots in
-`definition.json`. See [Timestretch](../machines/timestretch/controls.h).
+`definition.json`. See [Timestretch](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/timestretch/controls.h).
 
 ### Sample analysis
 
@@ -393,8 +393,7 @@ Without `dryParameter`, the adapter returns unity to preserve the source dry.
 
 ## Registration boundary
 
-A machine's ID (`definition.json`'s `id`, and the folder name of a bundled
-machine) is its stock name: the engine type the device lists, its catalog and
+A machine's ID (`definition.json`'s `id`) is its stock name: the engine type the device lists, its catalog and
 preset entries, its screen file, its symbol prefix and its C++ namespace. It is a lowercase letter followed by letters, digits or `_`, at most
 15 characters. It may not be a stock engine or effect type, a C++ keyword,
 `opxy` or `std`, or start with a reserved prefix (`extensions`, `sdk`, `kit`,
@@ -405,7 +404,7 @@ preset entries, its screen file, its symbol prefix and its C++ namespace. It is 
 | Field | Contract |
 | --- | --- |
 | `schema` | 1 |
-| `sdk` | The SDK version the machine targets, `"<major>.<minor>"`. This SDK is 1.0 and builds 1.0 machines |
+| `sdk` | The SDK version the machine targets, `"<major>.<minor>"`. This SDK is 1.1 and builds 1.0 and 1.1 machines |
 | `kind` | `synth`, `sample` or `effect` |
 | `description` | Plain text of at most 160 characters, shown by the builder and preview |
 | `identity` | The numbers it asks for: `{"engine": n, "page": p}`, or `{"effect": n, "page": 21}` for an effect; see below |
@@ -428,11 +427,12 @@ IDs above 32 and pages above 81 exist only in the relocated stock tables.
 Presets save a machine's name and projects its numbers, so a name never changes
 once published, and neither do a firmware's numbers.
 
-`identity` holds the numbers a machine asks for. The four bundled machines'
-are fixed: 2op 34/82, Macro Osc 26/83, Ring Mod effect 1 and Timestretch 35 on
-sample page 7. No other machine may be bundled with fixed numbers, since a
-layout may already hold any free number: `tests/fixtures/numbers.json` pins
-these four.
+`identity` holds the numbers a machine asks for. Four core machines, which
+the first Open-XY firmware shipped, have fixed numbers held in every firmware
+whether it includes them or not: 2op FM 34/82, Macro Osc 26/83, Ring Mod
+effect 1 and Timestretch 35 on sample page 7 (`FIXED_NUMBERS` in
+[`tooling/machines.py`](../tooling/machines.py)). No other machine gets fixed
+numbers, since a layout may already hold any free number.
 Every other machine is numbered by the firmware's **layout**: its record of
 every number it has given out, including to machines since dropped, which stay
 held so an old project never opens another machine. The builder and
@@ -441,7 +441,7 @@ the next build so every machine keeps its numbers. A machine new to the layout
 gets the numbers it asks for when they are free, otherwise the lowest free
 ones. New numbers come from engines 34..62 and pages 82..127, never from the
 gaps in stock's own engine table, so ask for numbers in those ranges; a
-sample engine keeps its stock page. Bundled Macro Osc predates this and keeps
+sample engine keeps its stock page. Macro Osc predates this and keeps
 engine 26.
 
 Generated adapters check record/name ownership and screen readiness before
@@ -450,5 +450,5 @@ See [native builds](build.md). Generated instrument presets use polyphonic
 voice mode.
 
 Arbitrary external-engine loading is not implemented: a machine reaches the
-firmware through the collection, bundled, from the [catalog](catalog.md), or as
-a folder passed to a build with `--machine`.
+firmware through the collection, from the [catalog](catalog.md) or as a folder
+passed to a build with `--machine`.

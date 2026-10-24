@@ -23,7 +23,8 @@ effect and page numbers are not the catalog's: each firmware's
 | `status` | `reserved`: the ID is held for a machine being written. `published`: built from its release. `retired`: no longer built; its ID stays held |
 | `repository`, `tag`, `commit`, `path` | A published machine's release: `https://github.com/<owner>/<repo>`, the tag, its full commit SHA, and the machine's folder in the repository (`.` at the root). A retired entry may keep them |
 
-IDs are unique across the catalog and the bundled machines.
+IDs are unique across the catalog. Open-XY's own machines are entries like
+any other, published from the [core machines](https://github.com/etcetc000/open-xy-core-machines).
 
 The builder's machine details panel links to the catalog's maintainer profile,
 repository and source at the pinned release commit. Community machines also
@@ -33,8 +34,8 @@ show a short notice about support and possible instability or unexpected audio.
 
 | Command | Does |
 | --- | --- |
-| `python sdk.py catalog check [--base <ref>] [--allow-control-changes]` | Validates the catalog against itself and the bundled machines. With `--base`, also against an earlier catalog: every entry stays, with its kind, and its status only moves forward; a published machine whose commit moved is fetched at both commits and its [controls compared](#controls) |
-| `python sdk.py catalog fetch [--tags]` | Fetches every published machine at exactly its commit into `local/catalog/`, checks it matches its entry and writes `local/catalog/collection.json`: the bundled machines, then every published one. `--tags` also confirms each tag still names its commit |
+| `python sdk.py catalog check [--base <ref>] [--allow-control-changes]` | Validates the catalog. With `--base`, also against an earlier catalog: every entry stays, with its kind, and its status only moves forward; a published machine whose commit moved is fetched at both commits and its [controls compared](#controls) |
+| `python sdk.py catalog fetch [--tags]` | Fetches every published machine at exactly its commit into `local/catalog/`, checks it matches its entry and writes `local/catalog/collection.json`: every published machine, in catalog order. `--tags` also confirms each tag still names its commit |
 | `python sdk.py catalog test [--tags]` | Fetches, then runs [`sdk.py test`](first-machine.md#what-you-own) on every published machine |
 
 A fetched folder that changed is refused; delete it to fetch again. Pass the
@@ -52,10 +53,9 @@ a separate pull request.
 
 The [Catalog workflow](../.github/workflows/catalog.yml) runs on every pull
 request that changes `catalog/` or anything published machines build against
-(the SDK, tooling, profiles, linker script or bundled machines). It validates the catalog, fetches each
+(the SDK, tooling, profiles or linker script). It validates the catalog, fetches each
 published machine and checks it as its own repository's CI does, and compiles
-the firmware module with the bundled machines and all published ones on the
-pinned Windows tools.
+the firmware module with all of them on the pinned Windows tools.
 
 Merged catalog changes reach the site with the next release
 ([`sdk.py release`](builder.md#cloudflare-deployment)): beta from `staging`,

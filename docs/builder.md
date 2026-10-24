@@ -40,8 +40,7 @@ leaves the browser.
    **Community** and start unselected; their details name the maintainer and
    link to the machine's code at the commit the catalog pins. Open-XY's own
    example machines from the catalog are labelled as Open-XY machines. A
-   [personal kit](#export-a-kit)'s own machines are marked **Yours**; the rest
-   are bundled with Open-XY.
+   [personal kit](#export-a-kit)'s own machines are marked **Yours**.
 4. Follow the installation guide using the remembered computer choice. Mac
    browsers with WebUSB send the files directly; Windows downloads a ZIP to
    copy with File Explorer. The OS write step on the device is still manual.
@@ -160,8 +159,8 @@ python sdk.py release --stock-os <stock-1.2.0>/os.ldr --out <builds>/release-001
 ```
 
 It fetches every published [catalog](catalog.md) machine at its pinned commit
-(confirming its tag), exports the release kit from the bundled machines plus
-those ([Export a kit](#export-a-kit), with release verification), runs the
+(confirming its tag), exports the release kit from them
+([Export a kit](#export-a-kit), with release verification), runs the
 builder's web tests, builds the site around the kit and deploys it. It deploys
 beta only from `staging` and production only from `main`, and only when the
 checkout is exactly that branch on `origin`: no local edits, nothing unpushed or
@@ -196,8 +195,8 @@ authenticated stock menu and the SDK screen template; firmware stays
 user-supplied. It is named only after every check passes.
 
 A published kit comes from the release host, after
-[release verification](build.md#release-verification). It holds the bundled
-machines and [catalog](catalog.md) machines fetched at their pinned commits
+[release verification](build.md#release-verification). It holds the
+[catalog](catalog.md)'s machines fetched at their pinned commits
 (`--collection local/catalog/collection.json`), each with its repository, tag,
 commit and maintainer. For your own machines,
 add `--personal`: it runs on any pinned host, Windows or Apple-silicon macOS,

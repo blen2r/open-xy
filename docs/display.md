@@ -10,7 +10,7 @@ rasterization can differ.
 
 There is one display contract. Characters, dials, keyboards, meters and other
 patterns are the machine's own code filling nodes; see
-[Macro Osc's segment characters](../machines/macroosc/segments.hpp).
+[Macro Osc's segment characters](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/macroosc/segments.hpp).
 
 ## Declaration
 
@@ -178,8 +178,8 @@ device can supply its own platform template and backend. The browser authenticat
 the embedded template, while native packaging records it in source provenance.
 Template validation checks structure, not actual device text rendering.
 
-See [2op display.cpp](../machines/fm2op/display.cpp) (outlines and pulses) and
-[Macro display.cpp](../machines/macroosc/display.cpp) (segment characters,
+See [2op display.cpp](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/fm2op/display.cpp) (outlines and pulses) and
+[Macro display.cpp](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/macroosc/display.cpp) (segment characters,
 glow, dials and header text) for implementations.
 How screens reach stock is described in the [firmware ABI](abi-1.2.0.md#screens).
 
@@ -198,8 +198,8 @@ replaced with this one. To bring one up to date:
   merges repeated points.
 - A `"kind": "segments"` display, or code that includes `opxy/segments.hpp`,
   draws with this contract instead. Macro Osc keeps its own
-  [segments.hpp](../machines/macroosc/segments.hpp) and
-  [display.cpp](../machines/macroosc/display.cpp): copy the parts you need into
+  [segments.hpp](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/macroosc/segments.hpp) and
+  [display.cpp](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/macroosc/display.cpp): copy the parts you need into
   your machine and declare nodes for them.
 - Code that fills a `Node` directly also sets its rotation (`cos`, `sin`);
   `place`, `shade` and `turn` do this for you.

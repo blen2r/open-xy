@@ -20,7 +20,7 @@ See [Cloudflare deployment](docs/builder.md#cloudflare-deployment).
 ## Where changes belong
 
 Start with [Your first machine](docs/first-machine.md), then the
-[engine API](docs/api.md) and either bundled example. Keep changes
+[engine API](docs/api.md) and the [core machines](https://github.com/etcetc000/open-xy-core-machines). Keep changes
 in the layer that owns the behavior:
 
 | Change | Location |
@@ -36,8 +36,9 @@ schema for every kind), `machine.json`, artwork and `tests/`. It never holds
 build scripts; a new machine is not a reason to add code to `tooling/`. A new
 callback contract or native identity still needs SDK work. New machines live
 in their own repositories and reach the builder through the [catalog](docs/catalog.md)
-([submitting a machine](https://github.com/etcetc000/open-xy-machine-template/blob/main/SUBMITTING.md));
-`machines/` holds the bundled reference machines.
+([submitting a machine](https://github.com/etcetc000/open-xy-machine-template/blob/main/SUBMITTING.md)).
+This repository holds no machines; Open-XY's own are in the
+[core machines](https://github.com/etcetc000/open-xy-core-machines), published the same way.
 
 ## Checks
 

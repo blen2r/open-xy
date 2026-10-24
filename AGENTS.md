@@ -3,12 +3,13 @@
 ## First, which task is this?
 
 - **Making a machine** (an instrument or effect, a "plugin"): it does not go in
-  this repository. Start a repository of your own from the
+  this repository, which holds only the SDK and the catalog. Start a repository
+  of your own from the
   [machine template](https://github.com/etcetc000/open-xy-machine-template) and
   follow its README and AGENTS.md. Use this checkout only as the SDK beside it,
   for example `python ../open-xy/sdk.py test --machine machines/<id>`. Do not
-  add machines to `machines/`, or change `sdk/`, `tooling/` or tests, to make a
-  machine work. If the SDK lacks something it needs, that is a separate SDK
+  add a machine to this repository, or change `sdk/`, `tooling/` or tests, to
+  make a machine work. If the SDK lacks something it needs, that is a separate SDK
   pull request.
 - **Submitting a machine to the builder:** a pull request against `staging` that
   changes only `catalog/machines.json`, adding or updating that machine's one
@@ -19,11 +20,11 @@
   pull request against `staging`. `main` only receives releases from `staging`;
   never base work on it or target it.
 
-Examples to read before writing a machine: the bundled machines in `machines/`
-(synths `fm2op` and `macroosc`, effect `ringmod`, sample engine `timestretch`),
-the template's own examples, and
-[Karplus](https://github.com/etcetc000/open-xy-karplus), a machine in its own
-repository published through the catalog.
+This repository holds no machines. Examples to read before writing one: the
+template's own, and Open-XY's
+[core machines](https://github.com/etcetc000/open-xy-core-machines): synths 2op FM, Macro Osc and Karplus, the Timestretch
+sample engine, and the Ring Mod and Ping Pong send effects, each published
+through the catalog like any other machine.
 
 ## SDK changes
 

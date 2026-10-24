@@ -10,10 +10,11 @@ preview toolchain with `python sdk.py doctor --preview`; custom schema-1 sources
 build with `python sdk.py preview --source /path/to/machine --out local/custom-001`.
 Custom sources always use local authoring checks and cannot qualify a collection.
 
-Build a selected example, then serve its authenticated snapshot:
+Build a machine folder, such as one of the [core machines](https://github.com/etcetc000/open-xy-core-machines) cloned
+beside this repository, then serve its authenticated snapshot:
 
 ```sh
-python sdk.py preview --engine fm2op --out local/preview-001
+python sdk.py preview --machine ../open-xy-core-machines/machines/fm2op --out local/preview-001
 python tools/serve_harness.py --preview local/preview-001
 ```
 

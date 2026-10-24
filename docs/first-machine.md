@@ -44,7 +44,7 @@ python tools/serve_harness.py --preview local/my-preview-001
 Add the same `--cxx` option from the doctor to the `preview` command if needed.
 The ID follows the [machine name rule](api.md#registration-boundary): a
 lowercase letter, then up to 14 lowercase letters, digits or underscores. It
-must differ from the bundled machines.
+must differ from every [catalog](catalog.md) machine's.
 
 `sdk.py new` starts a synth; `--kind effect` starts a send effect instead
 (effects have no browser preview). Every starter has a sound check in
@@ -113,9 +113,9 @@ does not change your machine.
 `python sdk.py test --machine local/mymachine` checks a machine folder the way
 a machine repository's CI does: its records and sources, a preview build and
 its `tests/*.cpp`, compiled with a host C++ compiler (`--host-cxx`, default
-`c++`). It also prints a [CPU estimate](api.md#cpu) next to the bundled
-machines; keep it within their range. `--firmware` adds a native compile with
-the bundled machines.
+`c++`). It also prints a [CPU estimate](api.md#cpu) next to the core
+machines'; keep it within their range. `--firmware` adds a native compile of
+the machines given.
 
 Change labels and presets directly in `definition.json`; custom previews read it
 when building, with no separate JavaScript definition generator. Parameter
