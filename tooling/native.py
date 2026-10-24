@@ -767,7 +767,8 @@ def main(argv=None, command=None):
             require((args.stock_content / 'op1_factory.json').is_file(),
                     f'--stock-content must be the folder holding op1_factory.json '
                     f'(a copy of the device\'s /content): {args.stock_content}')
-        entries = None if command == 'verify' else selected_collection(args)
+        # A package records the collection it was built from.
+        entries = package_collection(args.package) if command == 'verify' else selected_collection(args)
         layout = read_layout(args.layout) if command != 'verify' and args.layout else None
         profile, machines, definitions = configuration(entries, layout)
         tools = resolve_toolchain(args.toolchain, args.compiler)
