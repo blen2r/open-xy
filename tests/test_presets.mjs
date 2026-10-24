@@ -6,15 +6,16 @@ import {buildAssets, presetPath, sha256} from '../builder/core.mjs';
 const read = path => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
 // Catalog entries as the Python SDK writes them (any valid Q15 defaults).
 const entry = (id, params) => ',\n        ' + JSON.stringify({type:id, default_params:params});
-const machines = ['fm2op', 'macroosc', 'timestretch'].map((id, i) => {
-  const machine = JSON.parse(read(`machines/${id}/machine.json`));
+// Test fixture machines (tests/fixtures/machines): two synths and a sample engine with amp defaults.
+const machines = ['probesynth', 'probesources', 'probesample'].map((id, i) => {
+  const machine = JSON.parse(read(`tests/fixtures/machines/${id}/machine.json`));
   return {id, kind: machine.kind, catalog: entry(id, [i, 1000 * i, 32767, 0, 0, 0, 0, 0]),
     presetDefaults: machine.presetDefaults ?? {}};
 });
-machines.push({id:'ringmod', kind:'effect',
-  catalog:entry('ringmod', [0, 32767, 0, 0, 0, 0, 0, 0]).replace('"type":"ringmod"', '"type":"ringmod","id":1')});
+machines.push({id:'probefx', kind:'effect',
+  catalog:entry('probefx', [0, 32767, 0, 0, 0, 0, 0, 0]).replace('"type":"probefx"', '"type":"probefx","id":3')});
 // The numbers a layout gave: the effect's menu entry carries its own.
-const numbers = {ringmod: {effect: 6, page: 21}};
+const numbers = {probefx: {effect: 6, page: 21}};
 
 async function fixture(selectedMachines = machines) {
   // Authored menu fixture with its own insertion points; no captured firmware or factory content.
@@ -33,7 +34,7 @@ test('all selections include only their instrument presets with native names and
       ...selected.filter(m=>m.kind!=='effect').map(m=>`content/presets/${m.id}/default.json`)].sort());
     for(const m of selected.filter(m=>m.kind!=='effect')) {
       const p=JSON.parse(new TextDecoder().decode(files[presetPath(m)]));
-      assert.equal(p.type,{'fm2op':'fm2op','macroosc':'macroosc',timestretch:'timestretch'}[m.id]);
+      assert.equal(p.type,{probesynth:'probesynth',probesources:'probesources',probesample:'probesample'}[m.id]);
       assert.equal(p.version,4); assert.equal(p.platform,'OP-XY');
       assert.deepEqual(p.engine.params,JSON.parse(m.catalog.slice(1)).default_params);
       assert.equal(p.engine.playmode,'poly');
@@ -47,14 +48,14 @@ test('all selections include only their instrument presets with native names and
     }
     const menu=JSON.parse(new TextDecoder().decode(files['content/op1_factory.json']));
     assert.deepEqual(menu.engine_types[0],{type:'existing'});
-    if (selected.some(m=>m.id==='ringmod')) assert.equal(menu.fx_types.at(-1).id,6);
+    if (selected.some(m=>m.id==='probefx')) assert.equal(menu.fx_types.at(-1).id,6);
     assert.deepEqual(Object.keys(files).filter(p=>p.startsWith('user/')),[]);
   }
   assert.deepEqual(machines,original);
 });
 
 test('preset generation rejects unsafe paths, foreign kinds and invalid engine parameter values', async () => {
-  for(const id of ['../fm2op','two/op','two\\op','']) assert.throws(()=>presetPath({id,kind:'synth'}));
+  for(const id of ['../probesynth','two/op','two\\op','']) assert.throws(()=>presetPath({id,kind:'synth'}));
   assert.throws(()=>presetPath({id:'example',kind:'unknown'}));
   for(const params of [[0],Array(8).fill(-1),Array(8).fill(32768),Array(8).fill(.5),Array(8).fill(null)]) {
     const m={id:'example',kind:'synth',catalog:', '+JSON.stringify({type:'example',default_params:params})};

@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from dataclasses import replace
 from tooling.adapters import generate_sample_callbacks, generate_screen_order
-from tooling.machines import machine
 from tooling.startup import generate as generate_startup
+from machine_fixtures import fixture
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -36,7 +36,7 @@ class SampleServices(unittest.TestCase):
             binary = Path(folder) / (name + ('.exe' if os.name == 'nt' else ''))
             hidden = dict(creationflags=subprocess.CREATE_NO_WINDOW) if os.name == 'nt' else {}
             if name == 'sample_callbacks':
-                probe = replace(machine('timestretch'), id='probe', identity=dict(engine=46, page=7))
+                probe = replace(fixture('probesample'), id='probe', identity=dict(engine=46, page=7))
                 generate_sample_callbacks(folder, [probe])
                 # Exercise the real tempo readers and assignment bridge with
                 # host addresses standing in for stock functions and globals.

@@ -20,7 +20,7 @@ function elf() {
   section(4,[23,3,0,0,96,names.length,0,0,1,0]);
   return bytes;
 }
-function machine(id, engine, page, origin='bundled') { return {id, prefix:id, kind:'synth', identity:{engine,page}, absent:{}, origin}; }
+function machine(id, engine, page, origin='personal') { return {id, prefix:id, kind:'synth', identity:{engine,page}, absent:{}, origin}; }
 const profileBytes = readFileSync(new URL('../profiles/opxy-1.2.0.json',import.meta.url));
 function fixture() {
   const object = {...readObject(elf()), name:'a.o',owner:'a'};
@@ -112,7 +112,7 @@ test('saved layouts restore numbers and selections, including older saved select
   assert.throws(()=>readLayout(k,{format:'opxy-layout/1',profile:'wrong',machines:{}}),/different OS version/);
   assert.throws(()=>readLayout(k,{format:'opxy-layout/1',profile:id,selected:['missing'],machines:{}}),/doesn’t have/);
   assert.throws(()=>readLayout(k,{format:'opxy-layout/1',profile:id,machines:{a:{engine:'34',page:82}}}),/Invalid numbers/);
-  assert.throws(()=>linkKit(k,['a'],{a:{engine:40,page:90}}),/bundled with fixed numbers/);
+  assert.throws(()=>linkKit(k,['a'],{a:{engine:40,page:90}}),/a has fixed numbers/);
 });
 test('undefined imports never silently become zero', () => {
   const k=fixture(), o=k.objects[0];
@@ -158,7 +158,7 @@ test('curated profile and object authentication reject modified input', async ()
   k.objects[0].sha256='0'.repeat(64); await assert.rejects(openKit(k),/hash mismatch/);
   k.profile.patches[0].after='0000000000000000'; await assert.rejects(openKit(k),/reviewed profile/);
 });
-test('a machine says where it comes from: bundled, a catalog release, or a personal folder', async () => {
+test('a machine says where it comes from: a catalog release or a personal folder', async () => {
   const source = {repository:'https://github.com/someone/opxy-probe', tag:'v1.0.0', commit:'a'.repeat(40), maintainer:'someone'};
   assert.ok(validSource(source));
   assert.equal(sourceUrl(source), 'https://github.com/someone/opxy-probe/tree/' + 'a'.repeat(40));
@@ -169,18 +169,20 @@ test('a machine says where it comes from: bundled, a catalog release, or a perso
                         {extra:1}])
     assert.ok(!validSource({...source, ...change}), JSON.stringify(change));
   assert.ok(!validSource(null) && !validSource(undefined) && !validSource('https://github.com/a/b'));
-  assert.ok(validOrigin({origin:'catalog', source}) && validOrigin({origin:'bundled'}) && validOrigin({origin:'personal'}));
-  for (const m of [{origin:'catalog'}, {origin:'official'}, {origin:'bundled', source}, {origin:'personal', source}, {},
+  assert.ok(validOrigin({origin:'catalog', source}) && validOrigin({origin:'personal'}));
+  // The SDK bundles no machines, so no machine comes from it.
+  for (const m of [{origin:'catalog'}, {origin:'official'}, {origin:'bundled'}, {origin:'bundled', source}, {origin:'personal', source}, {},
                    {origin:'community'}])
     assert.ok(!validOrigin(m), JSON.stringify(m));
   assert.ok(validOrigin({origin:'official', source}));
   // Community machines start unselected; Open-XY's own and the user's start selected.
-  assert.deepEqual(['bundled', 'official', 'catalog', 'personal'].map(origin => chosenByDefault({origin})), [true, true, false, true]);
+  assert.deepEqual(['official', 'catalog', 'personal'].map(origin => chosenByDefault({origin})), [true, false, true]);
   const k=fixture(); k.format='opxy-browser-kit/1'; k.profileSource=profileBytes.toString('base64');
   k.objects=[]; k.stockCatalog=''; k.screenTemplate=readFileSync(new URL('../sdk/platform/opxy-1.2.0/screen.svg',import.meta.url),'utf8');
   Object.assign(k.machines[0], {origin:'catalog', source}); k.fixed={}; await openKit(k);
-  // A bundled machine's numbers are the kit's fixed ones, and only bundled machines have them.
-  k.fixed={a:{engine:34,page:82}}; await assert.rejects(openKit(k), /Bundled machine numbers differ/); k.fixed={};
+  // A machine with fixed numbers (kit.fixed), from wherever it comes, uses exactly those.
+  k.fixed={a:{engine:34,page:82}}; await openKit(k);
+  k.fixed={a:{engine:35,page:83}}; await assert.rejects(openKit(k), /Fixed machine numbers differ: a/); k.fixed={};
   k.machines[0].source = {...source, repository:'https://evil.example/a/b'};
   await assert.rejects(openKit(k), /Invalid machine origin/);
 });

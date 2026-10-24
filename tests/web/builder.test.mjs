@@ -63,7 +63,7 @@ test('collection builds require fresh external output, including config override
   const collection = {format:'opxy-browser-kit/1',version:'0.0.2',profile:JSON.parse(profileSource),
     profileSource:profileSource.toString('base64'),objects:[],stockCatalog:'',screenTemplate,
     fixed:{fixture:{engine:34,page:82}},
-    machines:[{id:'fixture',kind:'synth',identity:{engine:34,page:82},origin:'bundled'}]};
+    machines:[{id:'fixture',kind:'synth',identity:{engine:34,page:82},origin:'personal'}]};
   const source = join(directory,'kit.json');
   const external = join(directory,'site');
   try {

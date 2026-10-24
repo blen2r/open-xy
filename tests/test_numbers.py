@@ -8,10 +8,11 @@ import unittest
 
 from tooling.adapters import (generate_display, generate_fx_object, generate_registration, generate_sample_callbacks,
                               generate_sample_voice, generate_screen, generate_synth_controls, generate_voice)
-from tooling.machines import (LAYOUT_FORMAT, ROOT, by_kind, collection, discovered, layout_document, number_layout,
+from tooling.machines import (FIXED_NUMBERS, LAYOUT_FORMAT, ROOT, by_kind, collection, layout_document, number_layout,
                               read_layout)
 from tooling.pipeline import config
 from tooling.startup import generate as generate_startup
+from machine_fixtures import fixture, fixture_entries
 
 
 def renumbered(m):
@@ -52,7 +53,7 @@ def sources(directory, machines):
 
 class LinkTimeNumbers(unittest.TestCase):
     def test_generated_sources_do_not_depend_on_machine_numbers(self):
-        machines = collection()
+        machines = collection(fixture_entries())
         self.assertEqual({m.kind for m in machines}, {'synth', 'effect', 'sample'})
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
             before, after = sources(first, machines), sources(second, [renumbered(m) for m in machines])
@@ -67,8 +68,8 @@ class Layouts(unittest.TestCase):
         cases = json.loads((ROOT / 'tests/fixtures/numbers.json').read_text(encoding='utf-8'))
         rules = config()['identities']
         fixed = cases['fixed']
-        # The cases' fixed machines are this repository's bundled ones.
-        self.assertEqual({name: identity for name, _kind, identity in fixed}, {m.id: m.identity for m in discovered()})
+        # The cases' fixed machines are the SDK's fixed numbers.
+        self.assertEqual({name: identity for name, _kind, identity in fixed}, FIXED_NUMBERS)
         for case in cases['cases']:
             with self.subTest(case=case['name']):
                 run = lambda: number_layout(rules, fixed, case.get('layout'), case['machines'])
@@ -81,7 +82,7 @@ class Layouts(unittest.TestCase):
                                      case['numbers'])
 
     def test_layout_files_round_trip_and_name_their_profile(self):
-        numbers = {m.id: m.identity for m in discovered()} | {'pluck': {'engine': 36, 'page': 84}}
+        numbers = FIXED_NUMBERS | {'pluck': {'engine': 36, 'page': 84}}
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'layout.json'
             document = dict(layout_document(numbers), selected=['pluck'])  # the builder adds its selection
@@ -96,8 +97,18 @@ class Layouts(unittest.TestCase):
         self.assertEqual(layout_document({})['format'], LAYOUT_FORMAT)
 
     def test_a_collection_takes_its_numbers_from_the_layout(self):
-        machines = collection(layout={'gone': {'engine': 40, 'page': 90}})
-        self.assertEqual({m.id: m.identity for m in machines}, {m.id: m.identity for m in discovered()})
+        entries = fixture_entries()
+        requested = {m.id: m.identity for m in collection(entries)}
+        self.assertEqual(requested, {e: fixture(e).identity for e in requested})
+        # A layout's numbers win over the ones a machine asks for; dropped machines' stay held.
+        synth = fixture('probesynth').identity
+        layout = {'gone': {'engine': synth['engine'], 'page': 90}, 'probefx': {'effect': 11, 'page': 21}}
+        machines = {m.id: m for m in collection(entries, layout=layout)}
+        self.assertEqual(machines['probefx'].identity, {'effect': 11, 'page': 21})
+        self.assertEqual(machines['probefx'].requested, fixture('probefx').identity)
+        self.assertNotEqual(machines['probesynth'].identity['engine'], synth['engine'])
+        self.assertEqual({k: v.identity for k, v in machines.items() if k not in ('probefx', 'probesynth')},
+                         {k: v for k, v in requested.items() if k not in ('probefx', 'probesynth')})
 
 
 if __name__ == '__main__':

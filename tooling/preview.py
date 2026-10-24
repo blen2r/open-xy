@@ -132,8 +132,8 @@ def preview_bundle(directory, *, require_reference=False):
             manifest['kind'] == 'cpp-browser-preview' and type(manifest['sample_rate']) is int and
             manifest['sample_rate'] == 44100, 'Unsupported preview contract')
     root = manifest['root']
-    require(root is None or isinstance(root, str) and Path(root).is_absolute(), 'Invalid machine folder in preview')
-    m = machine(manifest['engine']) if root is None else machine_at(root)
+    require(isinstance(root, str) and Path(root).is_absolute(), 'Invalid machine folder in preview')
+    m = machine_at(root)
     require(m.id == manifest['engine'] and m.kind == 'synth', 'Browser previews audition synths')
     require(manifest['sources'] == source_hashes(m), 'Preview is stale; rebuild from current source')
     require(manifest['definition'] == m.definition and manifest['description'] == m.description,

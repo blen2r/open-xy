@@ -11,7 +11,8 @@ import tempfile
 import unittest
 
 from tooling import catalog
-from tooling.machines import ROOT
+from tooling.machines import FIXED_NUMBERS, ROOT
+from machine_fixtures import FOLDER
 
 PUBLISHED = dict(id='probe', kind='synth', maintainer='someone',
                  status='published', repository='https://github.com/someone/opxy-probe', tag='v1.0.0',
@@ -50,9 +51,14 @@ class Validation(unittest.TestCase):
     def test_ids_are_held_once(self):
         other = dict(PUBLISHED, id='other')
         catalog.validate(document(PUBLISHED, other))
-        for clash in (dict(other, id='probe'), dict(other, status='retired', id='probe'), dict(PUBLISHED, id='fm2op')):
+        for clash in (dict(other, id='probe'), dict(other, status='retired', id='probe')):
             with self.subTest(clash=clash), self.assertRaisesRegex(ValueError, 'already'):
-                catalog.validate(document(PUBLISHED, clash) if clash['id'] == 'probe' else document(clash))
+                catalog.validate(document(PUBLISHED, clash))
+        # Open-XY's own machines are catalog entries like any other, so their IDs are held there.
+        entries = catalog.load()
+        self.assertLessEqual(set(FIXED_NUMBERS), {e['id'] for e in entries})
+        with self.assertRaisesRegex(ValueError, 'already'):
+            catalog.validate(document(*entries, dict(PUBLISHED, id='fm2op')))
 
 
 class Official(unittest.TestCase):
@@ -96,9 +102,9 @@ class Fetching(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         root = Path(self.temporary.name).resolve()
-        # A machine repository: fm2op renamed to probe, committed and tagged.
+        # A machine repository: the probesynth fixture renamed to probe, committed and tagged.
         self.repository = root / 'opxy-probe'
-        shutil.copytree(ROOT / 'machines/fm2op', self.repository)
+        shutil.copytree(FOLDER / 'probesynth', self.repository)
         definition = json.loads((self.repository / 'definition.json').read_text(encoding='utf-8'))
         definition['id'] = 'probe'
         (self.repository / 'definition.json').write_text(json.dumps(definition), encoding='utf-8')
@@ -158,7 +164,7 @@ class Controls(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         root = Path(self.temporary.name).resolve()
         self.repository = root / 'opxy-probe'
-        shutil.copytree(ROOT / 'machines/fm2op', self.repository)
+        shutil.copytree(FOLDER / 'probesynth', self.repository)
         record = json.loads((self.repository / 'machine.json').read_text(encoding='utf-8'))
         record['identity'] = dict(engine=5, page=85)
         (self.repository / 'machine.json').write_text(json.dumps(record), encoding='utf-8')
@@ -194,14 +200,14 @@ class Controls(unittest.TestCase):
         self.assertEqual(self.update(copy.deepcopy(self.parameters)), [])
         relabelled = copy.deepcopy(self.parameters)
         relabelled[0].update(label='Harmonic', default=0.5)
-        self.assertEqual(self.update(relabelled), ['probe v1.0.0 -> v1.1.0: parameter 0 (ratio): label Ratio -> Harmonic',
-                                                   'probe v1.0.0 -> v1.1.0: parameter 0 (ratio): default 0.3333333333333333 -> 0.5'])
+        self.assertEqual(self.update(relabelled), ['probe v1.0.0 -> v1.1.0: parameter 0 (shape): label Shape -> Harmonic',
+                                                   'probe v1.0.0 -> v1.1.0: parameter 0 (shape): default 0.3333333333333333 -> 0.5'])
         # A release that keeps its commit is not fetched.
         self.assertEqual(catalog.release_controls([self.before], [dict(self.before, repository='file:///missing')]), [])
 
     def test_an_appended_parameter_passes(self):
-        report = self.update(self.parameters + [self.alternate('width')])
-        self.assertEqual(report, ['probe v1.0.0 -> v1.1.0: parameter 5 (width): added'])
+        report = self.update(self.parameters + [self.alternate('depth')])
+        self.assertEqual(report, ['probe v1.0.0 -> v1.1.0: parameter 5 (depth): added'])
 
     def test_control_changes_fail_naming_the_parameter(self):
         reordered = copy.deepcopy(self.parameters)
@@ -213,9 +219,9 @@ class Controls(unittest.TestCase):
         moved = copy.deepcopy(self.parameters)
         moved[4]['control'] = 2
         for parameters, message in ((self.parameters[:4], r'parameter 4 \(spread\): removed'),
-                                    (reordered, r'parameter 1 \(amount\): moved to parameter 2'),
-                                    (remapped, r'parameter 3 \(decay\): mapping changed'),
-                                    (renamed, r'parameter 3 \(decay\): id changed to release'),
+                                    (reordered, r'parameter 1 \(width\): moved to parameter 2'),
+                                    (remapped, r'parameter 3 \(motion\): mapping changed'),
+                                    (renamed, r'parameter 3 \(motion\): id changed to release'),
                                     (moved, r'parameter 4 \(spread\): control position changed from 0 to 2')):
             with self.subTest(message=message):
                 with self.assertRaisesRegex(ValueError, '(?s)' + message + '.*controls-changed'):

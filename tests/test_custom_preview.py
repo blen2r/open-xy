@@ -105,10 +105,12 @@ class CustomPreviewTests(unittest.TestCase):
 
     def test_custom_definition_cannot_reuse_curated_identity(self):
         definition, _ = custom.metadata(custom.source_files(self.source))
-        definition['id'] = 'fm2op'
-        (self.source / 'definition.json').write_text(json.dumps(definition))
-        with self.assertRaisesRegex(ValueError, 'distinct local machine ID'):
-            custom.metadata(custom.source_files(self.source))
+        # A machine with fixed numbers, and one the catalog holds the ID of.
+        for identity in ('fm2op', 'karplus'):
+            definition['id'] = identity
+            (self.source / 'definition.json').write_text(json.dumps(definition))
+            with self.subTest(identity=identity), self.assertRaisesRegex(ValueError, 'distinct local machine ID'):
+                custom.metadata(custom.source_files(self.source))
 
     def test_includes_cannot_escape_source_or_use_an_untracked_header(self):
         path = self.source / 'engine.cpp'

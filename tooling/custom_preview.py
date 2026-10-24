@@ -50,7 +50,11 @@ def source_files(directory):
 
 def custom_identity(identity):
     stock_name(identity)
-    require(not (ROOT / 'machines' / identity).exists(), 'Choose a distinct local machine ID')
+    # Published machines hold their IDs for good (catalog/machines.json), as do those with fixed numbers.
+    from .catalog import load
+    from .machines import FIXED_NUMBERS
+    require(identity not in FIXED_NUMBERS and all(e['id'] != identity for e in load()),
+            'Choose a distinct local machine ID')
 
 
 def metadata(files):

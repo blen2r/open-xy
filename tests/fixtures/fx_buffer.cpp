@@ -2,7 +2,7 @@
 // through the generated method table, and no buffer anywhere else.
 #include <cstdlib>
 #include <initializer_list>
-#include "fx_object_ringmod.cpp"
+#include "fx_object_probefx.cpp"
 
 static opxy::i32 scratch[2][16];
 static opxy::u32 asked_slot, asked_bytes;
@@ -17,7 +17,7 @@ opxy::platform::Address opxy::platform::host_stock_address(Address address) {
 
 int main() {
     Object storage = {};
-    Object* object = static_cast<Object*>(ringmod_fx_factory(&storage));
+    Object* object = static_cast<Object*>(probefx_fx_factory(&storage));
     if (object != &storage || object->buffer) return 1;
     const void* const* table = object->vtable;
     typedef void (*Init)(void*, opxy::u32);
