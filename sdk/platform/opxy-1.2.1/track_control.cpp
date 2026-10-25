@@ -9,6 +9,13 @@
 // notices stock's own writes over an overlaid value, gives the machine every
 // value without overlays, writes its new overlay through 8d5acea8, and
 // restores what stock last set wherever the machine stopped overlaying.
+//
+// Capture: 8d5ad564, the encoder edit stock's controllers reach through
+// 8d5ad5bc, reads the base value at track data + 0x3864 and, unless a step is
+// held for a lock, calls the setter 8d5acf28 with the new value. That call at
+// 8d5ad5ae routes through sdk_param_edit_set. While a machine captures, it
+// records the edit and the base value from before the first one, then makes
+// the original call; when capture ends, the SDK sets each base value back.
 #include "track_control.hpp"
 #include "stock.hpp"
 
@@ -28,6 +35,12 @@ i32& live(u32 track, u32 index) {
 void live_set(u32 track, u32 index, i32 value) {
     stock<void(u32, u32, u32, i32)>(0x8d5acea8)(kProject, track, index, value);
 }
+void param_set(u32 project, u32 track, u32 index, i32 value) {
+    stock<void(u32, u32, u32, i32)>(0x8d5acf28)(project, track, index, value);
+}
+i32 base(u32 track, u32 index) {
+    return static_cast<i32>(word(stock<u32(u32)>(0x8d587708)(track) + 0x3864 + index * 4));
+}
 
 // One overlaid parameter: the value written, and stock's own value beneath it.
 struct Applied { u8 track, index, wanted; i32 written, underlying; };
@@ -37,7 +50,23 @@ control::Input input;
 control::Overlay overlay;
 // The machine and track that ran last tick, to reset its state on a change.
 const ControlMachine* host_machine;
-u32 host_track;
+u32 host_track = control::tracks;
+
+// Capture: edits since the last tick, and each edited parameter's base value
+// from before the capture. A parameter with no room to restore is not captured.
+const u32 kOriginals = 2 * control::overlay_capacity;
+bool capturing;
+control::Entry pending[control::edit_capacity];
+u32 pending_count;
+control::Entry originals[kOriginals];
+u32 original_count;
+
+void end_capture() {
+    for (u32 i = 0; i < original_count; ++i)
+        param_set(kProject, originals[i].track, originals[i].index, originals[i].value);
+    original_count = 0;
+    pending_count = 0;
+}
 
 const ControlMachine* owner(u32 track) {
     const u32 engine = track_engine(track);
@@ -65,6 +94,30 @@ bool applies(u32 i, u32 host) {
 }
 }
 
+extern "C" void sdk_param_edit_set(u32 project, u32 track, u32 index, i32 value) {
+    if (capturing && track < control::tracks && track != host_track && index < control::track_parameters) {
+        bool known = false;
+        for (u32 i = 0; i < original_count && !known; ++i)
+            known = originals[i].track == track && originals[i].index == index;
+        if (!known && original_count < kOriginals) {
+            control::Entry& o = originals[original_count++];
+            o.track = static_cast<u8>(track);
+            o.index = static_cast<u8>(index);
+            o.reserved = 0;
+            o.value = base(track, index);
+            known = true;
+        }
+        if (known && pending_count < control::edit_capacity) {
+            control::Entry& e = pending[pending_count++];
+            e.track = static_cast<u8>(track);
+            e.index = static_cast<u8>(index);
+            e.reserved = 0;
+            e.value = value < 0 ? 0 : value;
+        }
+    }
+    param_set(project, track, index, value);
+}
+
 extern "C" void sdk_gui_tick() {
     stock<void()>(0x8d580074)();
     if (!sdk_control_machine_count && !applied_count) return;
@@ -82,18 +135,29 @@ extern "C" void sdk_gui_tick() {
     for (u32 t = 0; t < control::tracks && !m; ++t)
         if ((m = owner(t))) track = t;
     overlay.count = 0;
+    overlay.capture = 0;
     if (m) {
         for (u32 t = 0; t < control::tracks; ++t)
             for (u32 p = 0; p < control::track_parameters; ++p) input.values[t][p] = live(t, p);
         for (u32 i = 0; i < applied_count; ++i)
             input.values[applied[i].track][applied[i].index] = applied[i].underlying;
         input.track = track;
-        if (m != host_machine || track != host_track) m->reset();
+        input.edit_count = pending_count;
+        for (u32 i = 0; i < pending_count; ++i) input.edits[i] = pending[i];
+        pending_count = 0;
+        if (m != host_machine || track != host_track) {
+            if (capturing) end_capture();
+            m->reset();
+        }
         m->control(&input, &overlay);
         if (overlay.count > control::overlay_capacity) overlay.count = control::overlay_capacity;
     }
     host_machine = m;
     host_track = track;
+    // Ending a capture sets its base values back before this tick's overlay.
+    const bool capture = m && overlay.capture;
+    if (capturing && !capture) end_capture();
+    capturing = capture;
 
     // Mark what the machine still overlays; restore and drop the rest.
     for (u32 i = 0; i < overlay.count; ++i) {

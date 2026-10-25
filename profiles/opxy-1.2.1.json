@@ -1055,6 +1055,15 @@
       "call": true
     },
     {
+      "kind": "hook",
+      "address": "0x8d5ad5ae",
+      "file_offset": "0x1e4806",
+      "length": 4,
+      "before": "ffe3bdfc",
+      "symbol": "sdk_param_edit_set",
+      "call": true
+    },
+    {
       "kind": "startup",
       "name": "Boot-screen version label",
       "address": "0x8c0b85dc",

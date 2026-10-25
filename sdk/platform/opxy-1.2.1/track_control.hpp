@@ -18,4 +18,6 @@ extern "C" {
 extern const opxy::platform::ControlMachine sdk_control_machines[] __asm__("sdk_control_machines");
 extern const opxy::u32 sdk_control_machine_count __asm__("sdk_control_machine_count");
 void sdk_gui_tick() __asm__("sdk_gui_tick");
+void sdk_param_edit_set(opxy::u32 project, opxy::u32 track, opxy::u32 index, opxy::i32 value)
+    __asm__("sdk_param_edit_set");
 }

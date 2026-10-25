@@ -1,9 +1,9 @@
 // Track control (SDK 1.4): a synth that declares resources.trackControl runs
 // control() on the GUI side once per stock GUI tick while it is on an
 // instrument track. It reads every instrument track's live parameters and may
-// overlay other tracks' values for that tick. Overlays never reach the saved
-// project: stock keeps its own values, and a parameter the machine stops
-// overlaying returns to them.
+// overlay other tracks' values for that tick, or capture their encoder edits.
+// Overlays never reach the saved project: stock keeps its own values, and a
+// parameter the machine stops overlaying returns to them.
 #pragma once
 #include <opxy/types.hpp>
 
@@ -14,21 +14,33 @@ namespace opxy { namespace control {
 const u32 tracks = 8;
 const u32 track_parameters = 58;
 const u32 overlay_capacity = 64;
+const u32 edit_capacity = 32;
+
+// One parameter of an instrument track: an overlay entry or a captured edit.
+struct Entry { u8 track, index; u16 reserved; i32 value; };
 
 struct Input {
     u32 track;  // the instrument track this machine is on
     // Each track's live values as stock sets them (sequenced, locked or
     // edited), without any overlay.
     i32 values[tracks][track_parameters];
+    // While the machine captures: encoder edits of other instrument tracks'
+    // parameters since the last tick, oldest first, with the edited value.
+    u32 edit_count;
+    Entry edits[edit_capacity];
 };
 
-// One parameter to overlay this tick. An entry for the machine's own track, or
-// outside tracks x track_parameters, is ignored; a later entry for the same
-// parameter replaces an earlier one; negative values are treated as 0.
-struct Entry { u8 track, index; u16 reserved; i32 value; };
+// What the machine returns each tick. An overlay entry for the machine's own
+// track, or outside tracks x track_parameters, is ignored; a later entry for
+// the same parameter replaces an earlier one; negative values are treated as 0.
 struct Overlay {
     u32 count;  // 0 on entry; at most overlay_capacity
     Entry entries[overlay_capacity];
+    // 0 on entry. 1 captures encoder edits: they still play and show as
+    // usual, and arrive in the next tick's edits. When the machine stops
+    // capturing, every parameter edited meanwhile returns to its value from
+    // before the capture.
+    u32 capture;
 };
 
 inline void add(Overlay& overlay, u32 track, u32 index, i32 value) {

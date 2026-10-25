@@ -44,9 +44,10 @@ class TrackControl(unittest.TestCase):
         self.assertNotIn('probesynth', table)
 
     def test_gui_tick_is_a_reviewed_call_in_a_shared_unit(self):
-        hooks = [p for p in config()['patches'] if p.get('symbol') == 'sdk_gui_tick']
-        self.assertEqual([(int(p['address'], 16), p['length'], p['call']) for p in hooks], [(0x8c0baade, 8, True)])
-        self.assertNotIn('service', hooks[0])
+        hooks = [p for p in config()['patches'] if p.get('symbol') in ('sdk_gui_tick', 'sdk_param_edit_set')]
+        self.assertEqual([(int(p['address'], 16), p['length'], p['call']) for p in hooks],
+                         [(0x8c0baade, 8, True), (0x8d5ad5ae, 4, True)])
+        self.assertTrue(all('service' not in p for p in hooks))
         self.assertIn('track_control', native.SDK_UNITS)
         self.assertNotIn('track_control', native.UNIT_SERVICES)
 
@@ -75,8 +76,8 @@ class TrackControl(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     @unittest.skipUnless(os.environ.get('OPXY_TEST_STOCK_OS'), 'Private stock input not supplied')
-    def test_stock_tick_calls_the_original_leaf(self):
-        from tooling.firmware import absolute_target
+    def test_hooked_calls_reach_the_original_functions(self):
+        from tooling.firmware import absolute_target, decode_branch
         stock = Path(os.environ['OPXY_TEST_STOCK_OS']).read_bytes()
         profile = config()
         self.assertEqual(sha(stock), profile['stock_sha256'])
@@ -84,6 +85,11 @@ class TrackControl(unittest.TestCase):
         offset = mapped_offset(ldr(stock), int(patch['address'], 16), patch['length'])
         self.assertEqual(offset, int(patch['file_offset'], 16))
         self.assertEqual(absolute_target(stock[offset:offset + 8]), 0x8d580074)
+        patch = next(p for p in profile['patches'] if p.get('symbol') == 'sdk_param_edit_set')
+        address = int(patch['address'], 16)
+        offset = mapped_offset(ldr(stock), address, patch['length'])
+        self.assertEqual(offset, int(patch['file_offset'], 16))
+        self.assertEqual(decode_branch(address, stock[offset:offset + 4]), (0x8d5acf28, True))
 
 
 if __name__ == '__main__':

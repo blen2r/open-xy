@@ -37,7 +37,7 @@ version is rejected. The output differs from stock in exactly these places:
 | Project companions | 4 | Writes a [companion](projects.md) after every project save, and shows companions beside projects over MTP |
 | Diagnostic benchmark | 1 | Extends explicit command 0xc8 with the selected machines; no normal-playback callbacks added |
 | Per-voice profiling | 10 optional | Bypasses diagnostic timing in both stock voice renderers when built with profiling off |
-| Track control | 1 | Runs a synth's track control once per GUI tick, after stock's own call at that site |
+| Track control | 2 | Runs a synth's track control once per GUI tick, after stock's own call at that site, and lets it capture encoder edits |
 | Startup label | 1 | Shows `OPEN <version>-1.2.1` at boot, `<version>` from [`VERSION`](../VERSION), through the stock startup text renderer |
 | Module | 1 record | One loader block holding the linked module |
 
@@ -250,6 +250,18 @@ through `8d5acea8`, and writes stock's last value back wherever the machine
 stopped overlaying, unless stock has written there since. Values written this
 way are live values only: the saved project keeps stock's base values. With no
 such synth on a track, the hook makes only the original call.
+
+Stock's controllers reach encoder edits through `8d5ad5bc`, which reads the
+base value at track data (`8d587708`) + `0x3864` and passes it to `8d5ad564`.
+Unless a step is held for a parameter lock, that calls the setter `8d5acf28`
+with the new value; the setter writes the live value, the base value for synth
+tracks, and publishes. The call at `8d5ad5ae` routes through
+`sdk_param_edit_set`, which always makes the original call. While a synth
+captures, an edit of another instrument track's parameter is also recorded for
+the next tick, with the base value from before that parameter's first edit;
+when the capture ends, the SDK sets each of those base values back through
+`8d5acf28`. Lock edits and other setters (MIDI, presets, resets) are not
+captured.
 
 ## Sample engines
 

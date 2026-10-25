@@ -264,6 +264,7 @@ before the first call and whenever the machine moves to another track.
 | --- | --- |
 | `track` | The instrument track the machine is on |
 | `values[track][index]` | Every instrument track's 58 live parameter words, as stock sets them (edits, parameter locks, sequencing), without this machine's overlay. Indices 0..7 are the engine's controls; the rest are stock's own track parameters, in stock's units |
+| `edit_count`, `edits` | While capturing: up to 32 encoder edits of other instrument tracks' parameters since the last tick, oldest first, as track, index and edited value |
 
 `overlay` arrives empty; `opxy::control::add` appends up to 64 entries, each a
 track, parameter index and value for this tick. Entries for the machine's own
@@ -271,8 +272,16 @@ track or outside the table are ignored, the last entry for a parameter wins and
 negative values count as 0. A parameter the machine stops overlaying returns to
 stock's value. Overlays are live values only: saved projects keep stock's
 values, and an edit or parameter lock under an overlay reaches `values` on the
-next tick. Like the display, `control` is bounded and allocation-free; it is
-not an audio callback. Browser previews do not run it.
+next tick.
+
+Setting `overlay.capture` to 1 captures encoder edits for the next tick: they
+still play and show as usual, and arrive in `edits`. When a tick returns 0, or
+the machine leaves its track, every parameter edited during the capture
+returns to its value from before it, so a machine can record edits without
+keeping them. Edits made while a step is held (parameter locks) and changes
+from MIDI or presets are not captured. Like the display, `control` is bounded
+and allocation-free; it is not an audio callback. Browser previews do not run
+it.
 
 ## Sample engines
 
