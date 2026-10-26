@@ -1,6 +1,6 @@
 // Host boundary double for the real track control platform adapter: stock's
-// live parameter table, its writer and the GUI tick it wraps. The machine is
-// a scripted overlay; no machine behavior is tested.
+// live parameter table, its writer, the GUI tick it wraps and the displayed
+// values. The machine is a scripted overlay; no machine behavior is tested.
 #include <cstdio>
 #include <cstdlib>
 #include <initializer_list>
@@ -19,6 +19,9 @@ u32 engines[16], ticks, writes, resets, runs, sets, edits_seen;
 control::Entry last_edit;
 u32 capture;
 i32 seen;  // the value of track 0, parameter 1 the machine was given
+i32 seen_own;  // and of its own engine control 1
+// Each track's LFO amount, which stock's displayed value adds.
+i32 lfo[control::tracks][control::track_parameters];
 // The scripted overlay for the next tick.
 control::Entry script[8];
 u32 script_count;
@@ -44,12 +47,24 @@ void stock_live_set(u32 project, u32 track, u32 index, i32 v) {
     ++writes;
     value(track, index) = v;
 }
+// 8d5ac9dc: the live value plus the LFO amount, as a page shows it.
+i32 stock_shown(u32 project, u32 track, u32 index, u32 flag) {
+    require(project == kProject && track < control::tracks && index < control::track_parameters && flag == 1,
+            "Invalid displayed value");
+    return value(track, index) + lfo[track][index];
+}
+// 8d5ac910: the base value, which a stopped page shows.
+i32 stock_base(u32 project, u32 track, u32 index) {
+    require(project == kProject && track < control::tracks && index < control::track_parameters, "Invalid base");
+    return static_cast<i32>(bases[track][index]);
+}
 int ready() { return 1; }
 void reset() { ++resets; }
 void run(const control::Input* input, control::Overlay* overlay) {
     ++runs;
     require(overlay->count == 0, "Overlay not cleared");
     seen = input->values[0][1];
+    seen_own = input->values[input->track][1];
     edits_seen = input->edit_count;
     if (input->edit_count) last_edit = input->edits[input->edit_count - 1];
     require(overlay->capture == 0, "Capture not cleared");
@@ -81,6 +96,8 @@ opxy::platform::Address opxy::platform::host_stock_address(opxy::platform::Addre
     if (address == 0x8d5acea8) return reinterpret_cast<Address>(&stock_live_set);
     if (address == 0x8d5acf28) return reinterpret_cast<Address>(&stock_param_set);
     if (address == 0x8d587708) return reinterpret_cast<Address>(&stock_track_data);
+    if (address == 0x8d5ac9dc) return reinterpret_cast<Address>(&stock_shown);
+    if (address == 0x8d5ac910) return reinterpret_cast<Address>(&stock_base);
     if (address >= kBlocks + 0x3864 && address < kBlocks + control::tracks * kBlockBytes) {
         const u32 track = (address - kBlocks) / kBlockBytes, at = address - kBlocks - track * kBlockBytes - 0x3864;
         if (track < control::tracks && at < sizeof(bases[0]))
@@ -163,5 +180,42 @@ int main() {
     sdk_param_edit_set(kProject, 0, 5, 60);
     tick(0, "Uncaptured edit wrote an overlay");
     require(edits_seen == 0 && bases[0][5] == 60, "Edit captured after the capture ended");
+
+    // The machine's own engine controls arrive as its page shows them.
+    value(2, 1) = 50;
+    lfo[2][1] = 1000;
+    tick(0, "Own LFO wrote an overlay");
+    require(seen_own == 1050, "Own LFO not included");
+
+    // Pages show an overlay playing or stopped; other parameters as stock does.
+    plan({{0, 1, 0, 500}});
+    tick(1, "Overlay not written");
+    bases[0][2] = 30;
+    value(0, 2) = 40;
+    require(sdk_param_shown(kProject, 0, 1, 0) == 500 && sdk_param_shown(kProject, 0, 1, 1) == 500,
+            "Overlay not shown");
+    require(sdk_param_shown(kProject, 0, 2, 0) == 30 && sdk_param_shown(kProject, 0, 2, 1) == 40,
+            "Stock value not shown");
+    // Turning an overlaid parameter shows its base value for a while.
+    sdk_param_edit_set(kProject, 0, 1, 80);
+    for (u32 i = 0; i < kTurnTicks; ++i) {
+        require(sdk_param_shown(kProject, 0, 1, 1) == 80, "Turned base not shown");
+        tick(i == 0 ? 1 : 0, "Overlay not restored once over the turn");
+    }
+    require(sdk_param_shown(kProject, 0, 1, 1) == 500, "Overlay not shown after the turn");
+
+    // A capture that ends under an overlay leaves stock's restored value beneath it.
+    bases[0][6] = 10;
+    value(0, 6) = 10;
+    capture = 1;
+    plan({{0, 6, 0, 800}});
+    tick(2, "Release and new overlay not written");
+    sdk_param_edit_set(kProject, 0, 6, 300);
+    tick(1, "Overlay not restored over the captured edit");
+    capture = 0;
+    tick(1, "Overlay not restored over the end of the capture");
+    plan({});
+    tick(1, "Release not written");
+    require(value(0, 6) == 10 && bases[0][6] == 10, "Edit from the capture restored under the overlay");
     return 0;
 }

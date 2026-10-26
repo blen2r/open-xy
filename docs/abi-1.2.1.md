@@ -37,7 +37,7 @@ version is rejected. The output differs from stock in exactly these places:
 | Project companions | 4 | Writes a [companion](projects.md) after every project save, and shows companions beside projects over MTP |
 | Diagnostic benchmark | 1 | Extends explicit command 0xc8 with the selected machines; no normal-playback callbacks added |
 | Per-voice profiling | 10 optional | Bypasses diagnostic timing in both stock voice renderers when built with profiling off |
-| Track control | 2 | Runs a synth's track control once per GUI tick, after stock's own call at that site, and lets it capture encoder edits |
+| Track control | 3 | Runs a synth's track control once per GUI tick, after stock's own call at that site, lets it capture encoder edits, and shows its overlays as parameter values |
 | Startup label | 1 | Shows `OPEN <version>-1.2.1` at boot, `<version>` from [`VERSION`](../VERSION), through the stock startup text renderer |
 | Module | 1 record | One loader block holding the linked module |
 
@@ -262,6 +262,20 @@ the next tick, with the base value from before that parameter's first edit;
 when the capture ends, the SDK sets each of those base values back through
 `8d5acf28`. Lock edits and other setters (MIDI, presets, resets) are not
 captured.
+
+Every page shows a parameter's value through `8d5ac9dc(project, track, index,
+…)`. With a step held it shows that step's lock; otherwise it reads the live
+value while either play flag (`860c9b39`, `860c9b3a`) is set and the base value
+(`8d5ac910`) when not, adds the track's LFO amount when the LFO targets that
+index, and clamps at 0. A jump hook replaces its choice at `8d5aca48` with
+`sdk_param_shown(project, track, index, playing)`
+([`track_control_hooks.s`](../sdk/platform/opxy-1.2.1/track_control_hooks.s)),
+then resumes at `8d5aca8e` to add the LFO amount. An overlaid parameter shows
+its overlay, playing or not, except for 40 GUI ticks after an encoder edit of
+it (`sdk_param_edit_set`), when it shows the base value that edit changed;
+every other parameter shows as stock shows it. The host track's eight engine
+controls reach the synth through the same getter, so their LFO amounts are
+included.
 
 ## Sample engines
 

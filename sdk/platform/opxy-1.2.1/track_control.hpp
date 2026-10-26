@@ -20,4 +20,8 @@ extern const opxy::u32 sdk_control_machine_count __asm__("sdk_control_machine_co
 void sdk_gui_tick() __asm__("sdk_gui_tick");
 void sdk_param_edit_set(opxy::u32 project, opxy::u32 track, opxy::u32 index, opxy::i32 value)
     __asm__("sdk_param_edit_set");
+// The value stock's displayed-value getter shows before its LFO amount, through
+// the jump hook sdk_param_shown_hook (track_control_hooks.s).
+opxy::i32 sdk_param_shown(opxy::u32 project, opxy::u32 track, opxy::u32 index, opxy::u32 playing)
+    __asm__("sdk_param_shown");
 }

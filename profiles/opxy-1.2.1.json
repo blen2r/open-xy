@@ -1064,6 +1064,16 @@
       "call": true
     },
     {
+      "kind": "hook",
+      "name": "Displayed parameter values follow track control overlays",
+      "address": "0x8d5aca48",
+      "file_offset": "0x1e3ca0",
+      "length": 4,
+      "before": "000c1b18",
+      "symbol": "sdk_param_shown_hook",
+      "call": false
+    },
+    {
       "kind": "startup",
       "name": "Boot-screen version label",
       "address": "0x8c0b85dc",

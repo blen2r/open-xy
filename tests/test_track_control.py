@@ -44,12 +44,16 @@ class TrackControl(unittest.TestCase):
         self.assertNotIn('probesynth', table)
 
     def test_gui_tick_is_a_reviewed_call_in_a_shared_unit(self):
-        hooks = [p for p in config()['patches'] if p.get('symbol') in ('sdk_gui_tick', 'sdk_param_edit_set')]
+        hooks = [p for p in config()['patches']
+                 if p.get('symbol') in ('sdk_gui_tick', 'sdk_param_edit_set', 'sdk_param_shown_hook')]
         self.assertEqual([(int(p['address'], 16), p['length'], p['call']) for p in hooks],
-                         [(0x8c0baade, 8, True), (0x8d5ad5ae, 4, True)])
+                         [(0x8c0baade, 8, True), (0x8d5ad5ae, 4, True), (0x8d5aca48, 4, False)])
         self.assertTrue(all('service' not in p for p in hooks))
-        self.assertIn('track_control', native.SDK_UNITS)
-        self.assertNotIn('track_control', native.UNIT_SERVICES)
+        # CC = R0 == 0; IF CC JUMP 8d5aca80: the getter's choice of live or base value.
+        self.assertEqual(hooks[2]['before'], '000c1b18')
+        for unit in ('track_control', 'track_control_hooks'):
+            self.assertIn(unit, native.SDK_UNITS)
+            self.assertNotIn(unit, native.UNIT_SERVICES)
 
     @unittest.skipUnless(HOST_CXX, 'No working host C++ compiler (set OPXY_TEST_HOST_CXX)')
     def test_real_platform_adapter_overlays_and_restores(self):
@@ -90,6 +94,10 @@ class TrackControl(unittest.TestCase):
         offset = mapped_offset(ldr(stock), address, patch['length'])
         self.assertEqual(offset, int(patch['file_offset'], 16))
         self.assertEqual(decode_branch(address, stock[offset:offset + 4]), (0x8d5acf28, True))
+        patch = next(p for p in profile['patches'] if p.get('symbol') == 'sdk_param_shown_hook')
+        offset = mapped_offset(ldr(stock), int(patch['address'], 16), patch['length'])
+        self.assertEqual(offset, int(patch['file_offset'], 16))
+        self.assertEqual(stock[offset:offset + 4].hex(), patch['before'])
 
 
 if __name__ == '__main__':

@@ -263,7 +263,7 @@ before the first call and whenever the machine moves to another track.
 | `Input` field | Contract |
 | --- | --- |
 | `track` | The instrument track the machine is on |
-| `values[track][index]` | Every instrument track's 58 live parameter words, as stock sets them (edits, parameter locks, sequencing), without this machine's overlay. Indices 0..7 are the engine's controls; the rest are stock's own track parameters, in stock's units |
+| `values[track][index]` | Every instrument track's 58 live parameter words, as stock sets them (edits, parameter locks, sequencing), without this machine's overlay. Indices 0..7 are the engine's controls; the rest are stock's own track parameters, in stock's units. The machine's own engine controls are the values its page shows, including its LFO |
 | `edit_count`, `edits` | While capturing: up to 32 encoder edits of other instrument tracks' parameters since the last tick, oldest first, as track, index and edited value |
 
 `overlay` arrives empty; `opxy::control::add` appends up to 64 entries, each a
@@ -272,7 +272,9 @@ track or outside the table are ignored, the last entry for a parameter wins and
 negative values count as 0. A parameter the machine stops overlaying returns to
 stock's value. Overlays are live values only: saved projects keep stock's
 values, and an edit or parameter lock under an overlay reaches `values` on the
-next tick.
+next tick. Pages show an overlaid parameter's overlay, whether or not the
+sequencer plays; for a moment after the parameter's encoder is turned, they
+show the track's own value, which the turn changes.
 
 Setting `overlay.capture` to 1 captures encoder edits for the next tick: they
 still play and show as usual, and arrive in `edits`. When a tick returns 0, or

@@ -16,6 +16,15 @@
 // 8d5ad5ae routes through sdk_param_edit_set. While a machine captures, it
 // records the edit and the base value from before the first one, then makes
 // the original call; when capture ends, the SDK sets each base value back.
+//
+// Display: stock's displayed-value getter 8d5ac9dc shows a parameter's live
+// value while the sequencer plays and its base value otherwise, plus any LFO
+// amount. A jump hook at 8d5aca48 (track_control_hooks.s) asks
+// sdk_param_shown instead, which shows an overlaid parameter's overlay either
+// way, except for a moment after an encoder edit of it, when it shows the base
+// value the edit changed. Every other parameter shows as stock shows it. The
+// host track's own engine controls reach the machine as that getter shows
+// them, so an LFO on one of them moves the machine like a turn.
 #include "track_control.hpp"
 #include "stock.hpp"
 
@@ -38,6 +47,11 @@ void live_set(u32 track, u32 index, i32 value) {
 void param_set(u32 project, u32 track, u32 index, i32 value) {
     stock<void(u32, u32, u32, i32)>(0x8d5acf28)(project, track, index, value);
 }
+// Stock's displayed value: 8d5ac9dc(project, track, index, 1), as the pages ask.
+const u32 kEngineControls = 8;
+i32 shown(u32 track, u32 index) {
+    return stock<i32(u32, u32, u32, u32)>(0x8d5ac9dc)(kProject, track, index, 1);
+}
 i32 base(u32 track, u32 index) {
     return static_cast<i32>(word(stock<u32(u32)>(0x8d587708)(track) + 0x3864 + index * 4));
 }
@@ -51,6 +65,10 @@ control::Overlay overlay;
 // The machine and track that ran last tick, to reset its state on a change.
 const ControlMachine* host_machine;
 u32 host_track = control::tracks;
+// GUI ticks so far, and the last encoder edit's parameter and tick. For
+// kTurnTicks after it the edited parameter shows its base value.
+const u32 kTurnTicks = 40;
+u32 gui_ticks, turned_track = control::tracks, turned_index, turned_tick;
 
 // Capture: edits since the last tick, and each edited parameter's base value
 // from before the capture. A parameter with no room to restore is not captured.
@@ -60,13 +78,6 @@ control::Entry pending[control::edit_capacity];
 u32 pending_count;
 control::Entry originals[kOriginals];
 u32 original_count;
-
-void end_capture() {
-    for (u32 i = 0; i < original_count; ++i)
-        param_set(kProject, originals[i].track, originals[i].index, originals[i].value);
-    original_count = 0;
-    pending_count = 0;
-}
 
 const ControlMachine* owner(u32 track) {
     const u32 engine = track_engine(track);
@@ -83,6 +94,17 @@ Applied* find(u32 track, u32 index) {
     return nullptr;
 }
 
+// Restoring a base value also makes it stock's value beneath any overlay.
+void end_capture() {
+    for (u32 i = 0; i < original_count; ++i) {
+        const control::Entry& o = originals[i];
+        param_set(kProject, o.track, o.index, o.value);
+        if (Applied* a = find(o.track, o.index)) a->underlying = o.value;
+    }
+    original_count = 0;
+    pending_count = 0;
+}
+
 // An entry the platform applies: in range, not on the host track, and the
 // last one for its parameter.
 bool applies(u32 i, u32 host) {
@@ -94,7 +116,18 @@ bool applies(u32 i, u32 host) {
 }
 }
 
+extern "C" i32 sdk_param_shown(u32 project, u32 track, u32 index, u32 playing) {
+    const Applied* a = track < control::tracks && index < control::track_parameters ? find(track, index) : nullptr;
+    const bool turned = track == turned_track && index == turned_index && gui_ticks - turned_tick < kTurnTicks;
+    if (a && !turned) return a->written;
+    if (playing && !a) return live(track, index);
+    return stock<i32(u32, u32, u32)>(0x8d5ac910)(project, track, index);
+}
+
 extern "C" void sdk_param_edit_set(u32 project, u32 track, u32 index, i32 value) {
+    turned_track = track;
+    turned_index = index;
+    turned_tick = gui_ticks;
     if (capturing && track < control::tracks && track != host_track && index < control::track_parameters) {
         bool known = false;
         for (u32 i = 0; i < original_count && !known; ++i)
@@ -120,6 +153,7 @@ extern "C" void sdk_param_edit_set(u32 project, u32 track, u32 index, i32 value)
 
 extern "C" void sdk_gui_tick() {
     stock<void()>(0x8d580074)();
+    ++gui_ticks;
     if (!sdk_control_machine_count && !applied_count) return;
 
     // A value that differs from the one written is stock's: an edit, a lock or a step.
@@ -141,6 +175,8 @@ extern "C" void sdk_gui_tick() {
             for (u32 p = 0; p < control::track_parameters; ++p) input.values[t][p] = live(t, p);
         for (u32 i = 0; i < applied_count; ++i)
             input.values[applied[i].track][applied[i].index] = applied[i].underlying;
+        // The host's own controls as its page shows them, LFO included.
+        for (u32 p = 0; p < kEngineControls; ++p) input.values[track][p] = shown(track, p);
         input.track = track;
         input.edit_count = pending_count;
         for (u32 i = 0; i < pending_count; ++i) input.edits[i] = pending[i];
