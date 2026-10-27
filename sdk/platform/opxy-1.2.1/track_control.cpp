@@ -116,6 +116,14 @@ bool applies(u32 i, u32 host) {
 }
 }
 
+extern "C" u32 sdk_control_copies(u32 track) {
+    if (track >= 16) return 0;
+    const u32 engine = track_engine(track);
+    u32 count = 0;
+    for (u32 t = 0; t < control::tracks; ++t) count += track_engine(t) == engine;
+    return count;
+}
+
 extern "C" i32 sdk_param_shown(u32 project, u32 track, u32 index, u32 playing) {
     const Applied* a = track < control::tracks && index < control::track_parameters ? find(track, index) : nullptr;
     const bool turned = track == turned_track && index == turned_index && gui_ticks - turned_tick < kTurnTicks;
@@ -163,11 +171,16 @@ extern "C" void sdk_gui_tick() {
         applied[i].wanted = 0;
     }
 
-    // The first instrument track that holds a ready control machine runs it.
+    // The first instrument track that holds a ready control machine runs it,
+    // unless another track holds the same machine: then none runs.
     const ControlMachine* m = nullptr;
     u32 track = control::tracks;
     for (u32 t = 0; t < control::tracks && !m; ++t)
         if ((m = owner(t))) track = t;
+    if (m && sdk_control_copies(track) > 1) {
+        m = nullptr;
+        track = control::tracks;
+    }
     overlay.count = 0;
     overlay.capture = 0;
     if (m) {

@@ -217,5 +217,20 @@ int main() {
     plan({});
     tick(1, "Release not written");
     require(value(0, 6) == 10 && bases[0][6] == 10, "Edit from the capture restored under the overlay");
+
+    // Two copies of the machine: neither runs, and its overlay ends as if it
+    // had left, until one copy is removed.
+    const i32 own = value(0, 1);
+    plan({{0, 1, 0, 700}});
+    tick(1, "Overlay not written");
+    engines[6] = 40;
+    require(sdk_control_copies(2) == 2 && sdk_control_copies(6) == 2 && sdk_control_copies(16) == 0,
+            "Copies not counted");
+    const u32 ran = runs;
+    tick(1, "Overlay not released with two copies");
+    require(runs == ran && value(0, 1) == own, "Two copies ran");
+    engines[6] = 0;
+    tick(1, "Overlay not written once one copy is left");
+    require(runs == ran + 1 && value(0, 1) == 700 && sdk_control_copies(2) == 1, "Single copy not run again");
     return 0;
 }

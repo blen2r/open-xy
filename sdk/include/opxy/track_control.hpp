@@ -7,6 +7,8 @@
 #pragma once
 #include <opxy/types.hpp>
 
+extern "C" opxy::u32 sdk_control_copies(opxy::u32 track);
+
 namespace opxy { namespace control {
 // Instrument tracks 0..7, and stock's live parameter words for each: the
 // engine's eight controls (0..7), then stock's own track parameters in stock's
@@ -42,6 +44,11 @@ struct Overlay {
     // before the capture.
     u32 capture;
 };
+
+// GUI side, for a display: how many instrument tracks hold the same machine as
+// `track`, `track` included. Track control runs only while exactly one does.
+// Browser previews answer 1.
+inline u32 copies(u32 track) { return sdk_control_copies(track); }
 
 inline void add(Overlay& overlay, u32 track, u32 index, i32 value) {
     if (overlay.count >= overlay_capacity || track >= tracks || index >= track_parameters) return;

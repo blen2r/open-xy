@@ -257,8 +257,12 @@ void control(ControlState& state, const opxy::control::Input& input, opxy::contr
 
 [track_control.hpp](../sdk/include/opxy/track_control.hpp) defines the types.
 `control` runs on the GUI side once per stock GUI tick while the machine is on
-an instrument track; only the first such track runs it. `control_reset` runs
-before the first call and whenever the machine moves to another track.
+an instrument track. It runs on one track only: while two or more instrument
+tracks hold the machine, none runs, and every overlay and capture ends as if the
+machine had left. A display can tell its user with `opxy::control::copies(track)`,
+the number of instrument tracks holding the machine on `track` (browser previews
+answer 1). `control_reset` runs before the first call and whenever the machine
+moves to another track.
 
 | `Input` field | Contract |
 | --- | --- |

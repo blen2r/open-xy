@@ -243,7 +243,8 @@ when it changed.
 before the sequencer tick. That call at `8c0baade` routes through
 `sdk_gui_tick` ([`track_control.cpp`](../sdk/platform/opxy-1.2.1/track_control.cpp)),
 which makes the original call first. Then, for the first instrument track
-holding a synth with [track control](api.md#track-control), it treats any live
+holding a synth with [track control](api.md#track-control), unless another
+instrument track holds the same engine (`8d58781c`), it treats any live
 value that differs from the one it last wrote as stock's, gives the machine
 every instrument track's values without its overlays, writes the new overlay
 through `8d5acea8`, and writes stock's last value back wherever the machine
