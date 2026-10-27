@@ -27,7 +27,7 @@ FIELDS = {'schema', 'sdk', 'kind', 'description', 'identity', 'sources', 'includ
 # 1.1 adds display note activity; 1.2 an effect's delay buffer (resources.bufferBytes),
 # its tempo (resources.transport) and division captions; 1.3 the machine's own presets,
 # a press that switches a synth's whole page and up to 16 display text slots; 1.4 a
-# synth's track control (resources.trackControl).
+# synth's track control (resources.trackControl) and hidden stock pages (hidePages).
 SDK_VERSION = (1, 4)
 # Builder card glyph: SVG path data in a 46 x 48 box, drawn as a stroke.
 ICON = re.compile(r'[MLHVCSQTAZmlhvcsqtaz][MLHVCSQTAZmlhvcsqtaz0-9 .,-]{0,511}')
@@ -218,6 +218,8 @@ def machine_at(root, identity=None):
         require_sdk(version, (1, 2), 'A division control')
     if paged(definition):
         require_sdk(version, (1, 3), 'A press that switches the page ("press": "page")')
+    if 'hidePages' in definition:
+        require_sdk(version, (1, 4), 'Hidden stock pages ("hidePages")')
     if kind == 'synth' and definition['resources']['display']['texts'] > SDK_1_2_TEXTS:
         require_sdk(version, (1, 3), 'More than %d display text slots' % SDK_1_2_TEXTS)
     require(definition['id'] == identity, 'Machine directory and definition identity disagree')

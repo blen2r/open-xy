@@ -27,6 +27,7 @@
 // them, so an LFO on one of them moves the machine like a turn.
 #include "track_control.hpp"
 #include "stock.hpp"
+#include "synth_controls.hpp"
 
 namespace {
 using opxy::i32;
@@ -173,6 +174,7 @@ extern "C" void sdk_param_edit_set(u32 project, u32 track, u32 index, i32 value)
 extern "C" void sdk_gui_tick() {
     stock<void()>(0x8d580074)();
     ++gui_ticks;
+    sdk_synth_pages();
     if (!sdk_control_machine_count && !applied_count) return;
 
     // A value that differs from the one written is stock's: an edit, a lock or a step.

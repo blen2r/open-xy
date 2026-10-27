@@ -62,6 +62,7 @@ i32 stock_base(u32 project, u32 track, u32 index) {
 u32 selected = 0;
 u32 stock_selected() { return selected; }
 int ready() { return 1; }
+u32 page_checks;
 void reset() { ++resets; }
 void run(const control::Input* input, control::Overlay* overlay) {
     ++runs;
@@ -86,6 +87,9 @@ void tick(u32 expected_writes, const char* message) {
     require(writes == expected_writes, message);
 }
 }
+
+// The hidden-pages check (synth_controls.cpp) runs once per GUI tick.
+void sdk_synth_pages() { ++page_checks; }
 
 extern "C" {
 const opxy::platform::ControlMachine sdk_control_machines[] = {
@@ -117,7 +121,7 @@ int main() {
     value(3, 9) = 7;
     plan({{0, 1, 0, 500}});
     tick(0, "Overlay written without a machine");
-    require(ticks == 1 && runs == 0 && value(0, 1) == 100, "Stock tick not delegated alone");
+    require(ticks == 1 && runs == 0 && value(0, 1) == 100 && page_checks == 1, "Stock tick not delegated alone");
 
     engines[2] = 40;
     // Own track and out-of-range entries are ignored; the later duplicate wins.

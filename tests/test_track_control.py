@@ -8,7 +8,7 @@ import unittest
 
 from tooling import native
 from tooling.adapters import control_callbacks, generate_control, generate_track_controls
-from tooling.definitions import validate_definition
+from tooling.definitions import hidden_pages, validate_definition
 from tooling.formats import ldr, mapped_offset, sha
 from tooling.pipeline import ROOT, config
 from test_sample_services import HOST_CXX
@@ -93,6 +93,38 @@ class TrackControl(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30, **hidden)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(HOST_CXX, 'No working host C++ compiler (set OPXY_TEST_HOST_CXX)')
+    def test_real_hidden_pages_check(self):
+        platform = ROOT / 'sdk/platform/opxy-1.2.1'
+        with tempfile.TemporaryDirectory(prefix='synth-pages-') as directory:
+            folder = Path(directory)
+            stock = (platform / 'stock.hpp').read_text(encoding='utf-8')
+            stock = stock.replace('typedef __UINTPTR_TYPE__ Address;',
+                                  'typedef __UINTPTR_TYPE__ Address;\nAddress host_stock_address(Address);')
+            for pointer in ('T*', 'const volatile u32*', 'const volatile unsigned char*'):
+                stock = stock.replace('reinterpret_cast<' + pointer + '>(address)',
+                                      'reinterpret_cast<' + pointer + '>(host_stock_address(address))')
+            (folder / 'stock.hpp').write_text(stock, encoding='utf-8')
+            (folder / 'synth_controls.cpp').write_bytes((platform / 'synth_controls.cpp').read_bytes())
+            binary = folder / ('test.exe' if os.name == 'nt' else 'test')
+            hidden = dict(creationflags=subprocess.CREATE_NO_WINDOW) if os.name == 'nt' else {}
+            result = subprocess.run([HOST_CXX, '-std=c++11', '-O2', '-Wall', '-Werror',
+                '-I' + str(folder), '-I' + str(ROOT / 'sdk/include'), '-I' + str(platform),
+                str(ROOT / 'tests/fixtures/synth_pages.cpp'), '-o', str(binary)],
+                capture_output=True, text=True, timeout=120, **hidden)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30, **hidden)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_a_synth_can_hide_the_envelope_and_filter_pages(self):
+        synth = copy.deepcopy(fixture('probesynth').definition)
+        for pages in (['envelope'], ['filter', 'envelope']):
+            validate_definition(dict(synth, hidePages=pages), 'synth')
+        for pages in ([], ['lfo'], ['filter', 'filter'], 'filter'):
+            with self.subTest(pages=pages), self.assertRaises(ValueError):
+                validate_definition(dict(synth, hidePages=pages), 'synth')
+        self.assertEqual(hidden_pages(dict(synth, hidePages=['envelope', 'filter'])), 6)
 
     @unittest.skipUnless(os.environ.get('OPXY_TEST_STOCK_OS'), 'Private stock input not supplied')
     def test_hooked_calls_reach_the_original_functions(self):

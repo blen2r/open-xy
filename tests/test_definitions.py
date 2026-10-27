@@ -210,7 +210,7 @@ class Definitions(unittest.TestCase):
                     SimpleNamespace(kind='synth', prefix='plain', identity=dict(engine=5), definition=self.engine)]
         with tempfile.TemporaryDirectory() as directory:
             text = generate_synth_controls(directory, machines).read_text(encoding='utf-8')
-        self.assertEqual(re.findall(r'^    \{(\w+)_engine_id, .*, (true|false)\},$', text, re.M),
+        self.assertEqual(re.findall(r'^    \{(\w+)_engine_id, .*, (true|false), \d+\},$', text, re.M),
                          [('paged', 'true'), ('plain', 'false')])
 
     def test_control_table_owns_all_synths_and_preserves_alternates(self):

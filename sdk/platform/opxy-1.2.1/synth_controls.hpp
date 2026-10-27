@@ -17,6 +17,7 @@ struct SynthControls {
     bool (*format)(u32 slot, i32 value, char* text);
     bool effect;
     bool page;
+    u8 hidden_pages;  // stock instrument pages the synth hides, by page index (bit 1 envelope, bit 2 filter)
     u32 engine() const { return static_cast<u32>(reinterpret_cast<__UINTPTR_TYPE__>(id)); }
 };
 // GUI-only, bounded one-decimal formatting. Caller provides 16 bytes.
@@ -37,6 +38,9 @@ bool sdk_synth_value(opxy::u32 track, opxy::u32 slot, opxy::i32 value, char* tex
 // owned synth, as last refreshed; other indices and engines map to themselves.
 // For stock control titles.
 opxy::u32 sdk_synth_title_slot(opxy::u32 engine, opxy::u32 index) __asm__("sdk_synth_title_slot");
+// Once per GUI tick: when the selected instrument track's owned synth hides the
+// stock page shown, shows the page shown before it instead.
+void sdk_synth_pages() __asm__("sdk_synth_pages");
 // The send page's value text for position `index` of an owned effect, through
 // the hook in screen_hooks.s; every other caption reaches stock unchanged.
 opxy::u32 sdk_fx_value_text(opxy::u32 widget, const char* text, opxy::u32 index, opxy::i32 value)

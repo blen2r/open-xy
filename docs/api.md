@@ -148,6 +148,13 @@ edited. See
 [Macro Osc](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/macroosc/definition.json),
 whose header shows one page and whose row of text slots under it the other.
 
+A synth for which the stock envelope or filter page means nothing (one that
+makes no sound of its own, say) may declare `"hidePages": ["envelope",
+"filter"]` (either or both) at the top of `definition.json` (SDK 1.4). On its
+track, M2 or M3 then leaves the page shown as it was, and selecting the track
+while another track shows a hidden page shows the engine page. The SDK
+corrects the page once per GUI tick, so the hidden page may flash for a frame.
+
 On instrument tracks, the Value, Random and Element LFOs can target every
 declared parameter of a custom synth or sample engine, including all eight
 when present. Destination names follow parameter order regardless of which
