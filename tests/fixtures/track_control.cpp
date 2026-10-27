@@ -58,6 +58,9 @@ i32 stock_base(u32 project, u32 track, u32 index) {
     require(project == kProject && track < control::tracks && index < control::track_parameters, "Invalid base");
     return static_cast<i32>(bases[track][index]);
 }
+// 8d4d6f14: the GUI's selected track.
+u32 selected = 0;
+u32 stock_selected() { return selected; }
 int ready() { return 1; }
 void reset() { ++resets; }
 void run(const control::Input* input, control::Overlay* overlay) {
@@ -98,6 +101,7 @@ opxy::platform::Address opxy::platform::host_stock_address(opxy::platform::Addre
     if (address == 0x8d587708) return reinterpret_cast<Address>(&stock_track_data);
     if (address == 0x8d5ac9dc) return reinterpret_cast<Address>(&stock_shown);
     if (address == 0x8d5ac910) return reinterpret_cast<Address>(&stock_base);
+    if (address == 0x8d4d6f14) return reinterpret_cast<Address>(&stock_selected);
     if (address >= kBlocks + 0x3864 && address < kBlocks + control::tracks * kBlockBytes) {
         const u32 track = (address - kBlocks) / kBlockBytes, at = address - kBlocks - track * kBlockBytes - 0x3864;
         if (track < control::tracks && at < sizeof(bases[0]))
@@ -232,5 +236,16 @@ int main() {
     engines[6] = 0;
     tick(1, "Overlay not written once one copy is left");
     require(runs == ran + 1 && value(0, 1) == 700 && sdk_control_copies(2) == 1, "Single copy not run again");
+
+    // Marks over every page: an overlaid selected track, then a capture.
+    selected = 0;
+    require(opxy::platform::control_marks() == opxy::platform::kMarkOverlaid, "Overlaid track not marked");
+    selected = 3;
+    require(opxy::platform::control_marks() == 0, "Track without overlay marked");
+    capture = 1;
+    tick(0, "Capture rewrote the overlay");
+    require(opxy::platform::control_marks() == opxy::platform::kMarkCapture, "Capture not marked");
+    capture = 0;
+    tick(0, "End of capture rewrote the overlay");
     return 0;
 }

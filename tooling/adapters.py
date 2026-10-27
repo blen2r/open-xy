@@ -194,6 +194,11 @@ def generate_registration_stock(directory):
     return expand('registration_stock.cpp.in', RELOCATED, Path(directory) / 'registration_stock.cpp')
 
 
+def generate_track_control_overlay(directory):
+    """Track control's marks over every page, in the last page slot."""
+    return expand('track_control_overlay.cpp.in', RELOCATED, Path(directory) / 'track_control_overlay.cpp')
+
+
 def generate_screen_order(directory):
     """The compositor traversal over the relocated screen slots."""
     return expand('screen_order.cpp.in', RELOCATED, Path(directory) / 'screen_order.cpp')

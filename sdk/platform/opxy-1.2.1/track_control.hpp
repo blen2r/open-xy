@@ -12,12 +12,18 @@ struct ControlMachine {
     void (*control)(const control::Input*, control::Overlay*);
     u32 engine() const { return static_cast<u32>(reinterpret_cast<__UINTPTR_TYPE__>(id)); }
 };
+// The marks track control shows over every page (track_control_overlay.cpp.in):
+// its machine captures edits, or the selected track holds an overlay. GUI only.
+const u32 kMarkCapture = 1, kMarkOverlaid = 2;
+u32 control_marks();
 }}
 
 extern "C" {
 extern const opxy::platform::ControlMachine sdk_control_machines[] __asm__("sdk_control_machines");
 extern const opxy::u32 sdk_control_machine_count __asm__("sdk_control_machine_count");
 void sdk_gui_tick() __asm__("sdk_gui_tick");
+// Registers the marks' screen slot on the GUI role, after the machines' screens.
+void sdk_overlay_startup() __asm__("sdk_overlay_startup");
 void sdk_param_edit_set(opxy::u32 project, opxy::u32 track, opxy::u32 index, opxy::i32 value)
     __asm__("sdk_param_edit_set");
 // The value stock's displayed-value getter shows before its LFO amount, through

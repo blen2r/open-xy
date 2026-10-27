@@ -104,7 +104,7 @@ export function validIdentity(rules, kind, identity) {
   if (kind === 'effect') return rules.effects.includes(n) && page === rules.effect_page;
   if (!(n > 0 && n < rules.engines && n !== rules.engine_none && !rules.stock_engines.includes(n))) return false;
   return kind === 'sample' ? n > rules.engine_none && rules.sample_pages.includes(page)
-    : kind === 'synth' && page > rules.page_none && page < rules.pages;
+    : kind === 'synth' && page > rules.page_none && page < rules.pages - 1;  // the last page: track control's marks
 }
 
 // A kit's numbers: each machine asks for valid ones, and fixed numbers (kit.fixed,
@@ -129,7 +129,7 @@ export const LAYOUT_FORMAT = 'opxy-layout/1';
 export function numberPools(rules) {
   const range = (low, high) => Array.from({length: high - low}, (_, i) => low + i);
   return {engine: range(rules.engine_none + 1, rules.engines).filter(n => !rules.stock_engines.includes(n)),
-    page: range(rules.page_none + 1, rules.pages), effect: [...rules.effects]};
+    page: range(rules.page_none + 1, rules.pages - 1), effect: [...rules.effects]};
 }
 export function occupied(rules, identity) {
   const keys = ['engine', 'effect'].filter(slot => Object.hasOwn(identity, slot)).map(slot => slot + ' ' + identity[slot]);

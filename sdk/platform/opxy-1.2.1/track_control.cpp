@@ -116,6 +116,14 @@ bool applies(u32 i, u32 host) {
 }
 }
 
+u32 opxy::platform::control_marks() {
+    if (capturing) return kMarkCapture;
+    const u32 track = selected_track();
+    for (u32 i = 0; i < applied_count; ++i)
+        if (applied[i].track == track) return kMarkOverlaid;
+    return 0;
+}
+
 extern "C" u32 sdk_control_copies(u32 track) {
     if (track >= 16) return 0;
     const u32 engine = track_engine(track);

@@ -1,0 +1,92 @@
+// Track control's marks on every page: an SDK screen object in the last page
+// slot (@PAGE_LIMIT@ - 1), which no machine is given. The compositor
+// (8d5213f4) paints a slot that is the current page, or whose method-table
+// entry +8 says so; stock overlays such as the octave indicator use that.
+// This object answers yes while track control has a mark to show, and its
+// artwork has no background, so it is painted over whatever page is shown.
+#include "screen.hpp"
+#include "registration.hpp"
+#include "track_control.hpp"
+
+using opxy::u32;
+using opxy::i32;
+
+namespace {
+using namespace opxy::screen;
+namespace platform = opxy::platform;
+
+const u32 kPage = @PAGE_LIMIT@ - 1;
+// The capture outlines, fading inward, then the overlaid track's line.
+const u32 kCaptureLines = 4, kNodes = kCaptureLines + 1;
+const char* const kIds[kNodes] = {"overlay_capture_0", "overlay_capture_1", "overlay_capture_2",
+                                  "overlay_capture_3", "overlay_line"};
+const char kAsset[] = "openxy_overlay.svg";
+
+struct Object {
+    Base base;
+    PathNode* nodes[kNodes];  // 0 until bound, or when missing
+    u32 bound;
+    u32 shown;                // the marks last applied
+};
+Object overlay;
+
+// A node shown in place or moved off screen.
+void show(PathNode* node, bool on) {
+    if (!node) return;
+    const u32 at[2] = {6, 7};
+    const i32 value[2] = {on ? 0 : 640 << 10, on ? 0 : 320 << 10};
+    set_words(&node->leaf, at, value);
+}
+
+void apply(Object* o, u32 marks) {
+    const bool capture = marks & platform::kMarkCapture;
+    for (u32 i = 0; i < kCaptureLines; ++i) show(o->nodes[i], capture);
+    show(o->nodes[kCaptureLines], !capture && (marks & platform::kMarkOverlaid));
+    o->shown = marks;
+}
+
+void bind(Object* o) {
+    if (o->bound || !o->base.svg) return;
+    for (u32 i = 0; i < kNodes; ++i) o->nodes[i] = path_node(find(&o->base, kIds[i]));
+    o->bound = 1;
+    apply(o, 0);
+}
+
+void destroy(Object* o) { base_destroy(&o->base); }
+// Entry +8: paint this slot now.
+u32 visible(Object*, u32) { return platform::control_marks() != 0; }
+void frame(Object* o, i32) {
+    bind(o);
+    const u32 marks = platform::control_marks();
+    if (o->bound && marks != o->shown) apply(o, marks);
+    draw(&o->base);
+}
+void init(Object* o) { bind(o); }
+
+struct VTable {
+    void (*destroy)(Object*);
+    void (*destroy_delete)(Object*);
+    u32 (*visible)(Object*, u32);
+    void (*frame)(Object*, i32);
+    void (*init)(Object*);
+    const void* stock20;
+};
+const VTable kVTable = {destroy, destroy, visible, frame, init, reinterpret_cast<const void*>(0x8c0867f0)};
+
+char* construct(char* state, u32 page) {
+    Object* o = reinterpret_cast<Object*>(state);
+    base_construct(&o->base, page, kAsset);
+    o->base.vtable = &kVTable;
+    return state;
+}
+}
+
+// GUI role, after the machines' screens: only a collection with track control
+// takes the slot.
+extern "C" void sdk_overlay_startup() {
+    if (!sdk_control_machine_count) return;
+    const platform::Record record = {nullptr, nullptr, nullptr, nullptr, reinterpret_cast<const char*>(kPage), 0};
+    const platform::Screen screen = {reinterpret_cast<char*>(&overlay), sizeof(overlay),
+                                     reinterpret_cast<const char*>(&kVTable), kAsset, construct};
+    sdk_register_screen(&record, &screen);
+}
