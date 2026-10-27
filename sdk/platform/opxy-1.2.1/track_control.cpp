@@ -74,6 +74,8 @@ u32 gui_ticks, turned_track = control::tracks, turned_index, turned_tick;
 // from before the capture. A parameter with no room to restore is not captured.
 const u32 kOriginals = 2 * control::overlay_capacity;
 bool capturing;
+// The machine asked to mark the pages of the tracks it overlays.
+bool marking;
 control::Entry pending[control::edit_capacity];
 u32 pending_count;
 control::Entry originals[kOriginals];
@@ -118,6 +120,7 @@ bool applies(u32 i, u32 host) {
 
 u32 opxy::platform::control_marks() {
     if (capturing) return kMarkCapture;
+    if (!marking) return 0;
     const u32 track = selected_track();
     for (u32 i = 0; i < applied_count; ++i)
         if (applied[i].track == track) return kMarkOverlaid;
@@ -191,6 +194,7 @@ extern "C" void sdk_gui_tick() {
     }
     overlay.count = 0;
     overlay.capture = 0;
+    overlay.mark = 0;
     if (m) {
         for (u32 t = 0; t < control::tracks; ++t)
             for (u32 p = 0; p < control::track_parameters; ++p) input.values[t][p] = live(t, p);
@@ -215,6 +219,7 @@ extern "C" void sdk_gui_tick() {
     const bool capture = m && overlay.capture;
     if (capturing && !capture) end_capture();
     capturing = capture;
+    marking = m && overlay.mark;
 
     // Mark what the machine still overlays; restore and drop the rest.
     for (u32 i = 0; i < overlay.count; ++i) {

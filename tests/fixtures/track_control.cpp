@@ -17,7 +17,7 @@ const u32 kBlocks = 0x90000000, kBlockBytes = 0x10000;
 u32 bases[control::tracks][control::track_parameters];
 u32 engines[16], ticks, writes, resets, runs, sets, edits_seen;
 control::Entry last_edit;
-u32 capture;
+u32 capture, mark;
 i32 seen;  // the value of track 0, parameter 1 the machine was given
 i32 seen_own;  // and of its own engine control 1
 // Each track's LFO amount, which stock's displayed value adds.
@@ -72,6 +72,8 @@ void run(const control::Input* input, control::Overlay* overlay) {
     if (input->edit_count) last_edit = input->edits[input->edit_count - 1];
     require(overlay->capture == 0, "Capture not cleared");
     overlay->capture = capture;
+    require(overlay->mark == 0, "Mark not cleared");
+    overlay->mark = mark;
     for (u32 i = 0; i < script_count; ++i) overlay->entries[overlay->count++] = script[i];
 }
 void plan(std::initializer_list<control::Entry> entries) {
@@ -237,8 +239,12 @@ int main() {
     tick(1, "Overlay not written once one copy is left");
     require(runs == ran + 1 && value(0, 1) == 700 && sdk_control_copies(2) == 1, "Single copy not run again");
 
-    // Marks over every page: an overlaid selected track, then a capture.
+    // Marks over every page: an overlaid selected track once the machine asks
+    // for it, then a capture whether or not it asks.
     selected = 0;
+    require(opxy::platform::control_marks() == 0, "Overlaid track marked unasked");
+    mark = 1;
+    tick(0, "Mark rewrote the overlay");
     require(opxy::platform::control_marks() == opxy::platform::kMarkOverlaid, "Overlaid track not marked");
     selected = 3;
     require(opxy::platform::control_marks() == 0, "Track without overlay marked");
@@ -246,6 +252,8 @@ int main() {
     tick(0, "Capture rewrote the overlay");
     require(opxy::platform::control_marks() == opxy::platform::kMarkCapture, "Capture not marked");
     capture = 0;
+    mark = 0;
     tick(0, "End of capture rewrote the overlay");
+    require(opxy::platform::control_marks() == 0, "Mark kept after the machine stopped asking");
     return 0;
 }

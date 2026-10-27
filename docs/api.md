@@ -289,6 +289,12 @@ from MIDI or presets are not captured. Like the display, `control` is bounded
 and allocation-free; it is not an audio callback. Browser previews do not run
 it.
 
+Track control marks what it does on every page, over stock's: while the
+machine captures, a red frame fading inward at the screen's edge; with
+`overlay.mark` set to 1, a thin dark red frame on the page of any track it
+overlays. The SDK draws them in the last screen page, which no machine is
+given.
+
 ## Sample engines
 
 [sample_engine.hpp](../sdk/include/opxy/sample_engine.hpp) defines the sample

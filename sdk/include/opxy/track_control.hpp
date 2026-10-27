@@ -43,6 +43,9 @@ struct Overlay {
     // capturing, every parameter edited meanwhile returns to its value from
     // before the capture.
     u32 capture;
+    // 0 on entry. 1 marks the pages of the tracks this tick overlays with a
+    // thin dark red frame. While capturing, every page has a red frame anyway.
+    u32 mark;
 };
 
 // GUI side, for a display: how many instrument tracks hold the same machine as
