@@ -17,6 +17,15 @@ const u32 tracks = 8;
 const u32 track_parameters = 58;
 const u32 overlay_capacity = 64;
 const u32 edit_capacity = 32;
+// A machine that declares resources.trackControl.savedBytes (1..saved_capacity)
+// keeps data with each project, on the GUI side, through two more functions:
+//   u32 control_save(const ControlState&, u8* data, u32 capacity);
+// writes at most `capacity` (its savedBytes) bytes when stock saves a project,
+// the workspace included, and returns how many; and
+//   void control_load(ControlState&, const u8* data, u32 bytes);
+// gets them back after stock loads a project saved with them, or `bytes` 0
+// after it loads a project without them.
+const u32 saved_capacity = 8192;
 
 // One parameter of an instrument track: an overlay entry or a captured edit.
 struct Entry { u8 track, index; u16 reserved; i32 value; };

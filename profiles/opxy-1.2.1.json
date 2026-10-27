@@ -750,6 +750,15 @@
       "call": true
     },
     {
+      "kind": "hook",
+      "address": "0x8d58913e",
+      "file_offset": "0x1c039a",
+      "length": 4,
+      "before": "00e3e984",
+      "symbol": "sdk_project_read",
+      "call": true
+    },
+    {
       "kind": "text",
       "name": "MTP path allowlist: project companion (.oxy) beside each project (.xy)",
       "address": "0x840ae494",

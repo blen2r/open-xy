@@ -391,6 +391,17 @@ extern "C" void {p}_control(const opxy::control::Input* input, opxy::control::Ov
     {namespace}::control(state, *input, *overlay);
 }}
 '''
+    if 'savedBytes' in control:
+        source += f'''extern "C" opxy::u32 {p}_control_save(opxy::u8*) __asm__("{p}_control_save");
+extern "C" void {p}_control_load(const opxy::u8*, opxy::u32) __asm__("{p}_control_load");
+extern "C" opxy::u32 {p}_control_save(opxy::u8* data) {{
+    const opxy::u32 bytes = {namespace}::control_save(state, data, {control['savedBytes']});
+    return bytes <= {control['savedBytes']} ? bytes : 0;
+}}
+extern "C" void {p}_control_load(const opxy::u8* data, opxy::u32 bytes) {{
+    {namespace}::control_load(state, data, bytes);
+}}
+'''
     destination = Path(directory) / 'control_binding.cpp'
     destination.write_text(source, encoding='utf-8', newline='\n')
     return destination
@@ -398,7 +409,11 @@ extern "C" void {p}_control(const opxy::control::Input* input, opxy::control::Ov
 
 def control_callbacks(m):
     """The C entry points a synth with track control exports."""
-    return [m.prefix + suffix for suffix in ('_control_reset', '_control')] if track_control(m) else []
+    control = track_control(m)
+    if not control:
+        return []
+    suffixes = ('_control_reset', '_control') + (('_control_save', '_control_load') if 'savedBytes' in control else ())
+    return [m.prefix + suffix for suffix in suffixes]
 
 
 def generate_track_controls(directory, machines):
@@ -407,12 +422,16 @@ def generate_track_controls(directory, machines):
     for m in machines:
         if not track_control(m):
             continue
-        p = m.prefix
+        p, saved = m.prefix, track_control(m).get('savedBytes', 0)
         declarations += [f'int {p}_ready() __asm__("{p}_ready");',
                          f'extern const char {p}_engine_id[] __asm__("{p}_engine_id");',
                          f'void {p}_control_reset() __asm__("{p}_control_reset");',
                          f'void {p}_control(const opxy::control::Input*, opxy::control::Overlay*) __asm__("{p}_control");']
-        rows.append(f'    {{{p}_engine_id, {p}_ready, {p}_control_reset, {p}_control}},')
+        if saved:
+            declarations += [f'opxy::u32 {p}_control_save(opxy::u8*) __asm__("{p}_control_save");',
+                             f'void {p}_control_load(const opxy::u8*, opxy::u32) __asm__("{p}_control_load");']
+        callbacks = f'{p}_control_save, {p}_control_load' if saved else 'nullptr, nullptr'
+        rows.append(f'    {{{p}_engine_id, {p}_ready, {p}_control_reset, {p}_control, "{m.id}", {saved}, {callbacks}}},')
     return expand('track_control_table.cpp.in', dict(CONTROL_DECLS='\n'.join(declarations), MACHINES='\n'.join(rows)),
                   Path(directory) / 'track_control_table.cpp')
 

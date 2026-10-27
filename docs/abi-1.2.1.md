@@ -34,7 +34,7 @@ version is rejected. The output differs from stock in exactly these places:
 | Synth and effect controls | 5 | Lets an encoder press on an owned synth's page select an alternate parameter, which its turns and titles then follow; scales fine turns on owned synth and send-effect pages; names an owned effect's division values on the send page |
 | LFO destinations | 15 | Selects and modulates all declared engine parameters on owned instrument machines with five to eight parameters, using their assigned encoder icons |
 | Display note releases | 2 | Observes both stock note-off map updates while preserving their original calls |
-| Project companions | 4 | Writes a [companion](projects.md) after every project save, and shows companions beside projects over MTP |
+| Project companions | 5 | Writes a [companion](projects.md) after every project save, gives track control machines what they kept after every project load, and shows companions beside projects over MTP |
 | Diagnostic benchmark | 1 | Extends explicit command 0xc8 with the selected machines; no normal-playback callbacks added |
 | Per-voice profiling | 10 optional | Bypasses diagnostic timing in both stock voice renderers when built with profiling off |
 | Track control | 3 | Runs a synth's track control once per GUI tick, after stock's own call at that site, lets it capture encoder edits, and shows its overlays as parameter values |
@@ -385,6 +385,14 @@ newlib `fopen`, `fread` and `fclose` (`0x8fed0348`, `0x8fed05bc`,
 `fwrite` (`0x8fed0780`) ([`project_companion.cpp`](../sdk/platform/opxy-1.2.1/project_companion.cpp)).
 The machines it lists are the collection's, from their link-time numbers; a
 kit leaves out machines with number 0. A failed save writes nothing.
+
+Stock loads every project, the workspace included, through one function,
+`read(project, path)` (`0x8d599b10`), which `project_load` (`0x8d5890b0`) calls
+once, at `0x8d58913e`. That call is hooked: after a read that succeeds, the SDK
+reads the companion beside the project and, when its binding matches the
+project's bytes, decodes each track control machine's `open-xy.control` entry
+and calls its `control_load`; with no matching entry, `control_load` gets 0
+bytes. A failed read changes nothing.
 
 Stock's MTP view lists only paths matching a table of regular expressions
 (`0x840ae0c4`…), and under `/projects` only `.xy`. Three text edits rewrite

@@ -289,6 +289,20 @@ from MIDI or presets are not captured. Like the display, `control` is bounded
 and allocation-free; it is not an audio callback. Browser previews do not run
 it.
 
+A machine can keep data with each project, such as Morph's states. It adds
+`"savedBytes": n` (1..8192) to `trackControl` and supplies:
+
+```cpp
+u32 control_save(const ControlState& state, u8* data, u32 capacity);  // bytes written, at most capacity (n)
+void control_load(ControlState& state, const u8* data, u32 bytes);
+```
+
+When stock saves a project, the workspace included, `control_save` writes what
+to keep; the SDK stores it in the project's [companion](projects.md). After
+stock loads a project, `control_load` gets those bytes back, or `bytes` 0 when
+the project has none (saved before, on stock, or without the machine), so the
+machine can start empty. Both run on the GUI side.
+
 Track control marks what it does on every page, over stock's: while the
 machine captures, a red frame fading inward at the screen's edge; with
 `overlay.mark` set to 1, a thin dark red frame on the page of any track it

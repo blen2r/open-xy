@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from tooling import native
-from tooling.adapters import control_callbacks, generate_track_controls
+from tooling.adapters import control_callbacks, generate_control, generate_track_controls
 from tooling.definitions import validate_definition
 from tooling.formats import ldr, mapped_offset, sha
 from tooling.pipeline import ROOT, config
@@ -25,8 +25,11 @@ class TrackControl(unittest.TestCase):
     def test_definition_declares_aligned_state(self):
         synth = fixture('probesynth').definition
         validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4}), 'synth')
+        validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4, 'savedBytes': 8192}), 'synth')
         for control in ({'stateBytes': 6, 'stateAlignment': 4}, {'stateBytes': 0, 'stateAlignment': 4},
-                        {'stateBytes': 8}, {'stateBytes': 8, 'stateAlignment': 4, 'tracks': 1}, 1):
+                        {'stateBytes': 8}, {'stateBytes': 8, 'stateAlignment': 4, 'tracks': 1}, 1,
+                        {'stateBytes': 8, 'stateAlignment': 4, 'savedBytes': 0},
+                        {'stateBytes': 8, 'stateAlignment': 4, 'savedBytes': 8193}):
             with self.subTest(control=control), self.assertRaises(ValueError):
                 validate_definition(with_control(synth, control), 'synth')
         effect = fixture('probefx').definition
@@ -40,8 +43,20 @@ class TrackControl(unittest.TestCase):
         self.assertIn('sdk/track_control.o', native.object_owners(machines))
         with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
             table = generate_track_controls(folder, machines).read_text(encoding='utf-8')
-        self.assertIn('{nullptr, nullptr, nullptr, nullptr}', table)
+        self.assertIn('{nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr}', table)
         self.assertNotIn('probesynth', table)
+
+    def test_a_machine_that_keeps_data_exports_save_and_load(self):
+        synth = copy.deepcopy(fixture('probesynth'))
+        synth.definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4, 'savedBytes': 100}
+        self.assertEqual(control_callbacks(synth)[2:], [synth.prefix + '_control_save', synth.prefix + '_control_load'])
+        with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
+            table = generate_track_controls(folder, [synth]).read_text(encoding='utf-8')
+            binding = generate_control(folder, synth).read_text(encoding='utf-8')
+        p = synth.prefix
+        self.assertIn(f'"{synth.id}", 100, {p}_control_save, {p}_control_load}}', table)
+        self.assertIn('control_save(state, data, 100)', binding)
+        self.assertIn('return bytes <= 100 ? bytes : 0;', binding)
 
     def test_gui_tick_is_a_reviewed_call_in_a_shared_unit(self):
         hooks = [p for p in config()['patches']

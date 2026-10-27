@@ -10,6 +10,12 @@ struct ControlMachine {
     int (*ready)();
     void (*reset)();
     void (*control)(const control::Input*, control::Overlay*);
+    // What it keeps with each project (project_companion.cpp): its machine ID,
+    // at most saved_bytes, and save/load, or 0 and null when it keeps nothing.
+    const char* name;
+    u32 saved_bytes;
+    u32 (*save)(u8* data);
+    void (*load)(const u8* data, u32 bytes);
     u32 engine() const { return static_cast<u32>(reinterpret_cast<__UINTPTR_TYPE__>(id)); }
 };
 // The marks track control shows over every page (track_control_overlay.cpp.in):

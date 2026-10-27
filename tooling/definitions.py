@@ -81,6 +81,8 @@ EFFECT_OPTIONS = ('bufferBytes', 'transport')
 EFFECT_BUFFER_LIMIT = 524288
 # A synth's optional GUI-side track control (opxy/track_control.hpp): its state.
 CONTROL_FIELDS = ('stateBytes', 'stateAlignment')
+# The most a track control machine keeps with a project (opxy::control::saved_capacity).
+SAVED_CAPACITY = 8192
 DISPLAY_FORMATS = ('ratio', 'percent', 'bipolar', 'duration', 'semitones', 'enum', 'division')
 # Every kind's parameters occupy the stock eight-word parameter vector in order.
 # A synth's first four fill the four-control page; up to four more are alternates
@@ -177,11 +179,15 @@ def validate_synth_resources(resources):
     validate_display(resources['display'])
     if 'trackControl' in resources:
         control = resources['trackControl']
-        keys(control, CONTROL_FIELDS, 'trackControl')
+        saved = isinstance(control, dict) and 'savedBytes' in control
+        keys(control, CONTROL_FIELDS + (('savedBytes',) if saved else ()), 'trackControl')
         require(type(control['stateBytes']) is int and type(control['stateAlignment']) is int and
                 4 <= control['stateBytes'] and control['stateAlignment'] in (4, 8, 16) and
                 control['stateBytes'] % control['stateAlignment'] == 0,
                 'Track control state must occupy aligned whole words')
+        require('savedBytes' not in control or type(control['savedBytes']) is int and
+                1 <= control['savedBytes'] <= SAVED_CAPACITY,
+                f'Track control saves 1 to {SAVED_CAPACITY} bytes with a project')
 
 
 def validate_display(display):
