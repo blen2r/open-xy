@@ -19,10 +19,11 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 from . import benchmark, screen, startup_label, stock_tables
-from .adapters import (catalog_entry, generate_display, generate_fx_object, generate_registration,
-                       generate_registration_stock, generate_sample_voice,
+from .adapters import (catalog_entry, generate_control, generate_display, generate_fx_object,
+                       generate_registration, generate_registration_stock, generate_sample_voice,
                        generate_sample_callbacks, generate_screen, generate_screen_order,
-                       generate_synth_controls, generate_project_companion_table, generate_voice)
+                       generate_synth_controls, generate_project_companion_table, generate_track_controls,
+                       generate_voice, track_control)
 from .contributors import validate_source_boundary
 from .firmware import active_services, assemble, hook_instruction, hook_target, patch_active
 from .formats import elf32, elf_sections, require, sha
@@ -156,7 +157,8 @@ def plan(machines, profile=None):
     units = []
     for m in machines:
         if m.kind == 'synth':
-            steps = ('voice', *('source:' + s for s in m.sources), 'display', 'screen', 'registration')
+            steps = ('voice', *('source:' + s for s in m.sources), 'display', 'screen', 'registration',
+                     *(('control',) if track_control(m) else ()))
         elif m.kind == 'effect':
             steps = ('registration', 'fx_object')
         else:
@@ -177,7 +179,8 @@ SDK_UNITS = ('divide', 'memory', 'registration', 'registration_stock', 'startup'
              'sample_cache_hooks', 'sample_progress', 'sample_progress_stock', 'pad_assignment',
              'pad_assignment_stock', 'drum_page', 'drum_controls_stock', 'drum_display_stock', 'screen_order',
              'screen_hooks', 'synth_controls', 'synth_control_table', 'note_activity', 'project_companion',
-             'project_companion_table', 'profiling', 'lfo', 'lfo_stock', 'lfo_hooks')
+             'project_companion_table', 'profiling', 'lfo', 'lfo_stock', 'lfo_hooks', 'track_control',
+             'track_control_table')
 # SDK units that exist only for a profile service, linked when a machine needs it.
 UNIT_SERVICES = dict.fromkeys(('sample_machines', 'sample_hooks', 'sample_callbacks', 'sample_cache',
                                'sample_cache_stock', 'sample_cache_hooks', 'sample_progress',
@@ -272,6 +275,8 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
                 return cxx(str(generate_synth_controls(folder, machines)), obj)
             if step == 'project_companion_table':
                 return cxx(str(generate_project_companion_table(folder, machines)), obj)
+            if step == 'track_control_table':
+                return cxx(str(generate_track_controls(folder, machines)), obj)
             if step == 'registration_stock':
                 return cxx(str(generate_registration_stock(folder)), obj)
             if step == 'divide':
@@ -292,6 +297,7 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
         source = {'voice': lambda: generate_voice(folder, m), 'display': lambda: display_unit(folder, m),
                   'screen': lambda: generate_screen(folder, m), 'fx_object': lambda: generate_fx_object(folder, m, benchmark=True),
                   'registration': lambda: generate_registration(folder, m),
+                  'control': lambda: generate_control(folder, m),
                   'sample_voice': lambda: generate_sample_voice(folder, m, benchmark=True)}[step]
         return cxx(str(source()), obj, m)
 

@@ -37,6 +37,7 @@ version is rejected. The output differs from stock in exactly these places:
 | Project companions | 4 | Writes a [companion](projects.md) after every project save, and shows companions beside projects over MTP |
 | Diagnostic benchmark | 1 | Extends explicit command 0xc8 with the selected machines; no normal-playback callbacks added |
 | Per-voice profiling | 10 optional | Bypasses diagnostic timing in both stock voice renderers when built with profiling off |
+| Track control | 1 | Runs a synth's track control once per GUI tick, after stock's own call at that site |
 | Startup label | 1 | Shows `OPEN <version>-1.2.1` at boot, `<version>` from [`VERSION`](../VERSION), through the stock startup text renderer |
 | Module | 1 record | One loader block holding the linked module |
 
@@ -228,6 +229,27 @@ clamp retained selectors beyond the declared count to the last slot, just
 as audio does. Changing from a larger machine therefore keeps a valid name
 and icon until the user edits the destination.
 The [API guide](api.md#alternate-controls) describes saved-selector compatibility.
+
+### Track control
+
+Stock keeps each track's live parameters at `g_project + 0x4080` (`g_project`
+is the object at `86bd027c`), 58 words a track: the engine's eight controls,
+then stock's own track parameters. They are the values edits, parameter locks
+and sequencing set; the project saves separate base values. `8d5acea8(project,
+track, index, value)` writes one live value and publishes it to the audio side
+when it changed.
+
+`8c0baacc`, the GUI's per-tick update, calls the void leaf `8d580074` just
+before the sequencer tick. That call at `8c0baade` routes through
+`sdk_gui_tick` ([`track_control.cpp`](../sdk/platform/opxy-1.2.1/track_control.cpp)),
+which makes the original call first. Then, for the first instrument track
+holding a synth with [track control](api.md#track-control), it treats any live
+value that differs from the one it last wrote as stock's, gives the machine
+every instrument track's values without its overlays, writes the new overlay
+through `8d5acea8`, and writes stock's last value back wherever the machine
+stopped overlaying, unless stock has written there since. Values written this
+way are live values only: the saved project keeps stock's base values. With no
+such synth on a track, the hook makes only the original call.
 
 ## Sample engines
 

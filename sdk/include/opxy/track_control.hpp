@@ -1,0 +1,42 @@
+// Track control (SDK 1.4): a synth that declares resources.trackControl runs
+// control() on the GUI side once per stock GUI tick while it is on an
+// instrument track. It reads every instrument track's live parameters and may
+// overlay other tracks' values for that tick. Overlays never reach the saved
+// project: stock keeps its own values, and a parameter the machine stops
+// overlaying returns to them.
+#pragma once
+#include <opxy/types.hpp>
+
+namespace opxy { namespace control {
+// Instrument tracks 0..7, and stock's live parameter words for each: the
+// engine's eight controls (0..7), then stock's own track parameters in stock's
+// units. Every live value is non-negative.
+const u32 tracks = 8;
+const u32 track_parameters = 58;
+const u32 overlay_capacity = 64;
+
+struct Input {
+    u32 track;  // the instrument track this machine is on
+    // Each track's live values as stock sets them (sequenced, locked or
+    // edited), without any overlay.
+    i32 values[tracks][track_parameters];
+};
+
+// One parameter to overlay this tick. An entry for the machine's own track, or
+// outside tracks x track_parameters, is ignored; a later entry for the same
+// parameter replaces an earlier one; negative values are treated as 0.
+struct Entry { u8 track, index; u16 reserved; i32 value; };
+struct Overlay {
+    u32 count;  // 0 on entry; at most overlay_capacity
+    Entry entries[overlay_capacity];
+};
+
+inline void add(Overlay& overlay, u32 track, u32 index, i32 value) {
+    if (overlay.count >= overlay_capacity || track >= tracks || index >= track_parameters) return;
+    Entry& entry = overlay.entries[overlay.count++];
+    entry.track = static_cast<u8>(track);
+    entry.index = static_cast<u8>(index);
+    entry.reserved = 0;
+    entry.value = value;
+}
+}}

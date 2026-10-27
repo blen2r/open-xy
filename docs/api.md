@@ -5,7 +5,7 @@ A machine is a folder under `machines/` named after the machine. Every kind has
 
 | Kind | C++ the machine supplies | Example |
 | --- | --- | --- |
-| `synth` | `engine.cpp` with `Voice`/`Shared` state, `display.cpp` and `panel.svg.fragment` | [2op FM](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/fm2op/engine.cpp), [Macro Osc](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/macroosc/engine.cpp) |
+| `synth` | `engine.cpp` with `Voice`/`Shared` state, `display.cpp` and `panel.svg.fragment`; `control.cpp` with [track control](#track-control) | [2op FM](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/fm2op/engine.cpp), [Macro Osc](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/macroosc/engine.cpp) |
 | `sample` | `sample.cpp` with `Voice` state; the stock sample page is its screen | [Timestretch](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/timestretch/sample.cpp) |
 | `effect` | `fx.cpp` with `State`; the stock FX page is its screen | [Ring Mod](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/ringmod/fx.cpp) |
 
@@ -184,6 +184,7 @@ A synth declares:
 | `sharedBytes` | `Shared` size, or 0 when `Shared` is empty |
 | `outputPeakQ31` | Positive declared oscillator peak; the preview uses it for audition gain |
 | `display` | The screen's frame budget; see the [display API](display.md) |
+| `trackControl` | Optional: the [track control](#track-control) state's `stateBytes` and `stateAlignment` |
 
 The SDK never runs constructors or destructors for `Voice`, `Shared` or
 `DisplayState`: their storage starts zeroed and the callbacks set it up.
@@ -241,6 +242,37 @@ method table and voice pool; none of that belongs in `Voice`.
 ownership; `release` cannot free a stolen lease. The engine decides how a
 voice behaves after losing a resource. This pool has no locks and requires
 serialized access.
+
+## Track control
+
+A synth can steer other tracks (SDK 1.4). It declares
+`"trackControl": {"stateBytes": n, "stateAlignment": a}` in `resources`, with
+`"sdk": "1.4"` in `machine.json`, and supplies `control.cpp` with:
+
+```cpp
+struct ControlState { ... };  // trivial, standard-layout; starts zeroed
+void control_reset(ControlState& state);
+void control(ControlState& state, const opxy::control::Input& input, opxy::control::Overlay& overlay);
+```
+
+[track_control.hpp](../sdk/include/opxy/track_control.hpp) defines the types.
+`control` runs on the GUI side once per stock GUI tick while the machine is on
+an instrument track; only the first such track runs it. `control_reset` runs
+before the first call and whenever the machine moves to another track.
+
+| `Input` field | Contract |
+| --- | --- |
+| `track` | The instrument track the machine is on |
+| `values[track][index]` | Every instrument track's 58 live parameter words, as stock sets them (edits, parameter locks, sequencing), without this machine's overlay. Indices 0..7 are the engine's controls; the rest are stock's own track parameters, in stock's units |
+
+`overlay` arrives empty; `opxy::control::add` appends up to 64 entries, each a
+track, parameter index and value for this tick. Entries for the machine's own
+track or outside the table are ignored, the last entry for a parameter wins and
+negative values count as 0. A parameter the machine stops overlaying returns to
+stock's value. Overlays are live values only: saved projects keep stock's
+values, and an edit or parameter lock under an overlay reaches `values` on the
+next tick. Like the display, `control` is bounded and allocation-free; it is
+not an audio callback. Browser previews do not run it.
 
 ## Sample engines
 
@@ -452,7 +484,7 @@ preset entries, its screen file, its symbol prefix and its C++ namespace. It is 
 | Field | Contract |
 | --- | --- |
 | `schema` | 1 |
-| `sdk` | The SDK version the machine targets, `"<major>.<minor>"`. This SDK is 1.3 and builds 1.0 to 1.3 machines |
+| `sdk` | The SDK version the machine targets, `"<major>.<minor>"`. This SDK is 1.4 and builds 1.0 to 1.4 machines |
 | `kind` | `synth`, `sample` or `effect` |
 | `description` | Plain text of at most 160 characters, shown by the builder and preview |
 | `identity` | The numbers it asks for: `{"engine": n, "page": p}`, or `{"effect": n, "page": 21}` for an effect; see below |

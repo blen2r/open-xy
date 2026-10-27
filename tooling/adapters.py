@@ -362,6 +362,56 @@ FX_BUFFER_INIT = '''    // Stock's per-send scratch memory, which stock delay an
         ? opxy::platform::stock<opxy::i32*(opxy::u32, opxy::u32)>(0x8d50e048)(slot, {bytes}u) : nullptr;'''
 
 
+def track_control(m):
+    """A synth's declared track control state, or None."""
+    return m.definition['resources'].get('trackControl') if m.kind == 'synth' else None
+
+
+def generate_control(directory, m):
+    """A synth's track control callbacks behind C entry points, with its state."""
+    control, namespace, p = track_control(m), m.definition['id'], m.prefix
+    source = f'''// Generated: {m.native_name}'s track control behind C entry points.
+#include "control.cpp"
+static_assert(sizeof({namespace}::ControlState) == {control['stateBytes']},
+              "Declared track control state size differs from C++ type");
+static_assert(alignof({namespace}::ControlState) == {control['stateAlignment']},
+              "Declared track control state alignment differs from C++ type");
+static_assert(__is_trivial({namespace}::ControlState) && __is_standard_layout({namespace}::ControlState),
+              "Track control state must be trivial standard-layout data");
+namespace {{ {namespace}::ControlState state; }}
+extern "C" void {p}_control_reset() __asm__("{p}_control_reset");
+extern "C" void {p}_control(const opxy::control::Input*, opxy::control::Overlay*) __asm__("{p}_control");
+extern "C" void {p}_control_reset() {{ {namespace}::control_reset(state); }}
+extern "C" void {p}_control(const opxy::control::Input* input, opxy::control::Overlay* overlay) {{
+    {namespace}::control(state, *input, *overlay);
+}}
+'''
+    destination = Path(directory) / 'control_binding.cpp'
+    destination.write_text(source, encoding='utf-8', newline='\n')
+    return destination
+
+
+def control_callbacks(m):
+    """The C entry points a synth with track control exports."""
+    return [m.prefix + suffix for suffix in ('_control_reset', '_control')] if track_control(m) else []
+
+
+def generate_track_controls(directory, machines):
+    """The collection's synths with track control, as one table (track_control.hpp)."""
+    declarations, rows = [], []
+    for m in machines:
+        if not track_control(m):
+            continue
+        p = m.prefix
+        declarations += [f'int {p}_ready() __asm__("{p}_ready");',
+                         f'extern const char {p}_engine_id[] __asm__("{p}_engine_id");',
+                         f'void {p}_control_reset() __asm__("{p}_control_reset");',
+                         f'void {p}_control(const opxy::control::Input*, opxy::control::Overlay*) __asm__("{p}_control");']
+        rows.append(f'    {{{p}_engine_id, {p}_ready, {p}_control_reset, {p}_control}},')
+    return expand('track_control_table.cpp.in', dict(CONTROL_DECLS='\n'.join(declarations), MACHINES='\n'.join(rows)),
+                  Path(directory) / 'track_control_table.cpp')
+
+
 def generate_fx_object(directory, m, benchmark=False):
     resources = m.definition['resources']
     bytes_ = resources.get('bufferBytes')
