@@ -57,8 +57,8 @@ python sdk.py compile --collection local/catalog/collection.json --out <folder>
    examples. A root-level machine uses catalog `path: "."`; a machine in a
    multi-machine repository uses its folder, such as `machines/myid`.
 2. **Reserve the ID when you intend to publish.** Open a catalog-only PR against
-   `staging` with an unused ID and `reserved` entry as above. Your personal builds
-   need no reservation. The ID is saved in presets and held for good; engine,
+   `main` (see step 6) with an unused ID and `reserved` entry as above. Your personal
+   builds need no reservation. The ID is saved in presets and held for good; engine,
    effect and page numbers are assigned by each build's layout.
 3. **Check and audition.** Run `sdk.py test --machine <folder>` and the native
    compile (`test --firmware` with the pinned tools). Extend the machine's own
@@ -79,8 +79,10 @@ python sdk.py compile --collection local/catalog/collection.json --out <folder>
    report, keep it in an issue/comment or separate evidence location so adding
    the readout does not change the machine commit after measurement.
 6. **Validate the catalog PR.** From a checkout of the SDK, run
-   `python sdk.py catalog check --base origin/staging`. The PR targets `staging`
-   and changes only your entry in `catalog/machines.json`. CI fetches the pinned
+   `python sdk.py catalog check --base origin/main`. The PR targets `main`
+   and changes only your entry in `catalog/machines.json`. A machine that needs
+   SDK changes not yet released targets `staging` instead (`--base origin/staging`)
+   and reaches `main` with the next release. CI fetches the pinned
    source and checks the entry; maintainer review follows below.
 
 Updates follow the same checks: tag a new machine revision, remeasure it and
@@ -103,9 +105,10 @@ request that changes `catalog/` or anything published machines build against
 published machine and checks it as its own repository's CI does, and compiles
 the firmware module with all of them on the pinned Windows tools.
 
-Merged catalog changes reach the site with the next release
-([`sdk.py release`](builder.md#cloudflare-deployment)): beta from `staging`,
-then production from `main`.
+Maintainers merge `main` into `staging` after each catalog merge, so both
+branches carry every entry. Merged catalog changes reach the site with the next
+release ([`sdk.py release`](builder.md#cloudflare-deployment)): production from
+`main`, beta from `staging`.
 
 The builder shows catalog machines as **Community**, unselected at first.
 Open-XY's own examples, which maintainers list by ID (`OFFICIAL` in

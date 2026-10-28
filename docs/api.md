@@ -40,7 +40,9 @@ firmware reserves from its heap, minus 8 KiB of relocated stock tables. There
 is no per-machine allowance: a build that does not fit names each machine's
 share, and `sdk.py compile` and the builder's memory meter report the same
 figures. State usually dominates, since a synth's voice pool is
-`voiceBytes × voiceCapacity`.
+`voiceBytes × (min(voiceCapacity, 27) + 1)`: stock never sounds more than 27
+notes, and one spare voice serves a note that ended as another starts. The SDK
+adds 12 bytes per stock voice index (3 KiB) and 16 per voice.
 
 | Limit | Value | Why |
 | --- | --- | --- |
@@ -200,7 +202,7 @@ A synth declares:
 | Field | Required value or meaning |
 | --- | --- |
 | `voiceBytes`, `voiceAlignment` | `Voice` size (whole words) and alignment, checked against the compiled type |
-| `voiceCapacity` | Notes that sound at once, 1..256. Stock's 256 voice indices share these voices: a new note takes a free one, or the one whose note started longest ago |
+| `voiceCapacity` | Notes that sound at once, 1..256. Stock plays at most 8 notes per track and fades a note it takes, so 8 keeps a machine on one track within its own voices; allow 8 for each track it plays on at once. Values above 27, stock's voice slots, keep 27 voices plus the spare (28). Stock's 256 voice indices share these voices and one spare ([synth voices](abi-1.2.1.md#synth-voices)) |
 | `sharedBytes` | `Shared` size, or 0 when `Shared` is empty |
 | `outputPeakQ31` | Positive declared oscillator peak; the preview uses it for audition gain |
 | `display` | The screen's frame budget; see the [display API](display.md) |
@@ -250,11 +252,16 @@ Storage begins zeroed; `owner` is a stable nonzero voice ID, the stock voice
 index plus one. Each of the machine's `voiceCapacity` voices serves one owner at
 a time: `initialize` runs when a voice goes to an owner and establishes all
 sound state; `start` runs on each note; `destroy` releases anything the voice
-holds in `Shared`, when its note ends or another note takes the voice. A note
-whose voice was taken renders silence; no voice index ever fails, whatever the
-capacity.
+holds in `Shared`, once stock has stopped rendering its note (it ended, or
+stock took it and restarted the index) or another note has taken the voice.
+The adapter notices an ended note within about three blocks while the machine
+renders other notes; after the machine's last note it notices at the next note
+start. A taken note renders one last block fading to silence, then renders
+silence; no voice index ever fails, whatever the capacity.
 Callbacks run serially per voice. The browser preview's voice stealing and
-panic use the same lifecycle. The SDK adapter owns the firmware object header,
+panic use the same callbacks, but the preview always keeps 8 voices and takes
+the oldest at once: it does not model `voiceCapacity`, stock's renders, the
+spare or the fade. The SDK adapter owns the firmware object header,
 method table and voice pool; none of that belongs in `Voice`.
 
 [LeasePool](../sdk/include/opxy/lease_pool.hpp) provides fixed typed resources.

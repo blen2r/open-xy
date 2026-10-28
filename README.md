@@ -17,7 +17,7 @@ own stock `os.ldr`, without installing anything.
 
 **Contributing? Start feature branches from `staging` and open pull requests
 against `staging`.** It is the development branch; `main` receives reviewed
-releases from `staging`. See the [contributor workflow](CONTRIBUTING.md#branch-workflow).
+releases from `staging`, and machine submissions (catalog-only PRs) go to `main`. See the [contributor workflow](CONTRIBUTING.md#branch-workflow).
 
 This is an unofficial, experimental SDK. A build statically links a curated
 collection of machines into exact stock OS 1.2.1; arbitrary engine installation

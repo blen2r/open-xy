@@ -18,7 +18,7 @@ addresses live beside the code that uses them: the adapter templates in
 ## What a build changes
 
 The input is decrypted stock `os.ldr` 1.2.1
-(`e9dbdaa1…98f2`, pinned in the profile). An encrypted `.tfw` or any other
+(`60358afd…b52f`, pinned in the profile). An encrypted `.tfw` or any other
 version is rejected. The output differs from stock in exactly these places:
 
 | Change | Edits | Purpose |
@@ -74,6 +74,69 @@ exporter. The heap calls match the bounded allocation path used by sample analys
 allocation, preparation and cleanup are outside the timed callback. No callback
 wrapper is inserted into normal audio processing. See [workloads](profiling.md#what-is-measured).
 
+## Stock browser
+
+The internal GUI adapter in
+[`stock_browser.hpp`](../sdk/platform/opxy-1.2.1/stock_browser.hpp) reuses the
+stock engine/preset browser for flat selectors. It is specific to authenticated
+OS 1.2.1 and is not part of the public machine or WASM drawing API. Linking the
+adapter adds no stock patch, shortcut, startup action or audio callback.
+
+Declare `opxy::platform::stock_browser::StockSelector<N>` as a zero-initialized
+static aggregate. It owns N rows, copied strings, the catalog and its delegate.
+Call `open(title, labels, initial, callbacks)` from the native GUI role:
+
+```cpp
+#include "stock_browser.hpp"
+namespace browser = opxy::platform::stock_browser;
+static browser::StockSelector<3> shape_selector = {};
+static opxy::u32 selected_shape = 1;
+static void choose_shape(void*, opxy::u32 index) { selected_shape = index; }
+
+bool show_shapes() {
+    const char* labels[3] = {"soft", "medium", "hard"};
+    return shape_selector.open("shape", labels, selected_shape,
+        browser::Callbacks{nullptr, choose_shape, nullptr});
+}
+```
+
+N must be nonzero. Titles and labels must contain 1–15 printable ASCII
+characters; `open` rejects invalid strings, an out-of-range initial index or a
+missing confirmation callback. It copies strings, so the label array and
+source strings need not outlive the call. The selector and callback context
+must remain alive and unmodified until the browser closes.
+
+Only one adapter selector may be active. Opening while it or another stock
+browser (GUI screen 9) is active returns false without replacing it. Stock
+owns the modal screen, scrolling and controller stack: the left encoder
+selects rows, either the left or white click confirms, and M2 cancels. Other
+stock browser users retain their existing controls. Unsupported encoder
+clicks are consumed. The adapter does not change stock turn routing.
+
+Highlighting changes only a pending index. Confirmation receives that index
+once; a subsequent close does not cancel it. Closing without confirmation
+calls the optional cancellation callback once. Ownership remains held during
+callbacks, so synchronous reopen attempts fail. Defer another selector to a
+later GUI event. The adapter only delivers a GUI choice; its client owns
+persistence and any parameter transport to audio. Never call this API from
+an audio callback or publish audio state by sharing the GUI selector storage.
+
+The stock call contract is in `stock_browser.cpp`: browser getter `8c09dc28`,
+setup `8c0a0b90(browser, catalog, initial, delegate, mode=0)`, screen getter
+`8d550e70`, plain heading `8d551c48(screen, -1, title)` and preset-bank visibility
+`8d5501ec(screen, 0)`. The catalog uses 28-byte inline strings, 36-byte items,
+72-byte rows and a 20-byte root on the 32-bit target. The delegate's +0x10
+method receives highlights, +0x1c handles clicks (0 left, 3 white), +0x24 observes
+close, and +0x30 returns an empty options vector through a hidden result pointer.
+These details remain behind the adapter; clients must not recreate the ABI or
+install global input hooks to use it.
+
+The shared host fixture exercises two clients, input rejection, both stock
+click paths, cancellation, modal ownership and callback reentry. Native build
+and release verification check the target ABI and reconstruction. Hardware
+observations must be tied to the tested image; host doubles do not establish
+device timing or acceptance.
+
 ## Startup
 
 1. The synth initializer's exit registers every effect, then, on the audio
@@ -116,9 +179,34 @@ Stock asks the factory for a voice object per voice index (0–255) and calls
 it through an 11-entry method table: render once per 64-sample block, start on
 a note, and unchanged stock defaults for the rest (see
 [`voice.cpp.in`](../sdk/platform/opxy-1.2.1/voice.cpp.in)). It never checks
-for a missing object, so the factory gives every index a small handle. A
-machine's `voiceCapacity` voices go to handles as their notes start: a free
-voice, or the one whose note started longest ago. A handle that has lost its
+for a missing object, so the factory gives every index a small handle. Stock
+asks for an index's object again before each note it starts there, renders the
+index once per block while its note sounds, and never calls the destructor
+entries for a note: a note ends when stock stops rendering its index. Stock's
+free-voice allocator (`8d51c994`) hands out its 27 voice slots and limits each
+track to 8 notes; at the limit it takes the quietest
+voice on the track, fades it over one block and restarts the same index
+(`8d51ca94`, `8d51ad04`).
+
+Stock has 27 voice slots, so the adapter keeps at most 27 voices, plus one
+spare: `min(voiceCapacity, 27) + 1`. They go to handles as their notes start: a
+free voice, else one whose index has missed two blocks of renders (blocks are
+counted from the renders themselves), or, once nothing of the machine has
+rendered for 60 ticks of CPU cycles (`sdk_voice_ticks`, about 20 ms), any whose
+note did not just start. Ended voices are released once per counted block, and
+at a note start after such a pause. When a whole chord of `voiceCapacity` notes
+changes at once on new indices, the spare covers one note and the rest start
+about two blocks late, until their old notes have missed two blocks; a capacity
+above the chord size avoids that delay. A factory call for an index
+frees the voice it held, so a voice stock takes keeps its place for the
+restarted note. The spare covers a note that ended just before another starts.
+Only with more notes sounding than that (a capacity below 8, or the machine on
+several tracks) does a note take a sounding voice: one no other note waits for,
+then one past its first 8 blocks (as stock spares young voices), then the one
+rendered least recently, then the one whose note started first. As stock does
+with a voice it takes, that note fades linearly to silence over its next
+block, and the new note starts in the voice once it has, or once stock has
+stopped rendering the old note. A handle that has lost its
 voice renders silence. One adapter serves every synth.
 Render receives 64 output words and 8 parameter words. The SDK adds the stock
 per-sample pitch increments. Output is mono Q31 peaking at most at half scale. Stock

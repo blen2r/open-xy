@@ -163,7 +163,7 @@ validation pending and ask a maintainer to measure it.
 
 When publication is requested, follow [catalog submission](catalog.md#submit-a-machine):
 reserve an ID, tag the measured commit and submit its release and CPU record in
-one catalog entry against `staging`. The machine code stays in your repository.
+one catalog entry against `main`. The machine code stays in your repository.
 Every new or changed draft/published entry requires measurements for that exact
 revision. Published community machines link to their pinned source in the builder.
 
