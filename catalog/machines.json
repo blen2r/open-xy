@@ -263,7 +263,18 @@
       "id": "morphose",
       "kind": "synth",
       "maintainer": "blen2r",
-      "status": "reserved"
+      "status": "draft",
+      "repository": "https://github.com/blen2r/opxy-morpher",
+      "tag": "v1.0.0",
+      "commit": "bff3845521bf8228c707d856ccbcc6973a1a3bfe",
+      "path": "machines/morphose",
+      "cpu": {
+        "benchmark": "opxy-synth-c8-v1",
+        "commit": "bff3845521bf8228c707d856ccbcc6973a1a3bfe",
+        "firmware_sha256": "2f598eb066a08e0b2bd9f4936c406db990f7d5f6faad9ee117d863bbfd005193",
+        "runs": 3,
+        "block_percent": 0.834668
+      }
     },
     {
       "id": "grains",
