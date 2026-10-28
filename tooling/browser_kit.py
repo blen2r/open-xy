@@ -84,6 +84,8 @@ def export(package, output, tools, preview_cxx='clang++', *, stock_catalog, pers
                 entry['absent'].update({symbol: 'kit_absent' for symbol in control_callbacks(m)})
         if m.kind in ('effect', 'sample'):
             entry['absent'][m.prefix + '_benchmark'] = 'kit_absent'
+        if native.track_control(m) and native.track_control(m).get('marks'):
+            entry['marks'] = native.validate_marks(m).decode('utf-8')
         if m.display != 'stock':
             entry['artwork'] = read(m.root / 'panel.svg.fragment').decode('utf-8')
             entry['asset'] = m.native_name + '.svg'
@@ -117,6 +119,12 @@ def export(package, output, tools, preview_cxx='clang++', *, stock_catalog, pers
                machines=kit_machines, objects=objects, notices=notices(machines),
                stockCatalog=base64.b64encode(stock_catalog).decode('ascii'),
                screenTemplate=screen.template().decode('utf-8'))
+    # Track control: the marks' artwork, and the startup's call into the marks
+    # screen, which declines while a selection does not use the service.
+    if 'control' in native.active_services(profile, native.machine_uses(machines)):
+        kit['controlArtwork'] = read(ROOT / native.TEMPLATES / 'track_control_overlay.svg').decode('utf-8')
+        kit['serviceFallbacks'] = {'control': dict.fromkeys(
+            ('sdk_overlay_startup',), 'kit_absent')}
     kit_path = output / 'kit.json'
     kit_path.write_text(json.dumps(kit, separators=(',', ':')), encoding='utf-8')
     # Reference validation exercises every subset against GNU ld. Failure leaves

@@ -7,7 +7,8 @@ import tempfile
 import unittest
 
 from tooling import native
-from tooling.adapters import control_callbacks, generate_control, generate_track_controls
+from tooling.adapters import (control_callbacks, generate_control, generate_track_control_overlay,
+                              generate_track_controls)
 from tooling.definitions import validate_definition
 from tooling.formats import ldr, mapped_offset, sha
 from tooling.pipeline import ROOT, config
@@ -26,11 +27,15 @@ class TrackControl(unittest.TestCase):
         synth = fixture('probesynth').definition
         validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4}), 'synth')
         validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4, 'unique': True}), 'synth')
-        validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4, 'unique': False}), 'synth')
+        validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4, 'unique': False,
+                                                 'marks': {'capture': 1, 'line': 0}}), 'synth')
         for control in ({'stateBytes': 6, 'stateAlignment': 4}, {'stateBytes': 0, 'stateAlignment': 4},
                         {'stateBytes': 8}, {'stateBytes': 8, 'stateAlignment': 4, 'tracks': 1}, 1,
                         {'stateBytes': 8, 'stateAlignment': 4, 'unique': 1},
-                        {'stateBytes': 8, 'stateAlignment': 4, 'marks': {'capture': 1, 'line': 1}}):
+                        {'stateBytes': 8, 'stateAlignment': 4, 'marks': {'capture': 0, 'line': 1}},
+                        {'stateBytes': 8, 'stateAlignment': 4, 'marks': {'capture': 17, 'line': 1}},
+                        {'stateBytes': 8, 'stateAlignment': 4, 'marks': {'capture': 1, 'line': 17}},
+                        {'stateBytes': 8, 'stateAlignment': 4, 'marks': {'capture': 1}}):
             with self.subTest(control=control), self.assertRaises(ValueError):
                 validate_definition(with_control(synth, control), 'synth')
         effect = fixture('probefx').definition
@@ -59,6 +64,47 @@ class TrackControl(unittest.TestCase):
         self.assertIn('control_reset(states[copy])', binding)
         self.assertIn('control(states[copy], *input, *overlay)', binding)
 
+    def test_a_machine_can_draw_its_own_marks(self):
+        import dataclasses
+        import shutil
+        plain = copy.deepcopy(fixture('probesynth'))
+        plain.definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4}
+        with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
+            root = Path(folder) / 'own'
+            shutil.copytree(fixture('probesynth').root, root)
+            definition = copy.deepcopy(fixture('probesynth').definition)
+            definition['id'] = 'own'
+            definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4,
+                                                       'marks': {'capture': 2, 'line': 1}}
+            own = dataclasses.replace(fixture('probesynth'), id='own', root=root, definition=definition)
+            marks = ('<g id="own_marks">'
+                     '<circle id="own_capture_0" cx="8" cy="8" r="4" fill="#30d158" stroke="#30d158" stroke-width="1"/>'
+                     '<circle id="own_capture_1" cx="472" cy="8" r="4" fill="#30d158" stroke="#30d158" stroke-width="1"/>'
+                     '<path id="own_line" d="M0 219 L479 219" fill="none" stroke="#1f6f3a" stroke-width="1"/>'
+                     '</g>')
+            # The IDs are exactly the declared ones.
+            (root / 'marks.svg.fragment').write_text(marks, encoding='utf-8')
+            with self.assertRaises(ValueError):
+                native.validate_marks(own)
+            (root / 'marks.svg.fragment').write_text(marks.replace('own_line', 'own_line_0'), encoding='utf-8')
+            artwork = native.control_artwork([plain, own]).decode('utf-8')
+            for bad in ('<g id="own_marks"><text id="own_capture_0" x="0" y="9" fill="#ffffff" font-family="a" '
+                        'font-size="9px">x</text><circle id="own_capture_1" cx="8" cy="8" r="4" fill="#30d158" '
+                        'stroke="#30d158" stroke-width="1"/><path id="own_line_0" d="M0 0 L9 9" fill="none" '
+                        'stroke="#1f6f3a" stroke-width="1"/></g>',
+                        marks.replace('own_marks', 'marks').replace('own_line', 'own_line_0')):
+                (root / 'marks.svg.fragment').write_text(bad, encoding='utf-8')
+                with self.subTest(bad=bad), self.assertRaises(ValueError):
+                    native.validate_marks(own)
+            overlay = generate_track_control_overlay(folder, [plain, own]).read_text(encoding='utf-8')
+        # The SDK's marks first, then the machine's own, with each machine's nodes.
+        self.assertEqual(artwork.count('</svg>'), 1)
+        self.assertLess(artwork.index('overlay_line'), artwork.index('own_capture_0'))
+        self.assertIn('const u32 kNodes = 8;', overlay)
+        self.assertIn('"own_capture_0",\n    "own_capture_1",\n    "own_line_0",', overlay)
+        self.assertIn('{0, 4, 4, 1},  // probesynth', overlay)
+        self.assertIn('{5, 2, 7, 1},  // own', overlay)
+
     def test_builds_without_track_control_stay_as_before(self):
         from tooling.firmware import active_services, patch_active
         plain = [fixture(name) for name in ('probesynth', 'probefx')]
@@ -72,8 +118,13 @@ class TrackControl(unittest.TestCase):
             self.assertEqual('control' in services, used)
             self.assertEqual(all(patch_active(p, services) for p in hooks), used)
             units = {step for _name, _m, step in native.plan(machines)}
-            for unit in ('track_control', 'track_control_table', 'track_control_hooks'):
+            for unit in ('track_control', 'track_control_table', 'track_control_hooks', 'track_control_overlay'):
                 self.assertEqual(unit in units, used)
+        # Startup starts the marks' screen only with the service.
+        from tooling.startup import render
+        plain_startup, control_startup = render(['probe']), render(['probe'], control=True)
+        self.assertNotIn('sdk_overlay_startup', plain_startup)
+        self.assertIn('    sdk_overlay_startup();', control_startup)
 
     def test_gui_tick_is_a_reviewed_call_in_a_shared_unit(self):
         hooks = [p for p in config()['patches']

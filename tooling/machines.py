@@ -164,7 +164,8 @@ def check_identity(rules, kind, value):
         require(rules['engine_none'] < number and page in rules['sample_pages'],
                 'Sample engines need a relocated-table engine ID and a stock sample page')
     else:
-        require(rules['page_none'] < page < rules['pages'], 'A machine with its own screen needs a relocated page')
+        # The last page holds track control's marks (track_control_overlay.cpp.in).
+        require(rules['page_none'] < page < rules['pages'] - 1, 'A machine with its own screen needs a relocated page')
     return {slot: number, 'page': page}
 
 
@@ -278,7 +279,7 @@ def number_pools(rules):
     from the relocated table above stock's "none" value: the gaps in stock's own table
     below it are left for stock."""
     engines = [n for n in range(rules['engine_none'] + 1, rules['engines']) if n not in rules['stock_engines']]
-    return dict(engine=engines, page=list(range(rules['page_none'] + 1, rules['pages'])), effect=list(rules['effects']))
+    return dict(engine=engines, page=list(range(rules['page_none'] + 1, rules['pages'] - 1)), effect=list(rules['effects']))
 
 
 def occupied(rules, identity):

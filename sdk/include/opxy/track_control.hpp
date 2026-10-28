@@ -1,7 +1,7 @@
 // Track control (SDK 1.5): a synth that declares resources.trackControl runs
 // control() on the GUI side once per stock GUI tick while it is on an
 // instrument track. It reads every instrument track's live parameters and may
-// overlay other tracks' values for that tick.
+// overlay other tracks' values for that tick, or capture their encoder edits.
 // Overlays never reach the saved project: stock keeps its own values, and a
 // parameter the machine stops overlaying returns to them.
 //
@@ -22,10 +22,11 @@ namespace opxy { namespace control {
 const u32 tracks = 8;
 const u32 track_parameters = 58;
 const u32 overlay_capacity = 64;
+const u32 edit_capacity = 32;
 // Words the machine passes to its own display each tick (Overlay::display).
 const u32 display_words = 4;
 
-// One parameter of an instrument track: an overlay entry.
+// One parameter of an instrument track: an overlay entry or a captured edit.
 struct Entry { u8 track, index; u16 reserved; i32 value; };
 
 struct Input {
@@ -33,6 +34,12 @@ struct Input {
     // Each track's live values as stock sets them (sequenced, locked or
     // edited), without any machine's overlay.
     i32 values[tracks][track_parameters];
+    // 1 while this copy's capture is in effect: one copy captures at a time.
+    u32 capturing;
+    // While this copy captures: encoder edits of other instrument tracks'
+    // parameters since the last tick, oldest first, with the edited value.
+    u32 edit_count;
+    Entry edits[edit_capacity];
     // Microseconds since the previous tick (0 on the first after a reset, at
     // most one second), for anything that runs in real time.
     u32 elapsed_us;
@@ -49,6 +56,16 @@ struct Input {
 struct Overlay {
     u32 count;  // 0 on entry; at most overlay_capacity
     Entry entries[overlay_capacity];
+    // 0 on entry. 1 asks to capture encoder edits: they still play and show
+    // as usual, and arrive in the next tick's edits. One copy captures at a
+    // time: the one already capturing, else the first track asking. When the
+    // capture ends, every parameter edited meanwhile returns to its value
+    // from before it. While it captures, every page shows the machine's
+    // capture marks (a red frame fading inward, unless it supplies its own).
+    u32 capture;
+    // 0 on entry. 1 marks the pages of the tracks this tick overlays with the
+    // machine's line marks (a thin dark red frame, unless it supplies its own).
+    u32 mark;
     // 0 on entry: words for the machine's own display, which reads them with
     // from_control. The control and display are separate code, so this is
     // how the display shows what the control worked out.

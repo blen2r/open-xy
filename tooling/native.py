@@ -23,7 +23,7 @@ from .adapters import (catalog_entry, generate_control, generate_display, genera
                        generate_registration, generate_registration_stock, generate_sample_voice,
                        generate_sample_callbacks, generate_screen, generate_screen_order,
                        generate_synth_controls, generate_project_companion_table, generate_track_controls,
-                       generate_voice, track_control)
+                       generate_track_control_overlay, generate_voice, mark_ids, track_control)
 from .contributors import validate_source_boundary
 from .firmware import active_services, assemble, hook_instruction, hook_target, patch_active
 from .formats import elf32, elf_sections, require, sha
@@ -180,7 +180,7 @@ SDK_UNITS = ('divide', 'memory', 'registration', 'registration_stock', 'startup'
              'pad_assignment_stock', 'drum_page', 'drum_controls_stock', 'drum_display_stock', 'screen_order',
              'screen_hooks', 'synth_controls', 'synth_control_table', 'note_activity', 'project_companion',
              'project_companion_table', 'profiling', 'lfo', 'lfo_stock', 'lfo_hooks', 'track_control',
-             'track_control_table', 'track_control_hooks')
+             'track_control_table', 'track_control_hooks', 'track_control_overlay')
 def machine_uses(machines):
     """What machines use, for profile services: their kinds and the features they declare."""
     uses = set()
@@ -196,8 +196,10 @@ UNIT_SERVICES = dict.fromkeys(('sample_machines', 'sample_hooks', 'sample_callba
                                'sample_cache_stock', 'sample_cache_hooks', 'sample_progress',
                                'sample_progress_stock', 'pad_assignment', 'pad_assignment_stock', 'drum_page',
                                'drum_controls_stock', 'drum_display_stock'), 'samples')
-# Track control runs from the GUI tick hook.
-UNIT_SERVICES.update(dict.fromkeys(('track_control', 'track_control_table', 'track_control_hooks'), 'control'))
+# Track control runs from the GUI tick hook; the marks' screen
+# registers at startup only in builds that link it.
+UNIT_SERVICES.update(dict.fromkeys(('track_control', 'track_control_table', 'track_control_hooks',
+                                    'track_control_overlay'), 'control'))
 
 
 def module_bytes(profile):
@@ -289,6 +291,8 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
                 return cxx(str(generate_project_companion_table(folder, machines)), obj)
             if step == 'track_control_table':
                 return cxx(str(generate_track_controls(folder, machines)), obj)
+            if step == 'track_control_overlay':
+                return cxx(str(generate_track_control_overlay(folder, machines)), obj)
             if step == 'registration_stock':
                 return cxx(str(generate_registration_stock(folder)), obj)
             if step == 'divide':
@@ -299,8 +303,9 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
                 return assemble_unit(startup_label.generate(folder, version), obj)
             if step == 'startup':
                 prefixes = [x.prefix for x in by_kind(machines, 'synth', 'sample')]
+                control = 'control' in active_services(profile, machine_uses(machines))
                 return cxx(str(generate_startup(folder, prefixes, [x.prefix for x in effects],
-                                                [x.prefix for x in sample_engines])), obj)
+                                                [x.prefix for x in sample_engines], control)), obj)
             if (ROOT / TEMPLATES / (step + '.cpp')).is_file():
                 return cxx(TEMPLATES + step + '.cpp', obj)
             return assemble_unit(ROOT / TEMPLATES / (step + '.s'), obj)
@@ -619,6 +624,12 @@ def validate_panel(m, fragment=None):
     palette = check_bindings(by_id, m.prefix, m.definition['resources']['display'])
     for name in palette:
         donor(name)
+    check_authored(nodes)
+    return fragment
+
+
+def check_authored(nodes):
+    """The authored SVG subset: elements, numbers, paint and no styles, events or references."""
     for node in nodes:
         for attribute in SVG_NUMERIC.intersection(node.attrib):
             value = node.attrib[attribute]
@@ -637,7 +648,31 @@ def validate_panel(m, fragment=None):
                 require(node.get('stroke') not in (None, 'none') and float(node.get('stroke-width', '0')) > 0,
                         'Invisible authored SVG outline')
 
+
+def validate_marks(m):
+    """A track control machine's own marks (marks.svg.fragment): one root group,
+    the authored SVG subset without text, and exactly its declared mark nodes,
+    each a path or circle the overlay can show and hide."""
+    fragment = read(m.root / 'marks.svg.fragment')
+    root = panel_root(fragment, m.source('marks.svg.fragment'))
+    nodes = list(root.iter())
+    require(root.tag == 'g' and root.get('id') == m.id + '_marks', f'marks.svg.fragment must be <g id="{m.id}_marks">')
+    check_authored(nodes)
+    require(all(node.tag != 'text' for node in nodes), 'Track control marks have no text')
+    ids = [node.get('id') for node in nodes[1:] if node.get('id')]
+    require(len(ids) == len(set(ids)) and set(ids) == set(mark_ids(m)),
+            'marks.svg.fragment must hold exactly the declared mark IDs: ' + ', '.join(mark_ids(m)))
+    require(all(node.tag in ('path', 'circle') for node in nodes[1:] if node.get('id')),
+            'Each mark is a path or circle')
     return fragment
+
+
+def control_artwork(machines):
+    """The marks over every page: the SDK's, then each track control machine's own."""
+    template = read(ROOT / TEMPLATES / 'track_control_overlay.svg')
+    require(template.count(b'</svg>') == 1, 'Unexpected marks artwork boundary')
+    own = b''.join(validate_marks(m) for m in machines if track_control(m) and track_control(m).get('marks'))
+    return template.replace(b'</svg>', own + b'</svg>')
 
 
 def extend_catalog(catalog, profile, machines):
@@ -662,6 +697,8 @@ def prepare_assets(catalog, profile, machines):
     for m in machines:
         if m.display != 'stock':
             outputs[f'content/display/{m.native_name}.svg'] = screen.compose(validate_panel(m))
+    if any(track_control(m) for m in machines):
+        outputs['content/display/openxy_overlay.svg'] = control_artwork(machines)
     return outputs
 
 

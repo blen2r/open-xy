@@ -204,7 +204,7 @@ A synth declares:
 | `sharedBytes` | `Shared` size, or 0 when `Shared` is empty |
 | `outputPeakQ31` | Positive declared oscillator peak; the preview uses it for audition gain |
 | `display` | The screen's frame budget; see the [display API](display.md) |
-| `trackControl` | Optional: the [track control](#track-control) state's `stateBytes` and `stateAlignment`, and optionally `unique` |
+| `trackControl` | Optional: the [track control](#track-control) state's `stateBytes` and `stateAlignment`, and optionally `unique` and `marks` |
 
 The SDK never runs constructors or destructors for `Voice`, `Shared` or
 `DisplayState`: their storage starts zeroed and the callbacks set it up.
@@ -284,7 +284,7 @@ order, so a project can hold several, and several copies of one: each copy has
 its own `ControlState`, which costs `stateBytes` for each of the eight tracks.
 A machine that must run alone adds `"unique": true` to `trackControl`: it has
 one state, and while two or more instrument tracks hold it, none runs and every
-overlay ends as if it had left. A display can tell its user with
+overlay and capture ends as if it had left. A display can tell its user with
 `opxy::control::copies(track)`, the number of instrument tracks holding the
 machine on `track` (browser previews answer 1). `control_reset` runs before a
 copy's first call and whenever a copy arrives on a track.
@@ -292,7 +292,9 @@ copy's first call and whenever a copy arrives on a track.
 | `Input` field | Contract |
 | --- | --- |
 | `track` | The instrument track this copy is on |
+| `capturing` | 1 while this copy's capture is in effect (below) |
 | `values[track][index]` | Every instrument track's 58 live parameter words, as stock sets them (edits, parameter locks, sequencing), without any machine's overlay. Indices 0..7 are the engine's controls; the rest are stock's own track parameters, in stock's units. The machine's own engine controls are the values its page shows, including its LFO |
+| `edit_count`, `edits` | While capturing: up to 32 encoder edits of other instrument tracks' parameters since the last tick, oldest first, as track, index and edited value |
 | `elapsed_us` | Microseconds since the previous tick, from the core clock: 0 on the first tick after a reset, at most one second |
 | `transport` | The project's tempo in tenths of BPM (0 when unknown), the song position in 96ths of a quarter note, which advances only while playing, and whether the sequencer plays |
 
@@ -307,14 +309,39 @@ next tick. Pages show an overlaid parameter's overlay, whether or not the
 sequencer plays; for a moment after the parameter's encoder is turned, they
 show the track's own value, which the turn changes.
 
-Like the display, `control` is bounded and allocation-free; it is not an audio
-callback. Browser previews do not run it.
+Setting `overlay.capture` to 1 asks to capture encoder edits for the next tick:
+they still play and show as usual, and arrive in `edits`. One copy captures at a
+time: the one already capturing while it asks, otherwise the first track
+asking; `input.capturing` tells a copy its capture is in effect. When the
+capturing copy returns 0, or leaves its track, every parameter edited during the capture
+returns to its value from before it, so a machine can record edits without
+keeping them. Edits made while a step is held (parameter locks) and changes
+from MIDI or presets are not captured. Like the display, `control` is bounded
+and allocation-free; it is not an audio callback. Browser previews do not run
+it.
 
 A machine's control and display are compiled separately, so they share no
 variables. The control can pass four words to its display each tick in
 `overlay.display`, which the display reads with
 `opxy::control::from_control(index)`: the words of the copy on the selected
 track, 0 when it did not run, and always 0 in browser previews.
+
+Track control marks what it does on every page, over stock's: while a machine
+captures, its capture marks; with `overlay.mark` set to 1, its line marks on the
+page of any track it overlays. The SDK's are a red frame fading inward at the
+screen's edge and a thin dark red frame. The SDK draws them in the last screen
+page, which no machine is given.
+
+A machine can draw its own instead, in any colour or shape: it adds
+`"marks": {"capture": c, "line": l}` to `trackControl` (1..16 capture nodes,
+0..16 line nodes; 0 never marks steered tracks) and supplies
+`marks.svg.fragment`, one `<g id="<id>_marks">` holding exactly
+`<id>_capture_0`..`<id>_capture_<c-1>` and `<id>_line_0`..`<id>_line_<l-1>`,
+each a `path` or `circle` in the authored SVG subset, without text. They are
+drawn over every stock page, so keep them to the screen's edges or small, and
+leave the page readable; the capture marks must make clear that edits are being
+recorded. [track_control_overlay.svg](../sdk/platform/opxy-1.2.1/track_control_overlay.svg)
+holds the SDK's, as a starting point.
 
 ## Sample engines
 

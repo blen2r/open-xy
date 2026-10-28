@@ -112,7 +112,9 @@ class PackageVerification(unittest.TestCase):
             for symbol in undefined:
                 service = services.get(owner_of.get(symbol))
                 if service and name not in services:
-                    self.assertTrue(uses.get(owner, set()) & set(users[service]), (name, symbol))
+                    # The startup, generated per selection, starts a service it links.
+                    user = native.machine_uses(self.machines) if name == 'sdk/startup.o' else uses.get(owner, set())
+                    self.assertTrue(user & set(users[service]), (name, symbol))
 
     def test_only_curated_engines_are_linked_and_added_to_stock_content(self):
         _, symbols = elf32(self.elf)
@@ -129,11 +131,13 @@ class PackageVerification(unittest.TestCase):
         displays = [m.native_name for m in self.machines if m.display != 'stock']
         files = {p.relative_to(self.package / 'candidate').as_posix()
                  for p in (self.package / 'candidate').rglob('*') if p.is_file()}
-        self.assertEqual(files, {'os.ldr', 'content/op1_factory.json'} | {f'content/display/{n}.svg' for n in displays})
+        marks = {'content/display/openxy_overlay.svg'} if any(map(native.track_control, self.machines)) else set()
+        self.assertEqual(files, {'os.ldr', 'content/op1_factory.json'} | {f'content/display/{n}.svg' for n in displays} | marks)
 
     def test_changed_os_elf_module_and_asset_fail_even_with_new_hash(self):
         names = ['candidate/os.ldr', 'analysis/module.elf', 'analysis/module.bin', 'candidate/content/op1_factory.json',
-                 *(f'candidate/content/display/{m.native_name}.svg' for m in self.machines if m.display != 'stock')]
+                 *(f'candidate/content/display/{m.native_name}.svg' for m in self.machines if m.display != 'stock'),
+                 *(['candidate/content/display/openxy_overlay.svg'] if any(map(native.track_control, self.machines)) else [])]
         for name in names:
             with self.subTest(name=name):
                 path = self.copy / name

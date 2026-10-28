@@ -14,9 +14,11 @@ def _declare(name, signature='()'):
     return f'int {name}{signature} __asm__("{name}");'
 
 
-def render(prefixes, effects=(), stock_page=()):
+def render(prefixes, effects=(), stock_page=(), control=False):
     """stock_page: engines that show a stock page (e.g. sample engines on the
-    sampler page); they register on the GUI role without an own-page guard."""
+    sampler page); they register on the GUI role without an own-page guard.
+    control: the build links the control service; its marks screen registers
+    last."""
     require(1 <= len(prefixes) <= MAX_ENGINES and len(set(prefixes)) == len(prefixes),
             'Startup needs distinct engine prefixes')
     require(len(set(effects)) == len(effects) <= MAX_ENGINES and not set(effects) & set(prefixes),
@@ -40,6 +42,9 @@ def render(prefixes, effects=(), stock_page=()):
                'stock_catalog_insert(catalog, name, id) : 0;' for prefix in prefixes]
     owned = [f'    if (page == value({prefix}_page_id)) return {prefix}_ready() == 1;'
              for prefix in prefixes if prefix not in stock_page]
+    if control:
+        declarations.append('void sdk_overlay_startup() __asm__("sdk_overlay_startup");')
+        screens.append('    sdk_overlay_startup();')
     values = dict(DECLARATIONS='\n'.join(declarations), OWNED_SCREENS='\n'.join(owned),
                   EFFECTS='\n'.join(f'    {prefix}_fx_register();' for prefix in effects),
                   ENGINES='\n'.join(f'    {prefix}_register();' for prefix in prefixes),
@@ -52,7 +57,7 @@ def render(prefixes, effects=(), stock_page=()):
     return source
 
 
-def generate(directory, prefixes, effects=(), stock_page=()):
+def generate(directory, prefixes, effects=(), stock_page=(), control=False):
     destination = Path(directory) / 'startup.cpp'
-    destination.write_text(render(prefixes, effects, stock_page), encoding='utf-8', newline='\n')
+    destination.write_text(render(prefixes, effects, stock_page, control), encoding='utf-8', newline='\n')
     return destination

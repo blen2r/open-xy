@@ -81,8 +81,10 @@ EFFECT_OPTIONS = ('bufferBytes', 'transport')
 EFFECT_BUFFER_LIMIT = 524288
 # A synth's optional GUI-side track control (opxy/track_control.hpp): its state.
 CONTROL_FIELDS = ('stateBytes', 'stateAlignment')
-# Optional: whether only one copy runs.
-CONTROL_OPTIONS = ('unique',)
+# Optional: whether only one copy runs, and the machine's own marks
+# (marks.svg.fragment): capture nodes, then line nodes.
+CONTROL_OPTIONS = ('unique', 'marks')
+MARK_LIMIT = 16
 DISPLAY_FORMATS = ('ratio', 'percent', 'bipolar', 'duration', 'semitones', 'enum', 'division')
 # Every kind's parameters occupy the stock eight-word parameter vector in order.
 # A synth's first four fill the four-control page; up to four more are alternates
@@ -188,6 +190,12 @@ def validate_synth_resources(resources):
                 control['stateBytes'] % control['stateAlignment'] == 0,
                 'Track control state must occupy aligned whole words')
         require(type(control.get('unique', False)) is bool, 'Track control unique must be true or false')
+        if 'marks' in control:
+            marks = control['marks']
+            keys(marks, ('capture', 'line'), 'trackControl.marks')
+            require(type(marks['capture']) is int and 1 <= marks['capture'] <= MARK_LIMIT and
+                    type(marks['line']) is int and 0 <= marks['line'] <= MARK_LIMIT,
+                    f'Track control marks need 1 to {MARK_LIMIT} capture nodes and 0 to {MARK_LIMIT} line nodes')
 
 
 def validate_display(display):

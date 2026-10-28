@@ -11,10 +11,13 @@
 // overlays through 8d5acea8 (the later track's winning a parameter both
 // overlay), and restores what stock last set wherever no machine overlays.
 //
-// Turns: 8d5ad564, the encoder edit stock's controllers reach through 8d5ad5bc,
-// calls the setter 8d5acf28 with the new value unless a step is held for a
-// lock. That call at 8d5ad5ae routes through sdk_param_edit_set, which notes
-// the parameter turned for the display below, then makes the original call.
+// Capture: 8d5ad564, the encoder edit stock's controllers reach through
+// 8d5ad5bc, reads the base value at track data + 0x3864 and, unless a step is
+// held for a lock, calls the setter 8d5acf28 with the new value. That call at
+// 8d5ad5ae routes through sdk_param_edit_set. While a machine captures (one
+// copy at a time), it records the edit and the base value from before the
+// first one, then makes the original call; when capture ends, the SDK sets each
+// base value back.
 //
 // Display: stock's displayed-value getter 8d5ac9dc shows a parameter's live
 // value while the sequencer plays and its base value otherwise, plus any LFO
@@ -52,15 +55,19 @@ const u32 kEngineControls = 8;
 i32 shown(u32 track, u32 index) {
     return stock<i32(u32, u32, u32, u32)>(0x8d5ac9dc)(kProject, track, index, 1);
 }
+i32 base(u32 track, u32 index) {
+    return static_cast<i32>(word(stock<u32(u32)>(0x8d587708)(track) + 0x3864 + index * 4));
+}
 
-// One overlaid parameter: the value written, and stock's own value beneath it.
-struct Applied { u8 track, index, wanted; i32 written, underlying; };
+// One overlaid parameter: the value written, stock's own value beneath it,
+// and the track of the machine whose overlay it is.
+struct Applied { u8 track, index, wanted, owner; i32 written, underlying; };
 // Every machine's overlays together.
 const u32 kAppliedCapacity = 2 * control::overlay_capacity;
 Applied applied[kAppliedCapacity];
 u32 applied_count;
 // This tick's overlays from every machine, the later track's winning a parameter.
-struct Wanted { u8 track, index; i32 value; };
+struct Wanted { u8 track, index, owner; i32 value; };
 Wanted wanted[kAppliedCapacity];
 u32 wanted_count;
 control::Input input;
@@ -78,6 +85,17 @@ u32 last_cycles;
 const u32 kTurnTicks = 40;
 u32 gui_ticks, turned_track = control::tracks, turned_index, turned_tick;
 
+// Capture: the track whose copy captures (tracks when none), edits since the
+// last tick, and each edited parameter's base value from before the capture.
+// A parameter with no room to restore is not captured.
+const u32 kOriginals = 2 * control::overlay_capacity;
+u32 capture_track = control::tracks;
+// The tracks whose machine asked to mark the pages of the tracks it overlays.
+bool marking[control::tracks];
+control::Entry pending[control::edit_capacity];
+u32 pending_count;
+control::Entry originals[kOriginals];
+u32 original_count;
 // What each track's machine passed to its display last tick.
 i32 shown_words[control::tracks][control::display_words];
 
@@ -89,11 +107,24 @@ const ControlMachine* owner(u32 track) {
     }
     return nullptr;
 }
+u32 machine_index(const ControlMachine* m) { return static_cast<u32>(m - sdk_control_machines); }
 
 Applied* find(u32 track, u32 index) {
     for (u32 i = 0; i < applied_count; ++i)
         if (applied[i].track == track && applied[i].index == index) return &applied[i];
     return nullptr;
+}
+
+// Restoring a base value also makes it stock's value beneath any overlay.
+void end_capture() {
+    for (u32 i = 0; i < original_count; ++i) {
+        const control::Entry& o = originals[i];
+        param_set(kProject, o.track, o.index, o.value);
+        if (Applied* a = find(o.track, o.index)) a->underlying = o.value;
+    }
+    original_count = 0;
+    pending_count = 0;
+    capture_track = control::tracks;
 }
 
 // Adds the overlay of the machine on `host`: entries in range and not on its
@@ -111,9 +142,22 @@ void merge(u32 host) {
             w->track = e.track;
             w->index = e.index;
         }
+        w->owner = static_cast<u8>(host);
         w->value = e.value < 0 ? 0 : e.value;
     }
 }
+}
+
+Marks opxy::platform::control_marks() {
+    if (capture_track < control::tracks && hosts[capture_track])
+        return Marks{kMarkCapture, machine_index(hosts[capture_track])};
+    const u32 track = selected_track();
+    for (u32 i = 0; i < applied_count; ++i) {
+        const Applied& a = applied[i];
+        if (a.track == track && marking[a.owner] && hosts[a.owner])
+            return Marks{kMarkOverlaid, machine_index(hosts[a.owner])};
+    }
+    return Marks{0, 0};
 }
 
 extern "C" i32 sdk_control_display(u32 index) {
@@ -141,6 +185,27 @@ extern "C" void sdk_param_edit_set(u32 project, u32 track, u32 index, i32 value)
     turned_track = track;
     turned_index = index;
     turned_tick = gui_ticks;
+    if (capture_track < control::tracks && track < control::tracks && track != capture_track &&
+        index < control::track_parameters) {
+        bool known = false;
+        for (u32 i = 0; i < original_count && !known; ++i)
+            known = originals[i].track == track && originals[i].index == index;
+        if (!known && original_count < kOriginals) {
+            control::Entry& o = originals[original_count++];
+            o.track = static_cast<u8>(track);
+            o.index = static_cast<u8>(index);
+            o.reserved = 0;
+            o.value = base(track, index);
+            known = true;
+        }
+        if (known && pending_count < control::edit_capacity) {
+            control::Entry& e = pending[pending_count++];
+            e.track = static_cast<u8>(track);
+            e.index = static_cast<u8>(index);
+            e.reserved = 0;
+            e.value = value < 0 ? 0 : value;
+        }
+    }
     param_set(project, track, index, value);
 }
 
@@ -162,16 +227,19 @@ extern "C" void sdk_gui_tick() {
     const u32 now = opxy::benchmark::cycles(), us = (now - last_cycles) / kCyclesPerMicrosecond;
     last_cycles = now;
     wanted_count = 0;
-    bool loaded = false;
+    bool loaded = false, kept = false;
+    u32 asking = control::tracks;
     for (u32 t = 0; t < control::tracks; ++t) {
         const ControlMachine* m = owner(t);
         if (m && m->unique && sdk_control_copies(t) > 1) m = nullptr;
         const u32 copy = m && !m->unique ? t : 0;
         if (m != hosts[t]) {
+            if (capture_track == t) end_capture();
             hosts[t] = m;
             timed[t] = false;
             if (m) m->reset(copy);
         }
+        marking[t] = false;
         for (u32 i = 0; i < control::display_words; ++i) shown_words[t][i] = 0;
         if (!m) continue;
         if (!loaded) {
@@ -189,15 +257,33 @@ extern "C" void sdk_gui_tick() {
             input.values[t][p] = shown(t, p);
         }
         input.track = t;
+        input.capturing = capture_track == t;
+        input.edit_count = input.capturing ? pending_count : 0;
+        for (u32 i = 0; i < input.edit_count; ++i) input.edits[i] = pending[i];
+        if (input.capturing) pending_count = 0;
         input.elapsed_us = timed[t] ? (us < 1000000 ? us : 1000000) : 0;
         timed[t] = true;
         overlay.count = 0;
+        overlay.capture = 0;
+        overlay.mark = 0;
         for (u32 i = 0; i < control::display_words; ++i) overlay.display[i] = 0;
         m->control(copy, &input, &overlay);
         for (u32 p = 0; p < kEngineControls; ++p) input.values[t][p] = own[p];
         if (overlay.count > control::overlay_capacity) overlay.count = control::overlay_capacity;
+        if (overlay.capture) {
+            if (t == capture_track) kept = true;
+            else if (asking == control::tracks) asking = t;
+        }
+        marking[t] = overlay.mark != 0;
         for (u32 i = 0; i < control::display_words; ++i) shown_words[t][i] = overlay.display[i];
         merge(t);
+    }
+
+    // The copy capturing keeps on while it asks; otherwise the first asking
+    // starts. Ending a capture sets its base values back before this tick's overlays.
+    if (!kept) {
+        if (capture_track < control::tracks) end_capture();
+        capture_track = asking;
     }
 
     // Mark what the machines still overlay; restore and drop the rest.
@@ -223,6 +309,7 @@ extern "C" void sdk_gui_tick() {
             a->underlying = live(w.track, w.index);
         }
         a->wanted = 1;
+        a->owner = w.owner;
         a->written = w.value;
         if (live(w.track, w.index) != w.value) live_set(w.track, w.index, w.value);
     }
