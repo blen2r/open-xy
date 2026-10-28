@@ -17,7 +17,7 @@ struct SynthControls {
     bool (*format)(u32 slot, i32 value, char* text);
     bool effect;
     bool page;
-    u8 hidden_pages;  // stock instrument pages the synth hides, by page index (bit 1 envelope, bit 2 filter)
+    u8 hidden_pages;  // stock instrument pages the synth hides, by page index (bit 1 envelope, 2 filter, 3 lfo)
     u32 engine() const { return static_cast<u32>(reinterpret_cast<__UINTPTR_TYPE__>(id)); }
 };
 // GUI-only, bounded one-decimal formatting. Caller provides 16 bytes.

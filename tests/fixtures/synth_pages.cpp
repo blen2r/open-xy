@@ -20,12 +20,14 @@ int ready() { return 1; }
 }
 
 extern "C" {
-// Engine 40 hides the envelope and filter pages; engine 41 hides nothing.
+// Engine 40 hides the envelope and filter pages; engine 41 hides nothing; 42
+// hides every page but the engine page.
 const opxy::platform::SynthControls sdk_synth_controls[] = {
     {reinterpret_cast<const char*>(40), ready, {0, 1, 2, 3, 4, 5, 6, 7}, 0, nullptr, false, false, 6},
     {reinterpret_cast<const char*>(41), ready, {0, 1, 2, 3, 4, 5, 6, 7}, 0, nullptr, false, false, 0},
+    {reinterpret_cast<const char*>(42), ready, {0, 1, 2, 3, 4, 5, 6, 7}, 0, nullptr, false, false, 14},
     {nullptr, nullptr, {0, 1, 2, 3, 4, 5, 6, 7}, 0, nullptr, false, false, 0}};
-const u32 sdk_synth_control_count = 2;
+const u32 sdk_synth_control_count = 3;
 }
 
 Address opxy::platform::host_stock_address(Address address) {
@@ -47,6 +49,13 @@ int main() {
             sdk_synth_pages();
             require(page == p && sets == 0, "Page changed for a synth hiding nothing");
         }
+    // A synth hiding every page but the engine page stays there.
+    engines[4] = 42;
+    selected = 4;
+    page = 3;
+    sdk_synth_pages();
+    require(page == 0 && sets == 1, "LFO page not hidden");
+    sets = 0;
     // On the hiding synth, M4 then M2: back to M4; M3 from M1: back to M1.
     selected = 2;
     page = 3;

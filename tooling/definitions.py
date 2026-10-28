@@ -104,7 +104,7 @@ def control_positions(definition):
 
 
 # The stock instrument pages a synth may hide, by their page index (M1 is 0).
-HIDDEN_PAGES = {'envelope': 1, 'filter': 2}
+HIDDEN_PAGES = {'envelope': 1, 'filter': 2, 'lfo': 3}
 
 
 def hidden_pages(definition):
@@ -173,7 +173,7 @@ def validate_definition(value, kind):
     if 'hidePages' in value:
         pages = value['hidePages']
         require(kind == 'synth' and isinstance(pages, list) and pages and len(set(pages)) == len(pages) and
-                all(p in HIDDEN_PAGES for p in pages), '"hidePages" lists "envelope" and/or "filter" for a synth')
+                all(p in HIDDEN_PAGES for p in pages), '"hidePages" lists "envelope", "filter" and/or "lfo" for a synth')
     require(isinstance(value['presets'], dict) and len(value['presets']) <= 64, 'Invalid presets')
     for name, preset in value['presets'].items():
         label(name); keys(preset, names, 'preset')
