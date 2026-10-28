@@ -343,8 +343,8 @@ void control_load(ControlState& state, const u8* data, u32 bytes);
 When stock saves a project, the workspace included, `control_save` writes what
 to keep; the SDK stores it in the project's [companion](projects.md). After
 stock loads a project, `control_load` gets those bytes back, or `bytes` 0 when
-the project has none (saved before, on stock, or without the machine), so the
-machine can start empty. Both run on the GUI side.
+the project has none (saved before, on stock, or without the machine) or is a
+new one, so the machine can start empty. Both run on the GUI side.
 
 A machine's control and display are compiled separately, so they share no
 variables. The control can pass four words to its display each tick in

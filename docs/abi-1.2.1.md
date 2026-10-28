@@ -35,7 +35,7 @@ version is rejected. The output differs from stock in exactly these places:
 | Synth and effect controls | 7 | Lets an encoder press on an owned synth's or send effect's page select an alternate parameter, which its turns, titles and values then follow; scales fine turns on owned synth and send-effect pages; steps owned enums one choice per detent; names owned enums' choices, and an owned effect's division values on the send page |
 | LFO destinations | 15 | Selects and modulates all declared engine parameters on owned instrument machines with five to eight parameters, using their assigned encoder icons |
 | Display note releases | 2 | Observes both stock note-off map updates while preserving their original calls |
-| Project companions | 5 | Writes a [companion](projects.md) after every project save, gives track control machines what they kept after every project load, and shows companions beside projects over MTP |
+| Project companions | 7 | Writes a [companion](projects.md) after every project save, gives track control machines what they kept after every project load (and nothing after a new project), and shows companions beside projects over MTP |
 | Diagnostic benchmark | 1 | Extends explicit command 0xc8 with the selected machines; no normal-playback callbacks added |
 | Per-voice profiling | 10 optional | Bypasses diagnostic timing in both stock voice renderers when built with profiling off |
 | Track control | 3 | Runs a synth's track control once per GUI tick, after stock's own call at that site, lets it capture encoder edits, and shows its overlays as parameter values |
@@ -446,6 +446,13 @@ reads the companion beside the project and, when its binding matches the
 project's bytes, decodes each track control machine's `open-xy.control` entry
 and calls its `control_load`; with no matching entry, `control_load` gets 0
 bytes. A failed read changes nothing.
+
+A new project reads no file. Stock clears the project through `0x8d588114`, or
+clears it at random through `0x8d588988`, called for a new project only at
+`0x8d572f70` and `0x8d572ff8` (the clear's other caller is the boot fallback, when
+no machine has kept anything yet). Both calls are hooked: unless a project is
+loading (the word at `0x840a0528`, which makes both clears do nothing), every
+track control machine that keeps data then gets 0 bytes from `control_load`.
 
 Stock's MTP view lists only paths matching a table of regular expressions
 (`0x840ae0c4`…), and under `/projects` only `.xy`. Three text edits rewrite

@@ -3,6 +3,7 @@
 // control machine keeps a few bytes.
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <project_companion.cpp>
 #include <track_control_project.cpp>
 
@@ -57,6 +58,9 @@ const opxy::u32 sdk_control_machine_count = 2;
 
 namespace {
 opxy::u32 stock_read(void*, const char*) { return save_result; }
+// Stock's two project clears, and its loading flag, which makes them do nothing.
+opxy::u32 loading, clears;
+opxy::u32 stock_clear(opxy::u32, opxy::u32, opxy::u32) { if (!loading) ++clears; return 0; }
 }
 
 const opxy::platform::CompanionMachine sdk_companion_machines[] = {
@@ -75,18 +79,34 @@ Address opxy::platform::host_stock_address(Address address) {
     case 0x8fed00ae: return reinterpret_cast<Address>(&close_file);
     case 0x8d599074: return reinterpret_cast<Address>(&stock_save);
     case 0x8d599b10: return reinterpret_cast<Address>(&stock_read);
+    case 0x8d588114: return reinterpret_cast<Address>(&stock_clear);
+    case 0x8d588988: return reinterpret_cast<Address>(&stock_clear);
+    case 0x840a0528: return reinterpret_cast<Address>(&loading);
     }
     std::abort();
 }
 
-// project_companion <path> <stock result> [read]: saves, or with `read` loads and
-// prints what the keeping machine got back as hex, or "none".
+// project_companion <path> <stock result> [read | clear | random | busy]: saves, or
+// loads the project, starts a new one (clear or random), or tries to while a project
+// is loading (busy), and prints what the keeping machine got back as hex, or "none".
 int main(int argc, char** argv) {
     if (argc != 3 && argc != 4) return 2;
     saving = argv[1];
     save_result = static_cast<unsigned>(std::atoi(argv[2]));
     if (argc == 3) return sdk_project_save(nullptr, saving) == save_result ? 0 : 1;
-    if (sdk_project_read(nullptr, saving) != save_result) return 1;
+    const std::string mode = argv[3];
+    loading = mode == "busy";
+    if (mode == "read") {
+        if (sdk_project_read(nullptr, saving) != save_result) return 1;
+    } else if (mode == "clear" || mode == "busy") {
+        sdk_project_clear(0, 0, 0);
+        if (clears != (loading ? 0u : 1u)) return 1;
+    } else if (mode == "random") {
+        sdk_project_clear_random(0, 0, 0);
+        if (clears != 1) return 1;
+    } else {
+        return 2;
+    }
     if (loaded == 99) std::printf("none\n");
     else {
         for (opxy::u32 i = 0; i < loaded; ++i) std::printf("%02x", loaded_bytes[i]);
