@@ -5,7 +5,7 @@ A machine is a folder under `machines/` named after the machine. Every kind has
 
 | Kind | C++ the machine supplies | Example |
 | --- | --- | --- |
-| `synth` | `engine.cpp` with `Voice`/`Shared` state, `display.cpp` and `panel.svg.fragment` | [2op FM](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/fm2op/engine.cpp), [Macro Osc](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/macroosc/engine.cpp) |
+| `synth` | `engine.cpp` with `Voice`/`Shared` state, `display.cpp` and `panel.svg.fragment`; `control.cpp` with [track control](#track-control) | [2op FM](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/fm2op/engine.cpp), [Macro Osc](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/macroosc/engine.cpp) |
 | `sample` | `sample.cpp` with `Voice` state; the stock sample page is its screen | [Timestretch](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/timestretch/sample.cpp) |
 | `effect` | `fx.cpp` with `State`; the stock FX page is its screen | [Ring Mod](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/ringmod/fx.cpp) |
 
@@ -204,6 +204,7 @@ A synth declares:
 | `sharedBytes` | `Shared` size, or 0 when `Shared` is empty |
 | `outputPeakQ31` | Positive declared oscillator peak; the preview uses it for audition gain |
 | `display` | The screen's frame budget; see the [display API](display.md) |
+| `trackControl` | Optional: the [track control](#track-control) state's `stateBytes` and `stateAlignment`, and optionally `unique` |
 
 The SDK never runs constructors or destructors for `Voice`, `Shared` or
 `DisplayState`: their storage starts zeroed and the callbacks set it up.
@@ -261,6 +262,59 @@ method table and voice pool; none of that belongs in `Voice`.
 ownership; `release` cannot free a stolen lease. The engine decides how a
 voice behaves after losing a resource. This pool has no locks and requires
 serialized access.
+
+## Track control
+
+A synth can steer other tracks (SDK 1.5). A build without such a machine
+applies none of track control's
+firmware edits and links none of its code. It declares
+`"trackControl": {"stateBytes": n, "stateAlignment": a}` in `resources`, with
+`"sdk": "1.5"` in `machine.json`, and supplies `control.cpp` with:
+
+```cpp
+struct ControlState { ... };  // trivial, standard-layout; starts zeroed
+void control_reset(ControlState& state);
+void control(ControlState& state, const opxy::control::Input& input, opxy::control::Overlay& overlay);
+```
+
+[track_control.hpp](../sdk/include/opxy/track_control.hpp) defines the types.
+`control` runs on the GUI side once per stock GUI tick while the machine is on
+an instrument track. Every track control machine on tracks 1-8 runs, in track
+order, so a project can hold several, and several copies of one: each copy has
+its own `ControlState`, which costs `stateBytes` for each of the eight tracks.
+A machine that must run alone adds `"unique": true` to `trackControl`: it has
+one state, and while two or more instrument tracks hold it, none runs and every
+overlay ends as if it had left. A display can tell its user with
+`opxy::control::copies(track)`, the number of instrument tracks holding the
+machine on `track` (browser previews answer 1). `control_reset` runs before a
+copy's first call and whenever a copy arrives on a track.
+
+| `Input` field | Contract |
+| --- | --- |
+| `track` | The instrument track this copy is on |
+| `values[track][index]` | Every instrument track's 58 live parameter words, as stock sets them (edits, parameter locks, sequencing), without any machine's overlay. Indices 0..7 are the engine's controls; the rest are stock's own track parameters, in stock's units. The machine's own engine controls are the values its page shows, including its LFO |
+| `elapsed_us` | Microseconds since the previous tick, from the core clock: 0 on the first tick after a reset, at most one second |
+| `transport` | The project's tempo in tenths of BPM (0 when unknown), the song position in 96ths of a quarter note, which advances only while playing, and whether the sequencer plays |
+
+`overlay` arrives empty; `opxy::control::add` appends up to 64 entries, each a
+track, parameter index and value for this tick. Entries for the machine's own
+track or outside the table are ignored, the last entry for a parameter wins and
+negative values count as 0. When two machines overlay one parameter, the one on
+the later track wins. A parameter no machine overlays any more returns to
+stock's value. Overlays are live values only: saved projects keep stock's
+values, and an edit or parameter lock under an overlay reaches `values` on the
+next tick. Pages show an overlaid parameter's overlay, whether or not the
+sequencer plays; for a moment after the parameter's encoder is turned, they
+show the track's own value, which the turn changes.
+
+Like the display, `control` is bounded and allocation-free; it is not an audio
+callback. Browser previews do not run it.
+
+A machine's control and display are compiled separately, so they share no
+variables. The control can pass four words to its display each tick in
+`overlay.display`, which the display reads with
+`opxy::control::from_control(index)`: the words of the copy on the selected
+track, 0 when it did not run, and always 0 in browser previews.
 
 ## Sample engines
 
@@ -478,7 +532,7 @@ preset entries, its screen file, its symbol prefix and its C++ namespace. It is 
 | Field | Contract |
 | --- | --- |
 | `schema` | 1 |
-| `sdk` | The SDK version the machine targets, `"<major>.<minor>"`. This SDK is 1.4 and builds 1.0 to 1.4 machines |
+| `sdk` | The SDK version the machine targets, `"<major>.<minor>"`. This SDK is 1.5 and builds 1.0 to 1.5 machines |
 | `kind` | `synth`, `sample` or `effect` |
 | `description` | Plain text of at most 160 characters, shown by the builder and preview |
 | `identity` | The numbers it asks for: `{"engine": n, "page": p}`, or `{"effect": n, "page": 21}` for an effect; see below |

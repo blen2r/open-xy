@@ -1,0 +1,75 @@
+// Track control (SDK 1.5): a synth that declares resources.trackControl runs
+// control() on the GUI side once per stock GUI tick while it is on an
+// instrument track. It reads every instrument track's live parameters and may
+// overlay other tracks' values for that tick.
+// Overlays never reach the saved project: stock keeps its own values, and a
+// parameter the machine stops overlaying returns to them.
+//
+// Every track control machine on tracks 0..7 runs, in track order, each copy
+// with its own state. A machine that declares "unique": true runs only while
+// one track holds it.
+#pragma once
+#include <opxy/transport.hpp>
+#include <opxy/types.hpp>
+
+extern "C" opxy::u32 sdk_control_copies(opxy::u32 track);
+extern "C" opxy::i32 sdk_control_display(opxy::u32 index);
+
+namespace opxy { namespace control {
+// Instrument tracks 0..7, and stock's live parameter words for each: the
+// engine's eight controls (0..7), then stock's own track parameters in stock's
+// units. Every live value is non-negative.
+const u32 tracks = 8;
+const u32 track_parameters = 58;
+const u32 overlay_capacity = 64;
+// Words the machine passes to its own display each tick (Overlay::display).
+const u32 display_words = 4;
+
+// One parameter of an instrument track: an overlay entry.
+struct Entry { u8 track, index; u16 reserved; i32 value; };
+
+struct Input {
+    u32 track;  // the instrument track this copy is on
+    // Each track's live values as stock sets them (sequenced, locked or
+    // edited), without any machine's overlay.
+    i32 values[tracks][track_parameters];
+    // Microseconds since the previous tick (0 on the first after a reset, at
+    // most one second), for anything that runs in real time.
+    u32 elapsed_us;
+    // The project's tempo and the song position (96 ticks per quarter note,
+    // advancing only while playing), for anything that follows the music.
+    Transport transport;
+};
+
+// What the machine returns each tick. An overlay entry for the machine's own
+// track, or outside tracks x track_parameters, is ignored; a later entry for
+// the same parameter replaces an earlier one, and of two machines overlaying
+// one parameter, the one on the later track wins; negative values are treated
+// as 0.
+struct Overlay {
+    u32 count;  // 0 on entry; at most overlay_capacity
+    Entry entries[overlay_capacity];
+    // 0 on entry: words for the machine's own display, which reads them with
+    // from_control. The control and display are separate code, so this is
+    // how the display shows what the control worked out.
+    i32 display[display_words];
+};
+
+// GUI side, for a display: how many instrument tracks hold the same machine as
+// `track`, `track` included. A unique machine runs only while exactly one does.
+// Browser previews answer 1.
+inline u32 copies(u32 track) { return sdk_control_copies(track); }
+// GUI side, for a display: word `index` of what the control on the selected
+// track last returned in Overlay::display, or 0 when it did not run then.
+// Browser previews answer 0.
+inline i32 from_control(u32 index) { return sdk_control_display(index); }
+
+inline void add(Overlay& overlay, u32 track, u32 index, i32 value) {
+    if (overlay.count >= overlay_capacity || track >= tracks || index >= track_parameters) return;
+    Entry& entry = overlay.entries[overlay.count++];
+    entry.track = static_cast<u8>(track);
+    entry.index = static_cast<u8>(index);
+    entry.reserved = 0;
+    entry.value = value;
+}
+}}

@@ -97,7 +97,7 @@ class PackageVerification(unittest.TestCase):
 
     def test_service_hooks_live_in_their_units_and_only_their_users_reach_them(self):
         services = native.object_services(self.machines)
-        kinds = {m.id: m.kind for m in self.machines}
+        uses = {m.id: native.machine_uses([m]) for m in self.machines}
         owner_of, needs = {}, {}
         for name, owner in self.report['objects'].items():
             defined, undefined = object_symbols(read(self.package / 'analysis' / name))
@@ -106,13 +106,13 @@ class PackageVerification(unittest.TestCase):
         for patch in self.report['patches']:
             if patch.get('service') and patch['after'] != patch['before']:
                 self.assertEqual(services.get(owner_of[patch['symbol']]), patch['service'], patch['symbol'])
-        # Only a service's own units and machines of the kinds it serves may use its symbols.
+        # Only a service's own units and machines of the kinds or features it serves may use its symbols.
         users = self.patch_profile['services']
         for name, (owner, undefined) in needs.items():
             for symbol in undefined:
                 service = services.get(owner_of.get(symbol))
                 if service and name not in services:
-                    self.assertIn(kinds.get(owner), users[service], (name, symbol))
+                    self.assertTrue(uses.get(owner, set()) & set(users[service]), (name, symbol))
 
     def test_only_curated_engines_are_linked_and_added_to_stock_content(self):
         _, symbols = elf32(self.elf)

@@ -79,6 +79,10 @@ SAMPLE_OPTIONS = ('sampleAnalysis', *SAMPLE_FLAGS)
 # 512 KiB; and transport 1 for the tempo in process (SDK 1.2).
 EFFECT_OPTIONS = ('bufferBytes', 'transport')
 EFFECT_BUFFER_LIMIT = 524288
+# A synth's optional GUI-side track control (opxy/track_control.hpp): its state.
+CONTROL_FIELDS = ('stateBytes', 'stateAlignment')
+# Optional: whether only one copy runs.
+CONTROL_OPTIONS = ('unique',)
 DISPLAY_FORMATS = ('ratio', 'percent', 'bipolar', 'duration', 'semitones', 'enum', 'division')
 # Every kind's parameters occupy the stock eight-word parameter vector in order.
 # A synth's first four fill the four-control page; up to four more are alternates
@@ -107,15 +111,15 @@ def paged(definition):
 
 
 def validate_definition(value, kind):
-    keys(value, ('schema', 'id', 'name', 'parameters', 'presets', 'resources', *(('press',) if 'press' in value else ())),
-         'definition')
+    optional = tuple(k for k in ('press',) if k in value)
+    keys(value, ('schema', 'id', 'name', 'parameters', 'presets', 'resources', *optional), 'definition')
     require(type(value['schema']) is int and value['schema'] == 1, 'Unknown definition schema')
     stock_name(value['id']); label(value['name'])
     resources = value['resources']
-    options = SAMPLE_OPTIONS if kind == 'sample' else EFFECT_OPTIONS if kind == 'effect' else ()
+    options = {'sample': SAMPLE_OPTIONS, 'effect': EFFECT_OPTIONS, 'synth': ('trackControl',)}.get(kind, ())
     optional = tuple(k for k in options if isinstance(resources, dict) and k in resources)
     keys(resources, (*RESOURCES[kind], *optional), 'resources')
-    require(all(type(v) is int for k, v in resources.items() if k != 'display'),
+    require(all(type(v) is int for k, v in resources.items() if k not in ('display', 'trackControl')),
             'Numeric resource requirements must be integers')
     if 'voiceCapacity' in resources:
         require(1 <= resources['voiceCapacity'] <= 256, 'Voice capacity must be 1..256')
@@ -175,6 +179,15 @@ def validate_synth_resources(resources):
             'Shared state must occupy whole words')
     require(0 < resources['outputPeakQ31'] <= 0x7fffffff, 'Invalid oscillator output headroom')
     validate_display(resources['display'])
+    if 'trackControl' in resources:
+        control = resources['trackControl']
+        present = tuple(k for k in CONTROL_OPTIONS if isinstance(control, dict) and k in control)
+        keys(control, CONTROL_FIELDS + present, 'trackControl')
+        require(type(control['stateBytes']) is int and type(control['stateAlignment']) is int and
+                4 <= control['stateBytes'] and control['stateAlignment'] in (4, 8, 16) and
+                control['stateBytes'] % control['stateAlignment'] == 0,
+                'Track control state must occupy aligned whole words')
+        require(type(control.get('unique', False)) is bool, 'Track control unique must be true or false')
 
 
 def validate_display(display):

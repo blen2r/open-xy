@@ -168,6 +168,11 @@ test('SDK objects of a profile service link only when a selected machine uses it
   k.machines.push({...machine('b',46,7),kind:'sample'});
   assert.throws(()=>linkKit(k,['a','b']),/Duplicate global symbol: entry/);
 });
+test('track control uses the control service, by the feature a machine declares', () => {
+  const k=fixture();
+  assert.deepEqual([...activeServices(k.profile,[{kind:'synth',features:['trackControl']}])],['control']);
+  assert.deepEqual([...activeServices(k.profile,[{kind:'synth'}])],[]);
+});
 test('empty, unknown, repeated selections, duplicate globals and memory exhaustion are rejected', () => {
   const k=fixture(); for(const s of [[],['missing'],['a','a']]) assert.throws(()=>linkKit(k,s),/Choose each machine once/);
   k.definitions.entry=42; assert.throws(()=>linkKit(k,['a']),/Duplicate global/); delete k.definitions.entry;

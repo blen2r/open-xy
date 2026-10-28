@@ -12,7 +12,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from .adapters import catalog_entry, sample_callbacks
+from .adapters import catalog_entry, control_callbacks, sample_callbacks
 from .catalog import official
 from .definitions import control_positions, paged
 from .formats import require, sha
@@ -63,6 +63,9 @@ def export(package, output, tools, preview_cxx='clang++', *, stock_catalog, pers
             entry['source'] = {key: sources[m.id][key] for key in ('repository', 'tag', 'commit', 'maintainer')}
             if 'cpu' in sources[m.id]:
                 entry['cpu'] = sources[m.id]['cpu']
+        uses = sorted(native.machine_uses([m]) - {m.kind})
+        if uses:
+            entry['features'] = uses
         entry['presetDefaults'] = m.preset_defaults
         if m.presets:
             entry['presets'] = m.presets
@@ -78,6 +81,7 @@ def export(package, output, tools, preview_cxx='clang++', *, stock_catalog, pers
                 entry['absent'].update({symbol: 'kit_absent' for symbol in sample_callbacks(m)})
             else:
                 entry['absent'][m.prefix + '_screen_register'] = 'kit_absent'
+                entry['absent'].update({symbol: 'kit_absent' for symbol in control_callbacks(m)})
         if m.kind in ('effect', 'sample'):
             entry['absent'][m.prefix + '_benchmark'] = 'kit_absent'
         if m.display != 'stock':

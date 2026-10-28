@@ -93,6 +93,9 @@
   "services": {
     "samples": [
       "sample"
+    ],
+    "control": [
+      "trackControl"
     ]
   },
   "patches": [
@@ -1153,6 +1156,37 @@
       "before": "fee3b16f",
       "symbol": "sdk_benchmark_run",
       "call": true
+    },
+    {
+      "kind": "hook",
+      "address": "0x8c0baade",
+      "file_offset": "0xf1d1a",
+      "length": 8,
+      "before": "00de588d74000000",
+      "symbol": "sdk_gui_tick",
+      "call": true,
+      "service": "control"
+    },
+    {
+      "kind": "hook",
+      "address": "0x8d5ad5ae",
+      "file_offset": "0x1e4806",
+      "length": 4,
+      "before": "ffe3bdfc",
+      "symbol": "sdk_param_edit_set",
+      "call": true,
+      "service": "control"
+    },
+    {
+      "kind": "hook",
+      "name": "Displayed parameter values follow track control overlays",
+      "address": "0x8d5aca48",
+      "file_offset": "0x1e3ca0",
+      "length": 4,
+      "before": "000c1b18",
+      "symbol": "sdk_param_shown_hook",
+      "call": false,
+      "service": "control"
     },
     {
       "kind": "startup",
