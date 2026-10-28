@@ -180,7 +180,7 @@ SDK_UNITS = ('divide', 'memory', 'registration', 'registration_stock', 'startup'
              'pad_assignment_stock', 'drum_page', 'drum_controls_stock', 'drum_display_stock', 'screen_order',
              'screen_hooks', 'synth_controls', 'synth_control_table', 'note_activity', 'project_companion',
              'project_companion_table', 'profiling', 'lfo', 'lfo_stock', 'lfo_hooks', 'track_control',
-             'track_control_table', 'track_control_hooks', 'track_control_overlay', 'track_control_project')
+             'track_control_table', 'track_control_hooks', 'track_control_overlay', 'track_control_project', 'synth_pages')
 def machine_uses(machines):
     """What machines use, for profile services: their kinds and the features they declare."""
     uses = set()
@@ -188,6 +188,8 @@ def machine_uses(machines):
         uses.add(m.kind)
         if track_control(m):
             uses.add('trackControl')
+        if 'hidePages' in m.definition:
+            uses.add('hidePages')
     return uses
 
 
@@ -196,11 +198,11 @@ UNIT_SERVICES = dict.fromkeys(('sample_machines', 'sample_hooks', 'sample_callba
                                'sample_cache_stock', 'sample_cache_hooks', 'sample_progress',
                                'sample_progress_stock', 'pad_assignment', 'pad_assignment_stock', 'drum_page',
                                'drum_controls_stock', 'drum_display_stock'), 'samples')
-# Track control runs from the GUI tick hook; the marks' screen
+# Track control and hidden pages run from the GUI tick hook; the marks' screen
 # registers at startup only in builds that link it, and startup stands in for the
 # saved data's entry points in builds that don't.
 UNIT_SERVICES.update(dict.fromkeys(('track_control', 'track_control_table', 'track_control_hooks',
-                                    'track_control_overlay', 'track_control_project'), 'control'))
+                                    'track_control_overlay', 'track_control_project', 'synth_pages'), 'control'))
 
 
 def module_bytes(profile):

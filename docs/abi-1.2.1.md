@@ -47,8 +47,8 @@ form the profile's `samples` service: a build applies those edits, and links
 the SDK code behind them, only when it includes a sample engine. Otherwise
 their sites stay stock. The track control rows (and the project read of the
 project companion rows) form the `control` service in the same way: a build
-uses them only when it includes a machine with [track control](api.md#track-control).
-Everything else must reconstruct byte for byte. Protected ranges in
+uses them only when it includes a machine with [track control](api.md#track-control)
+or [hidden pages](api.md#alternate-controls). Everything else must reconstruct byte for byte. Protected ranges in
 [`pipeline.py`](../tooling/pipeline.py) admit only hooks into the module and
 the reviewed startup label.
 The bootloader is never modified.
@@ -266,6 +266,19 @@ clamp retained selectors beyond the declared count to the last slot, just
 as audio does. Changing from a larger machine therefore keeps a valid name
 and icon until the user edits the destination.
 The [API guide](api.md#alternate-controls) describes saved-selector compatibility.
+
+### Hidden pages
+
+[`synth_pages.cpp`](../sdk/platform/opxy-1.2.1/synth_pages.cpp) runs once per
+GUI tick from track control's tick. The instrument controller's page word
+(`080238bc`: 0 for the engine page, 1..3 for M2..M4) is set by `8c0b19c4`,
+which M1..M4, track changes and menus all reach. When the selected track's synth
+hides the page shown, the SDK calls `8c0b19c4` with the page shown before, or
+the engine page. A track's stock LFO runs while the byte at track data
+(`8d587708`) + `0x24` is set (`8d5879c0`, read by stock's LFO update
+`8d58a9b4`); the M4 page's on/off writes it through `8d587984(track, value)`,
+which also marks the project changed. On every instrument track whose synth
+hides the LFO page, the SDK calls `8d587984(track, 0)` while that byte is set.
 
 ### Track control
 

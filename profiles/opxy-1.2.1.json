@@ -95,7 +95,8 @@
       "sample"
     ],
     "control": [
-      "trackControl"
+      "trackControl",
+      "hidePages"
     ]
   },
   "patches": [
