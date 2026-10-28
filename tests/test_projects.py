@@ -98,7 +98,9 @@ def host_writer(folder):
     platform = ROOT / 'sdk/platform/opxy-1.2.1'
     stock = (platform / 'stock.hpp').read_text(encoding='utf-8')
     stock = stock.replace('typedef __UINTPTR_TYPE__ Address;', 'typedef __UINTPTR_TYPE__ Address;\nAddress host_stock_address(Address);')
-    stock = stock.replace('reinterpret_cast<T*>(address)', 'reinterpret_cast<T*>(host_stock_address(address))')
+    for pointer in ('T*', 'const volatile u32*'):
+        stock = stock.replace('reinterpret_cast<' + pointer + '>(address)',
+                              'reinterpret_cast<' + pointer + '>(host_stock_address(address))')
     (folder / 'stock.hpp').write_text(stock, encoding='utf-8')
     for name in ('project_companion.cpp', 'track_control_project.cpp', 'project_files.hpp'):
         (folder / name).write_bytes((platform / name).read_bytes())
@@ -142,6 +144,11 @@ class FirmwareWriter(unittest.TestCase):
             self.assertEqual(raw, companion(project.read_bytes(), SAVED, kept={'morph': b'stat\xff'}))
             self.assertEqual(kept_data(parse(raw), project.read_bytes()), {'morph': b'stat\xff'})
             self.assertEqual(run('1', 'read').stdout, '73746174ff/5\n')
+            # A new project, clean or random, gives the machine nothing; nor does a new
+            # project stock refuses while one is loading, which leaves the machine alone.
+            self.assertEqual(run('1', 'clear').stdout, '/0\n')
+            self.assertEqual(run('1', 'random').stdout, '/0\n')
+            self.assertEqual(run('1', 'busy').stdout, 'none\n')
             # Any writer's spacing reads the same; a failed load gives nothing either way.
             (folder / 'song.oxy').write_bytes(json.dumps(json.loads(raw)).encode())
             self.assertEqual(run('1', 'read').stdout, '73746174ff/5\n')
@@ -173,6 +180,15 @@ class FirmwareWriter(unittest.TestCase):
         self.assertEqual([(p['address'], p['before'], p['call']) for p in hooks], [('0x8d58913e', '00e3e984', True)])
         self.assertIn('track_control_project', native.SDK_UNITS)
         self.assertEqual(native.UNIT_SERVICES['track_control_project'], 'control')
+
+    def test_a_new_project_reaches_the_reader_through_two_reviewed_calls(self):
+        # A new project reads no file: CALL 0x8d588114 (clear) in 8d572f6c and CALL
+        # 0x8d588988 (clear at random) in 8d572ff4, their only callers but the boot
+        # fallback, which starts with every machine empty anyway.
+        hooks = [(p['address'], p['before'], p['symbol'], p['call'], p.get('service')) for p in config()['patches']
+                 if p.get('symbol') in ('sdk_project_clear', 'sdk_project_clear_random')]
+        self.assertEqual(hooks, [('0x8d572f70', '00e3d2a8', 'sdk_project_clear', True, 'control'),
+                                 ('0x8d572ff8', '00e3c8ac', 'sdk_project_clear_random', True, 'control')])
 
     def test_mtp_shows_companions_beside_projects(self):
         import re

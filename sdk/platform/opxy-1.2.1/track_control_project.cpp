@@ -5,16 +5,22 @@
 //
 // Stock loads every project through one call of read(project, path) (8d599b10, from
 // 8d58913e in 8d5890b0). After a read that succeeds, track control machines get back
-// what they kept.
+// what they kept. A new project reads no file: stock clears the project (8d588114,
+// from 8d572f70) or clears it at random (8d588988, from 8d572ff8). Both do nothing
+// while a project is loading (the word at 840a0528); otherwise machines then get
+// nothing back, as after loading a project without their data.
 #include "project_files.hpp"
 #include "project_companion.hpp"
 #include "track_control.hpp"
 
 extern "C" opxy::u32 sdk_control_kept_write(void* file) __asm__("sdk_control_kept_write");
 extern "C" opxy::u32 sdk_project_read(void* project, const char* path) __asm__("sdk_project_read");
+extern "C" opxy::u32 sdk_project_clear(opxy::u32, opxy::u32, opxy::u32) __asm__("sdk_project_clear");
+extern "C" opxy::u32 sdk_project_clear_random(opxy::u32, opxy::u32, opxy::u32) __asm__("sdk_project_clear_random");
 
 namespace {
 u32 read(void* project, const char* path) { return stock<u32(void*, const char*)>(0x8d599b10)(project, path); }
+const u32 kProjectLoading = 0x840a0528;
 
 // The format's 64 KiB, less what a reader never needs.
 const u32 kReadBytes = 32768;
@@ -198,6 +204,14 @@ void load_kept(const char* path) {
         m.load(kept, count);
     }
 }
+
+// After a new project: every machine that keeps data gets nothing back.
+void forget_kept() {
+    for (u32 i = 0; i < sdk_control_machine_count; ++i) {
+        const opxy::platform::ControlMachine& m = sdk_control_machines[i];
+        if (m.load && m.ready() == 1) m.load(kept, 0);
+    }
+}
 }
 
 // "open-xy.control": what each track control machine keeps, by machine ID.
@@ -223,4 +237,18 @@ u32 sdk_project_read(void* project, const char* path) {
     const u32 loaded = read(project, path);
     if (loaded && path) load_kept(path);
     return loaded;
+}
+
+u32 sdk_project_clear(u32 a, u32 b, u32 c) {
+    const bool cleared = !opxy::platform::word(kProjectLoading);
+    const u32 result = stock<u32(u32, u32, u32)>(0x8d588114)(a, b, c);
+    if (cleared) forget_kept();
+    return result;
+}
+
+u32 sdk_project_clear_random(u32 a, u32 b, u32 c) {
+    const bool cleared = !opxy::platform::word(kProjectLoading);
+    const u32 result = stock<u32(u32, u32, u32)>(0x8d588988)(a, b, c);
+    if (cleared) forget_kept();
+    return result;
 }

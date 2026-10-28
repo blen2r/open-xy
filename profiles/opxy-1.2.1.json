@@ -872,6 +872,26 @@
       "service": "control"
     },
     {
+      "kind": "hook",
+      "address": "0x8d572f70",
+      "file_offset": "0x1aa1cc",
+      "length": 4,
+      "before": "00e3d2a8",
+      "symbol": "sdk_project_clear",
+      "call": true,
+      "service": "control"
+    },
+    {
+      "kind": "hook",
+      "address": "0x8d572ff8",
+      "file_offset": "0x1aa254",
+      "length": 4,
+      "before": "00e3c8ac",
+      "symbol": "sdk_project_clear_random",
+      "call": true,
+      "service": "control"
+    },
+    {
       "kind": "text",
       "name": "MTP path allowlist: project companion (.oxy) beside each project (.xy)",
       "address": "0x840ae494",
