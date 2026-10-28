@@ -13,8 +13,9 @@ git switch -c my-change origin/staging
 When contributing from a fork, use `upstream/staging` after fetching the Open-XY
 repository as `upstream`. Target `etcetc000/open-xy:staging` in the pull request.
 Merged work is tested at beta.open-xy.com. Maintainers promote reviewed work
-with a `staging` → `main` release pull request; `main` is reserved for releases.
-CI rejects feature pull requests aimed directly at `main`.
+with a `staging` → `main` release pull request; `main` is reserved for releases
+and [catalog submissions](docs/catalog.md#submit-a-machine), which maintainers
+merge from `main` into `staging`. CI rejects other pull requests aimed directly at `main`.
 See [Cloudflare deployment](docs/builder.md#cloudflare-deployment).
 
 ## Where changes belong

@@ -12,13 +12,14 @@
   add a machine to this repository, or change `sdk/`, `tooling/` or tests, to
   make a machine work. If the SDK lacks something it needs, that is a separate SDK
   pull request.
-- **Submitting a machine to the builder:** a pull request against `staging` that
+- **Submitting a machine to the builder:** a pull request against `main` that
   changes only `catalog/machines.json`, adding or updating that machine's one
-  entry ([submission workflow](docs/catalog.md#submit-a-machine)). CI refuses a submission from a fork that changes
-  anything else.
+  entry ([submission workflow](docs/catalog.md#submit-a-machine)). A machine that
+  needs SDK changes only on `staging` targets `staging` instead. CI refuses a
+  submission from a fork that changes anything else.
 - **Changing the SDK, builder or docs:** branch from `origin/staging` and open the
-  pull request against `staging`. `main` only receives releases from `staging`;
-  never base work on it or target it.
+  pull request against `staging`. Apart from catalog entries, `main` only receives
+  releases from `staging`; never base other work on it or target it.
 
 This repository holds no machines. Examples to read before writing one are Open-XY's
 [core machines](https://github.com/etcetc000/open-xy-core-machines): synths 2op FM, Macro Osc and Karplus, the Timestretch

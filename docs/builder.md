@@ -155,9 +155,10 @@ with no collection as a UI check and never consumes private inputs.
 `wrangler.jsonc` names the site `open-xy` and binds `open-xy.com`. The site is
 static assets only, with no Worker script. The `beta` environment is a separate
 `open-xy-beta` site at `beta.open-xy.com`, deployed from `staging`; production
-is deployed from `main`. Merge work, and catalog changes, into `staging`,
-release beta, then open a pull request from `staging` to `main` and release
-production.
+is deployed from `main`. Merge work into `staging`, release beta, then open a
+pull request from `staging` to `main` and release production. Catalog changes
+merge into `main` (then `main` into `staging`), so a new machine can reach
+production without an SDK release.
 
 On the release host, after `npx wrangler login`, one command releases the
 catalog:
