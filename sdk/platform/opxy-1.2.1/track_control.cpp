@@ -28,6 +28,7 @@
 #include "track_control.hpp"
 #include "stock.hpp"
 #include "synth_controls.hpp"
+#include "benchmark.hpp"
 
 namespace {
 using opxy::i32;
@@ -66,6 +67,11 @@ control::Overlay overlay;
 // The machine and track that ran last tick, to reset its state on a change.
 const ControlMachine* host_machine;
 u32 host_track = control::tracks;
+// The core clock, 400 MHz, as cycles per microsecond, and the cycle count at
+// the last tick, for each tick's elapsed time.
+const u32 kCyclesPerMicrosecond = 400;
+u32 last_cycles;
+bool timed;
 // GUI ticks so far, and the last encoder edit's parameter and tick. For
 // kTurnTicks after it the edited parameter shows its base value.
 const u32 kTurnTicks = 40;
@@ -205,12 +211,18 @@ extern "C" void sdk_gui_tick() {
         // The host's own controls as its page shows them, LFO included.
         for (u32 p = 0; p < kEngineControls; ++p) input.values[track][p] = shown(track, p);
         input.track = track;
+        input.transport = opxy::Transport{project_bpm_x10(), word(kTicks96), byte(kPlaying) || byte(kPlaying + 1)};
         input.edit_count = pending_count;
         for (u32 i = 0; i < pending_count; ++i) input.edits[i] = pending[i];
         pending_count = 0;
+        const u32 now = opxy::benchmark::cycles(), us = (now - last_cycles) / kCyclesPerMicrosecond;
+        input.elapsed_us = timed ? (us < 1000000 ? us : 1000000) : 0;
+        last_cycles = now;
+        timed = true;
         if (m != host_machine || track != host_track) {
             if (capturing) end_capture();
             m->reset();
+            input.elapsed_us = 0;
         }
         m->control(&input, &overlay);
         if (overlay.count > control::overlay_capacity) overlay.count = control::overlay_capacity;

@@ -19,6 +19,12 @@ u32 engines[16], ticks, writes, resets, runs, sets, edits_seen;
 control::Entry last_edit;
 u32 capture, mark;
 i32 seen;  // the value of track 0, parameter 1 the machine was given
+u32 seen_elapsed, seen_bpm, seen_ticks, seen_playing;
+// The core clock, the project tempo and the song position.
+u32 cycles;
+unsigned short tempo = 1200;
+u32 ticks96;
+unsigned char playing[2];
 i32 seen_own;  // and of its own engine control 1
 // Each track's LFO amount, which stock's displayed value adds.
 i32 lfo[control::tracks][control::track_parameters];
@@ -68,6 +74,10 @@ void run(const control::Input* input, control::Overlay* overlay) {
     ++runs;
     require(overlay->count == 0, "Overlay not cleared");
     seen = input->values[0][1];
+    seen_elapsed = input->elapsed_us;
+    seen_bpm = input->transport.bpm_x10;
+    seen_ticks = input->transport.ticks96;
+    seen_playing = input->transport.playing;
     seen_own = input->values[input->track][1];
     edits_seen = input->edit_count;
     if (input->edit_count) last_edit = input->edits[input->edit_count - 1];
@@ -90,6 +100,8 @@ void tick(u32 expected_writes, const char* message) {
 
 // The hidden-pages check (synth_controls.cpp) runs once per GUI tick.
 void sdk_synth_pages() { ++page_checks; }
+opxy::u32 sdk_benchmark_cycles() { return cycles; }
+const volatile unsigned short* stock_project_tempo() { return &tempo; }
 
 extern "C" {
 const opxy::platform::ControlMachine sdk_control_machines[] = {
@@ -108,6 +120,10 @@ opxy::platform::Address opxy::platform::host_stock_address(opxy::platform::Addre
     if (address == 0x8d5ac9dc) return reinterpret_cast<Address>(&stock_shown);
     if (address == 0x8d5ac910) return reinterpret_cast<Address>(&stock_base);
     if (address == 0x8d4d6f14) return reinterpret_cast<Address>(&stock_selected);
+    if (address == 0x8d584210) return reinterpret_cast<Address>(&stock_project_tempo);
+    if (address == 0x86bd0080) return reinterpret_cast<Address>(&ticks96);
+    if (address == 0x860c9b39) return reinterpret_cast<Address>(&playing[0]);
+    if (address == 0x860c9b3a) return reinterpret_cast<Address>(&playing[1]);
     if (address >= kBlocks + 0x3864 && address < kBlocks + control::tracks * kBlockBytes) {
         const u32 track = (address - kBlocks) / kBlockBytes, at = address - kBlocks - track * kBlockBytes - 0x3864;
         if (track < control::tracks && at < sizeof(bases[0]))
@@ -242,6 +258,18 @@ int main() {
     engines[6] = 0;
     tick(1, "Overlay not written once one copy is left");
     require(runs == ran + 1 && value(0, 1) == 700 && sdk_control_copies(2) == 1, "Single copy not run again");
+
+    // Each tick carries the time since the last, from the 400 MHz core clock
+    // (0 after a reset, at most a second), and the tempo and song position.
+    cycles += 400 * 2500;
+    ticks96 = 480;
+    playing[1] = 1;
+    tick(0, "Timing rewrote the overlay");
+    require(seen_elapsed == 2500 && seen_bpm == 1200 && seen_ticks == 480 && seen_playing == 1, "Time not given");
+    cycles += 400u * 5000000u;
+    playing[1] = 0;
+    tick(0, "Timing rewrote the overlay");
+    require(seen_elapsed == 1000000 && seen_playing == 0, "Elapsed time not capped");
 
     // Marks over every page: an overlaid selected track once the machine asks
     // for it, then a capture whether or not it asks.

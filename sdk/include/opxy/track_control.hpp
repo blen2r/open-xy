@@ -5,6 +5,7 @@
 // Overlays never reach the saved project: stock keeps its own values, and a
 // parameter the machine stops overlaying returns to them.
 #pragma once
+#include <opxy/transport.hpp>
 #include <opxy/types.hpp>
 
 extern "C" opxy::u32 sdk_control_copies(opxy::u32 track);
@@ -39,6 +40,12 @@ struct Input {
     // parameters since the last tick, oldest first, with the edited value.
     u32 edit_count;
     Entry edits[edit_capacity];
+    // Microseconds since the previous tick (0 on the first after a reset, at
+    // most one second), for anything that runs in real time.
+    u32 elapsed_us;
+    // The project's tempo and the song position (96 ticks per quarter note,
+    // advancing only while playing), for anything that follows the music.
+    Transport transport;
 };
 
 // What the machine returns each tick. An overlay entry for the machine's own
