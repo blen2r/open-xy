@@ -122,9 +122,9 @@ const volatile unsigned short* stock_project_tempo() { return &tempo; }
 
 extern "C" {
 const opxy::platform::ControlMachine sdk_control_machines[] = {
-    {reinterpret_cast<const char*>(40), ready, reset, run, true},
-    {reinterpret_cast<const char*>(41), ready, reset_other, run_other, false},
-    {nullptr, nullptr, nullptr, nullptr, false}};
+    {reinterpret_cast<const char*>(40), ready, reset, run, nullptr, 0, nullptr, nullptr, true},
+    {reinterpret_cast<const char*>(41), ready, reset_other, run_other, nullptr, 0, nullptr, nullptr, false},
+    {nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false}};
 const opxy::u32 sdk_control_machine_count = 2;
 }
 

@@ -124,7 +124,7 @@ def export(package, output, tools, preview_cxx='clang++', *, stock_catalog, pers
     if 'control' in native.active_services(profile, native.machine_uses(machines)):
         kit['controlArtwork'] = read(ROOT / native.TEMPLATES / 'track_control_overlay.svg').decode('utf-8')
         kit['serviceFallbacks'] = {'control': dict.fromkeys(
-            ('sdk_overlay_startup',), 'kit_absent')}
+            ('sdk_overlay_startup', 'sdk_control_kept_write'), 'kit_absent')}
     kit_path = output / 'kit.json'
     kit_path.write_text(json.dumps(kit, separators=(',', ':')), encoding='utf-8')
     # Reference validation exercises every subset against GNU ld. Failure leaves

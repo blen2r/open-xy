@@ -81,10 +81,12 @@ EFFECT_OPTIONS = ('bufferBytes', 'transport')
 EFFECT_BUFFER_LIMIT = 524288
 # A synth's optional GUI-side track control (opxy/track_control.hpp): its state.
 CONTROL_FIELDS = ('stateBytes', 'stateAlignment')
-# Optional: whether only one copy runs, and the machine's own marks
-# (marks.svg.fragment): capture nodes, then line nodes.
-CONTROL_OPTIONS = ('unique', 'marks')
+# Optional: whether only one copy runs, the data kept with a project, and the
+# machine's own marks (marks.svg.fragment): capture nodes, then line nodes.
+CONTROL_OPTIONS = ('unique', 'savedBytes', 'marks')
 MARK_LIMIT = 16
+# The most a track control machine keeps with a project (opxy::control::saved_capacity).
+SAVED_CAPACITY = 8192
 DISPLAY_FORMATS = ('ratio', 'percent', 'bipolar', 'duration', 'semitones', 'enum', 'division')
 # Every kind's parameters occupy the stock eight-word parameter vector in order.
 # A synth's first four fill the four-control page; up to four more are alternates
@@ -189,7 +191,12 @@ def validate_synth_resources(resources):
                 4 <= control['stateBytes'] and control['stateAlignment'] in (4, 8, 16) and
                 control['stateBytes'] % control['stateAlignment'] == 0,
                 'Track control state must occupy aligned whole words')
+        require('savedBytes' not in control or type(control['savedBytes']) is int and
+                1 <= control['savedBytes'] <= SAVED_CAPACITY,
+                f'Track control saves 1 to {SAVED_CAPACITY} bytes with a project')
         require(type(control.get('unique', False)) is bool, 'Track control unique must be true or false')
+        require('savedBytes' not in control or control.get('unique') is True,
+                'A track control machine that keeps data with projects must be unique')
         if 'marks' in control:
             marks = control['marks']
             keys(marks, ('capture', 'line'), 'trackControl.marks')

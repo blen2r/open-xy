@@ -18,7 +18,7 @@ def render(prefixes, effects=(), stock_page=(), control=False):
     """stock_page: engines that show a stock page (e.g. sample engines on the
     sampler page); they register on the GUI role without an own-page guard.
     control: the build links the control service; its marks screen registers
-    last."""
+    last. Without it, the companion's calls into the service do nothing."""
     require(1 <= len(prefixes) <= MAX_ENGINES and len(set(prefixes)) == len(prefixes),
             'Startup needs distinct engine prefixes')
     require(len(set(effects)) == len(effects) <= MAX_ENGINES and not set(effects) & set(prefixes),
@@ -42,13 +42,17 @@ def render(prefixes, effects=(), stock_page=(), control=False):
                'stock_catalog_insert(catalog, name, id) : 0;' for prefix in prefixes]
     owned = [f'    if (page == value({prefix}_page_id)) return {prefix}_ready() == 1;'
              for prefix in prefixes if prefix not in stock_page]
+    kept = 'u32 sdk_project_kept(void*) { return 0; }'
     if control:
-        declarations.append('void sdk_overlay_startup() __asm__("sdk_overlay_startup");')
+        declarations += ['void sdk_overlay_startup() __asm__("sdk_overlay_startup");',
+                         'u32 sdk_control_kept_write(void*) __asm__("sdk_control_kept_write");']
         screens.append('    sdk_overlay_startup();')
+        kept = 'u32 sdk_project_kept(void* file) { return sdk_control_kept_write(file); }'
     values = dict(DECLARATIONS='\n'.join(declarations), OWNED_SCREENS='\n'.join(owned),
                   EFFECTS='\n'.join(f'    {prefix}_fx_register();' for prefix in effects),
                   ENGINES='\n'.join(f'    {prefix}_register();' for prefix in prefixes),
-                  SCREENS='\n'.join(screens), CATALOG='\n'.join(catalog), ENGINE_SENTINEL=str(ENGINE_SENTINEL))
+                  SCREENS='\n'.join(screens), CATALOG='\n'.join(catalog), ENGINE_SENTINEL=str(ENGINE_SENTINEL),
+                  PROJECT_KEPT=kept)
     source = (ROOT / TEMPLATE).read_text(encoding='utf-8')
     for key, text in values.items():
         require(source.count('@' + key + '@') == 1, 'Startup template placeholder missing')

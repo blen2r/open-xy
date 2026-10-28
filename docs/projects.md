@@ -8,7 +8,9 @@ user's firmware, can open the project with the right machines. Sections let
 other firmware features keep their own data in the same file.
 
 Open-XY firmware writes a companion after every project save, listing its
-machines; it does not read them yet ([firmware](abi-1.2.1.md#project-companions)).
+machines and what its [track control](api.md#track-control) machines keep with
+the project. After loading a project it reads back only what those machines
+kept ([firmware](abi-1.2.1.md#project-companions)).
 [`tooling/projects.py`](../tooling/projects.py) is the reference reader and
 writer.
 
@@ -81,7 +83,8 @@ rest.
 
 A writer replacing a project rewrites its own sections. It keeps other owners'
 sections unchanged while the previous companion still matched the project it
-replaces, and drops them otherwise. The firmware writes only `open-xy.machines` for now.
+replaces, and drops them otherwise. The firmware writes `open-xy.machines` and,
+when a track control machine keeps anything, `open-xy.control`.
 
 ### Canonical form
 
@@ -101,6 +104,14 @@ A reader with the same profile maps each listed number to that machine's
 number in its own layout. A machine missing from its layout is shown as
 missing, never replaced by whatever holds its old number. Numbers the section
 does not list are read as saved. A section for another profile is ignored.
+
+## `open-xy.control`
+
+Version 1. `machines` holds what each track control machine kept with the
+project, by machine ID, as a base64 string of at most 8192 bytes. The machine
+alone knows what the bytes mean. After loading a project, the firmware gives
+each machine its entry when the companion matches the project, and nothing
+otherwise.
 
 ## Commands
 

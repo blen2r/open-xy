@@ -12,7 +12,8 @@ from tooling import native
 from tooling.adapters import generate_project_companion_table
 from tooling.pipeline import ROOT, config
 from machine_fixtures import NAMES, fixture
-from tooling.projects import (LIMIT, MACHINES, canonical, companion, companion_path, main, parse, saved_numbers, translation)
+from tooling.projects import (LIMIT, MACHINES, canonical, companion, companion_path, kept_data, main, parse,
+                              saved_numbers, translation)
 
 PROJECT = bytes(range(256)) * 4
 SAVED = {'karplus': {'engine': 36, 'page': 84}, 'pingpong': {'effect': 40, 'page': 21},
@@ -99,7 +100,8 @@ def host_writer(folder):
     stock = stock.replace('typedef __UINTPTR_TYPE__ Address;', 'typedef __UINTPTR_TYPE__ Address;\nAddress host_stock_address(Address);')
     stock = stock.replace('reinterpret_cast<T*>(address)', 'reinterpret_cast<T*>(host_stock_address(address))')
     (folder / 'stock.hpp').write_text(stock, encoding='utf-8')
-    (folder / 'project_companion.cpp').write_bytes((platform / 'project_companion.cpp').read_bytes())
+    for name in ('project_companion.cpp', 'track_control_project.cpp', 'project_files.hpp'):
+        (folder / name).write_bytes((platform / name).read_bytes())
     binary = folder / ('writer.exe' if os.name == 'nt' else 'writer')
     result = subprocess.run([HOST_CXX, '-std=c++11', '-O2', '-Wall', '-Werror', '-I' + str(folder),
                              '-I' + str(ROOT / 'sdk/include'), '-I' + str(platform),
@@ -121,8 +123,37 @@ class FirmwareWriter(unittest.TestCase):
             folder = Path(directory)
             writer, project = host_writer(folder), folder / 'song.xy'
             self.assertEqual(subprocess.run([str(writer), str(project), '1'], timeout=30).returncode, 0)
-            # The fixture's table: what its numbers mean, a kit machine left out omitted.
-            self.assertEqual((folder / 'song.oxy').read_bytes(), companion(project.read_bytes(), SAVED))
+            # The fixture's table: what its numbers mean, a kit machine left out omitted, and
+            # what its track control machine keeps.
+            self.assertEqual((folder / 'song.oxy').read_bytes(),
+                             companion(project.read_bytes(), SAVED, kept={'morph': b'stat\xff'}))
+
+    def test_track_control_keeps_its_bytes_with_the_project(self):
+        with tempfile.TemporaryDirectory(prefix='companion-') as directory:
+            folder = Path(directory)
+            writer, project = host_writer(folder), folder / 'song.xy'
+            run = lambda *args: subprocess.run([str(writer), str(project), *args], capture_output=True, text=True,
+                                               timeout=30)
+            # Without a companion, a load gives the machine nothing.
+            project.write_bytes(b'xy')
+            self.assertEqual(run('1', 'read').stdout, '/0\n')
+            self.assertEqual(run('1').returncode, 0)
+            raw = (folder / 'song.oxy').read_bytes()
+            self.assertEqual(raw, companion(project.read_bytes(), SAVED, kept={'morph': b'stat\xff'}))
+            self.assertEqual(kept_data(parse(raw), project.read_bytes()), {'morph': b'stat\xff'})
+            self.assertEqual(run('1', 'read').stdout, '73746174ff/5\n')
+            # Any writer's spacing reads the same; a failed load gives nothing either way.
+            (folder / 'song.oxy').write_bytes(json.dumps(json.loads(raw)).encode())
+            self.assertEqual(run('1', 'read').stdout, '73746174ff/5\n')
+            self.assertEqual(run('0', 'read').stdout, 'none\n')
+            # A project saved since, or a section version this firmware does not know, gives nothing.
+            project.write_bytes(project.read_bytes() + b'!')
+            self.assertEqual(run('1', 'read').stdout, '/0\n')
+            document = json.loads(raw)
+            document['sections']['open-xy.control']['version'] = 2
+            project.write_bytes(project.read_bytes()[:-1])
+            (folder / 'song.oxy').write_bytes(json.dumps(document).encode())
+            self.assertEqual(run('1', 'read').stdout, '/0\n')
 
     def test_a_failed_save_or_other_name_writes_nothing(self):
         with tempfile.TemporaryDirectory(prefix='companion-') as directory:
@@ -135,8 +166,13 @@ class FirmwareWriter(unittest.TestCase):
     def test_every_save_reaches_the_writer_through_one_reviewed_call(self):
         hooks = [p for p in config()['patches'] if p.get('symbol') == 'sdk_project_save']
         self.assertEqual([(p['address'], p['before'], p['call']) for p in hooks], [('0x8d585eda', '00e3cd98', True)])
-        self.assertIn('project_companion', native.SDK_UNITS)
-        self.assertIn('project_companion_table', native.SDK_UNITS)
+
+    def test_every_load_reaches_the_reader_through_one_reviewed_call(self):
+        hooks = [p for p in config()['patches'] if p.get('symbol') == 'sdk_project_read']
+        # CALL 0x8d599b10, stock's project reader, in its only caller 8d5890b0.
+        self.assertEqual([(p['address'], p['before'], p['call']) for p in hooks], [('0x8d58913e', '00e3e984', True)])
+        self.assertIn('track_control_project', native.SDK_UNITS)
+        self.assertEqual(native.UNIT_SERVICES['track_control_project'], 'control')
 
     def test_mtp_shows_companions_beside_projects(self):
         import re

@@ -35,7 +35,7 @@ version is rejected. The output differs from stock in exactly these places:
 | Synth and effect controls | 7 | Lets an encoder press on an owned synth's or send effect's page select an alternate parameter, which its turns, titles and values then follow; scales fine turns on owned synth and send-effect pages; steps owned enums one choice per detent; names owned enums' choices, and an owned effect's division values on the send page |
 | LFO destinations | 15 | Selects and modulates all declared engine parameters on owned instrument machines with five to eight parameters, using their assigned encoder icons |
 | Display note releases | 2 | Observes both stock note-off map updates while preserving their original calls |
-| Project companions | 4 | Writes a [companion](projects.md) after every project save, and shows companions beside projects over MTP |
+| Project companions | 5 | Writes a [companion](projects.md) after every project save, gives track control machines what they kept after every project load, and shows companions beside projects over MTP |
 | Diagnostic benchmark | 1 | Extends explicit command 0xc8 with the selected machines; no normal-playback callbacks added |
 | Per-voice profiling | 10 optional | Bypasses diagnostic timing in both stock voice renderers when built with profiling off |
 | Track control | 3 | Runs a synth's track control once per GUI tick, after stock's own call at that site, lets it capture encoder edits, and shows its overlays as parameter values |
@@ -45,7 +45,8 @@ version is rejected. The output differs from stock in exactly these places:
 The sample rows (sample dispatch, analysis, drum-page services and recorder)
 form the profile's `samples` service: a build applies those edits, and links
 the SDK code behind them, only when it includes a sample engine. Otherwise
-their sites stay stock. The track control rows form the `control` service in the same way: a build
+their sites stay stock. The track control rows (and the project read of the
+project companion rows) form the `control` service in the same way: a build
 uses them only when it includes a machine with [track control](api.md#track-control).
 Everything else must reconstruct byte for byte. Protected ranges in
 [`pipeline.py`](../tooling/pipeline.py) admit only hooks into the module and
@@ -424,6 +425,14 @@ newlib `fopen`, `fread` and `fclose` (`0x8fed0348`, `0x8fed05bc`,
 `fwrite` (`0x8fed0780`) ([`project_companion.cpp`](../sdk/platform/opxy-1.2.1/project_companion.cpp)).
 The machines it lists are the collection's, from their link-time numbers; a
 kit leaves out machines with number 0. A failed save writes nothing.
+
+Stock loads every project, the workspace included, through one function,
+`read(project, path)` (`0x8d599b10`), which `project_load` (`0x8d5890b0`) calls
+once, at `0x8d58913e`. That call is hooked: after a read that succeeds, the SDK
+reads the companion beside the project and, when its binding matches the
+project's bytes, decodes each track control machine's `open-xy.control` entry
+and calls its `control_load`; with no matching entry, `control_load` gets 0
+bytes. A failed read changes nothing.
 
 Stock's MTP view lists only paths matching a table of regular expressions
 (`0x840ae0c4`…), and under `/projects` only `.xy`. Three text edits rewrite

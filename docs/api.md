@@ -204,7 +204,7 @@ A synth declares:
 | `sharedBytes` | `Shared` size, or 0 when `Shared` is empty |
 | `outputPeakQ31` | Positive declared oscillator peak; the preview uses it for audition gain |
 | `display` | The screen's frame budget; see the [display API](display.md) |
-| `trackControl` | Optional: the [track control](#track-control) state's `stateBytes` and `stateAlignment`, and optionally `unique` and `marks` |
+| `trackControl` | Optional: the [track control](#track-control) state's `stateBytes` and `stateAlignment`, and optionally `unique`, `savedBytes` and `marks` |
 
 The SDK never runs constructors or destructors for `Voice`, `Shared` or
 `DisplayState`: their storage starts zeroed and the callbacks set it up.
@@ -319,6 +319,20 @@ keeping them. Edits made while a step is held (parameter locks) and changes
 from MIDI or presets are not captured. Like the display, `control` is bounded
 and allocation-free; it is not an audio callback. Browser previews do not run
 it.
+
+A unique machine can keep data with each project, such as Morphose's states.
+It adds `"savedBytes": n` (1..8192) to `trackControl` and supplies:
+
+```cpp
+u32 control_save(const ControlState& state, u8* data, u32 capacity);  // bytes written, at most capacity (n)
+void control_load(ControlState& state, const u8* data, u32 bytes);
+```
+
+When stock saves a project, the workspace included, `control_save` writes what
+to keep; the SDK stores it in the project's [companion](projects.md). After
+stock loads a project, `control_load` gets those bytes back, or `bytes` 0 when
+the project has none (saved before, on stock, or without the machine), so the
+machine can start empty. Both run on the GUI side.
 
 A machine's control and display are compiled separately, so they share no
 variables. The control can pass four words to its display each tick in

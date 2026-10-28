@@ -2,83 +2,24 @@
 // the workspace included, through one call of save(project, path) (8d599074, from
 // 8d585eda). After a save that succeeds, the hook writes the .oxy beside the .xy: the
 // saved file's size and CRC-32, then this firmware's machine numbers, in the canonical
-// form tooling/projects.py writes. It runs where stock saves, never on the audio role.
+// form tooling/projects.py writes, with what track control machines keep. It runs where
+// stock saves, never on the audio role.
 // A failure leaves the previous companion, which no longer matches, or a partial
-// one; readers ignore both.
+// one; readers ignore both. What track control machines keep comes from the control
+// service, through startup.cpp, which writes nothing in a build without it.
 #include "project_companion.hpp"
-#include "stock.hpp"
+#include "project_files.hpp"
 
-using opxy::u32;
 using opxy::platform::CompanionMachine;
-using opxy::platform::stock;
 
-extern "C" u32 sdk_project_save(void* project, const char* path) __asm__("sdk_project_save");
+extern "C" opxy::u32 sdk_project_save(void* project, const char* path) __asm__("sdk_project_save");
 
 namespace {
-typedef void File;
-// newlib, as stock's project reader and writer call it (8d590d7c, 8d590e28, 8d591304, 8d590da2).
-File* file_open(const char* path, const char* mode) {
-    return stock<File*(const char*, const char*)>(0x8fed0348)(path, mode);
-}
-u32 file_read(void* data, u32 size, u32 count, File* file) {
-    return stock<u32(void*, u32, u32, File*)>(0x8fed05bc)(data, size, count, file);
-}
-u32 file_write(const void* data, u32 size, u32 count, File* file) {
-    return stock<u32(const void*, u32, u32, File*)>(0x8fed0780)(data, size, count, file);
-}
-void file_close(File* file) { stock<int(File*)>(0x8fed00ae)(file); }
 u32 save(void* project, const char* path) { return stock<u32(void*, const char*)>(0x8d599074)(project, path); }
-
-const u32 kPathBytes = 256;
-const u32 kTextBytes = 8192;
-unsigned char chunk[4096];
-char text[kTextBytes];
-char companion[kPathBytes];
-u32 crc_table[256];
-
 u32 value(const char* symbol) { return static_cast<u32>(reinterpret_cast<__UINTPTR_TYPE__>(symbol)); }
 
-// zlib's CRC-32.
-u32 crc32(u32 crc, const unsigned char* data, u32 count) {
-    if (!crc_table[1]) {
-        for (u32 i = 0; i < 256; ++i) {
-            u32 c = i;
-            for (int bit = 0; bit < 8; ++bit) c = c & 1 ? 0xedb88320u ^ (c >> 1) : c >> 1;
-            crc_table[i] = c;
-        }
-    }
-    crc = ~crc;
-    while (count--) crc = crc_table[(crc ^ *data++) & 0xff] ^ (crc >> 8);
-    return ~crc;
-}
-
-// The project's bytes as saved: false when it cannot be read back.
-bool measure(const char* path, u32& bytes, u32& crc) {
-    File* file = file_open(path, "rb");
-    if (!file) return false;
-    bytes = crc = 0;
-    for (u32 count; (count = file_read(chunk, 1, sizeof chunk, file)) != 0;) {
-        crc = crc32(crc, chunk, count);
-        bytes += count;
-    }
-    file_close(file);
-    return true;
-}
-
-// song.xy -> song.oxy; false for any other name.
-bool companion_path(const char* path) {
-    u32 length = 0;
-    while (path[length]) ++length;
-    if (length < 4 || length + 2 >= kPathBytes || path[length - 3] != '.' || path[length - 2] != 'x' ||
-        path[length - 1] != 'y')
-        return false;
-    for (u32 i = 0; i < length - 2; ++i) companion[i] = path[i];
-    companion[length - 2] = 'o';
-    companion[length - 1] = 'x';
-    companion[length] = 'y';
-    companion[length + 1] = 0;
-    return true;
-}
+const u32 kTextBytes = 8192;
+char text[kTextBytes];
 
 class Writer {
 public:
@@ -106,7 +47,11 @@ void write_companion(u32 bytes, u32 crc) {
     w.number(bytes);
     w.put(",\n    \"crc32\": \"");
     w.hex(crc);
-    w.put("\"\n  },\n  \"sections\": {\n    \"open-xy.machines\": {\n      \"machines\": {");
+    w.put("\"\n  },\n  \"sections\": {\n");
+    // What track control machines keep comes first, in key order, written by the
+    // control service straight to the file.
+    const u32 head = w.length;
+    w.put("    \"open-xy.machines\": {\n      \"machines\": {");
     u32 listed = 0;
     for (const CompanionMachine* m = sdk_companion_machines; m->id; ++m) {
         const u32 number = value(m->number);
@@ -124,7 +69,9 @@ void write_companion(u32 bytes, u32 crc) {
     if (w.full) return;
     File* file = file_open(companion, "wb");
     if (!file) return;
-    file_write(text, w.length, 1, file);
+    file_write(text, head, 1, file);
+    sdk_project_kept(file);
+    file_write(text + head, w.length - head, 1, file);
     file_close(file);
 }
 }

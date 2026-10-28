@@ -11,6 +11,12 @@ struct ControlMachine {
     // Each copy's state: copy 0 for a unique machine, else the copy's track.
     void (*reset)(u32 copy);
     void (*control)(u32 copy, const control::Input*, control::Overlay*);
+    // What it keeps with each project (project_companion.cpp): its machine ID,
+    // at most saved_bytes, and save/load, or 0 and null when it keeps nothing.
+    const char* name;
+    u32 saved_bytes;
+    u32 (*save)(u8* data);
+    void (*load)(const u8* data, u32 bytes);
     bool unique;  // runs only while one track holds it
     u32 engine() const { return static_cast<u32>(reinterpret_cast<__UINTPTR_TYPE__>(id)); }
 };

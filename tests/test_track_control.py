@@ -26,11 +26,17 @@ class TrackControl(unittest.TestCase):
     def test_definition_declares_aligned_state(self):
         synth = fixture('probesynth').definition
         validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4}), 'synth')
-        validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4, 'unique': True}), 'synth')
+        validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4, 'unique': True,
+                                                 'savedBytes': 8192}), 'synth')
         validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4, 'unique': False,
                                                  'marks': {'capture': 1, 'line': 0}}), 'synth')
         for control in ({'stateBytes': 6, 'stateAlignment': 4}, {'stateBytes': 0, 'stateAlignment': 4},
                         {'stateBytes': 8}, {'stateBytes': 8, 'stateAlignment': 4, 'tracks': 1}, 1,
+                        {'stateBytes': 8, 'stateAlignment': 4, 'unique': True, 'savedBytes': 0},
+                        {'stateBytes': 8, 'stateAlignment': 4, 'unique': True, 'savedBytes': 8193},
+                        # Data kept with projects is a unique machine's.
+                        {'stateBytes': 8, 'stateAlignment': 4, 'savedBytes': 8},
+                        {'stateBytes': 8, 'stateAlignment': 4, 'unique': False, 'savedBytes': 8},
                         {'stateBytes': 8, 'stateAlignment': 4, 'unique': 1},
                         {'stateBytes': 8, 'stateAlignment': 4, 'marks': {'capture': 0, 'line': 1}},
                         {'stateBytes': 8, 'stateAlignment': 4, 'marks': {'capture': 17, 'line': 1}},
@@ -50,8 +56,22 @@ class TrackControl(unittest.TestCase):
         self.assertNotIn('sdk/track_control_table.o', native.object_owners(machines))
         with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
             table = generate_track_controls(folder, machines).read_text(encoding='utf-8')
-        self.assertIn('{nullptr, nullptr, nullptr, nullptr, false}', table)
+        self.assertIn('{nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false}', table)
         self.assertNotIn('probesynth', table)
+
+    def test_a_machine_that_keeps_data_exports_save_and_load(self):
+        synth = copy.deepcopy(fixture('probesynth'))
+        synth.definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4, 'unique': True,
+                                                         'savedBytes': 100}
+        self.assertEqual(control_callbacks(synth)[2:], [synth.prefix + '_control_save', synth.prefix + '_control_load'])
+        with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
+            table = generate_track_controls(folder, [synth]).read_text(encoding='utf-8')
+            binding = generate_control(folder, synth).read_text(encoding='utf-8')
+        p = synth.prefix
+        self.assertIn(f'"{synth.id}", 100, {p}_control_save, {p}_control_load, true}}', table)
+        self.assertIn('ControlState states[1];', binding)
+        self.assertIn('control_save(states[0], data, 100)', binding)
+        self.assertIn('return bytes <= 100 ? bytes : 0;', binding)
 
     def test_each_copy_of_a_machine_that_is_not_unique_has_its_own_state(self):
         synth = copy.deepcopy(fixture('probesynth'))
@@ -112,19 +132,23 @@ class TrackControl(unittest.TestCase):
         steering.definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4}
         hooks = [p for p in config()['patches'] if p.get('service') == 'control']
         self.assertEqual(sorted(p['symbol'] for p in hooks),
-                         ['sdk_gui_tick', 'sdk_param_edit_set', 'sdk_param_shown_hook'])
+                         ['sdk_gui_tick', 'sdk_param_edit_set', 'sdk_param_shown_hook', 'sdk_project_read'])
         for machines, used in ((plain, False), ([steering], True)):
             services = active_services(config(), native.machine_uses(machines))
             self.assertEqual('control' in services, used)
             self.assertEqual(all(patch_active(p, services) for p in hooks), used)
             units = {step for _name, _m, step in native.plan(machines)}
-            for unit in ('track_control', 'track_control_table', 'track_control_hooks', 'track_control_overlay'):
+            for unit in ('track_control', 'track_control_table', 'track_control_hooks', 'track_control_overlay',
+                         'track_control_project'):
                 self.assertEqual(unit in units, used)
-        # Startup starts the marks' screen only with the service.
+        # Startup reaches the saved data's writer only with the service.
         from tooling.startup import render
         plain_startup, control_startup = render(['probe']), render(['probe'], control=True)
         self.assertNotIn('sdk_overlay_startup', plain_startup)
+        self.assertIn('u32 sdk_project_kept(void*) { return 0; }', plain_startup)
+        self.assertNotIn('sdk_control_kept_write', plain_startup)
         self.assertIn('    sdk_overlay_startup();', control_startup)
+        self.assertIn('{ return sdk_control_kept_write(file); }', control_startup)
 
     def test_gui_tick_is_a_reviewed_call_in_a_shared_unit(self):
         hooks = [p for p in config()['patches']
