@@ -211,6 +211,7 @@ extern "C" void sdk_gui_tick() {
         // The host's own controls as its page shows them, LFO included.
         for (u32 p = 0; p < kEngineControls; ++p) input.values[track][p] = shown(track, p);
         input.track = track;
+        input.page_key = sdk_synth_page_key(track);
         input.transport = opxy::Transport{project_bpm_x10(), word(kTicks96), byte(kPlaying) || byte(kPlaying + 1)};
         input.edit_count = pending_count;
         for (u32 i = 0; i < pending_count; ++i) input.edits[i] = pending[i];

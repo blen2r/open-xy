@@ -279,6 +279,7 @@ moves to another track.
 | `edit_count`, `edits` | While capturing: up to 32 encoder edits of other instrument tracks' parameters since the last tick, oldest first, as track, index and edited value |
 | `elapsed_us` | Microseconds since the previous tick, from the core clock: 0 on the first tick after a reset, at most one second |
 | `transport` | The project's tempo in tenths of BPM (0 when unknown), the song position in 96ths of a quarter note, which advances only while playing, and whether the sequencer plays |
+| `page_key` | A stock page key the synth hides (`"hidePages"`), pressed on its track since the last tick: 2, 3 or 4 for M2, M3 or M4, else 0. The page stays as it was, so the key is free for the machine |
 
 `overlay` arrives empty; `opxy::control::add` appends up to 64 entries, each a
 track, parameter index and value for this tick. Entries for the machine's own

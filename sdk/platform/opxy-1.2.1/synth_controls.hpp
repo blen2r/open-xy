@@ -41,6 +41,9 @@ opxy::u32 sdk_synth_title_slot(opxy::u32 engine, opxy::u32 index) __asm__("sdk_s
 // Once per GUI tick: when the selected instrument track's owned synth hides the
 // stock page shown, shows the page shown before it instead.
 void sdk_synth_pages() __asm__("sdk_synth_pages");
+// The hidden page key (2..4 for M2..M4) last pressed on `track` while it was
+// selected, once, or 0.
+opxy::u32 sdk_synth_page_key(opxy::u32 track) __asm__("sdk_synth_page_key");
 // The send page's value text for position `index` of an owned effect, through
 // the hook in screen_hooks.s; every other caption reaches stock unchanged.
 opxy::u32 sdk_fx_value_text(opxy::u32 widget, const char* text, opxy::u32 index, opxy::i32 value)

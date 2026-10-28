@@ -19,7 +19,7 @@ u32 engines[16], ticks, writes, resets, runs, sets, edits_seen;
 control::Entry last_edit;
 u32 capture, mark;
 i32 seen;  // the value of track 0, parameter 1 the machine was given
-u32 seen_elapsed, seen_bpm, seen_ticks, seen_playing;
+u32 seen_elapsed, seen_bpm, seen_ticks, seen_playing, seen_key;
 // The core clock, the project tempo and the song position.
 u32 cycles;
 unsigned short tempo = 1200;
@@ -78,6 +78,7 @@ void run(const control::Input* input, control::Overlay* overlay) {
     seen_bpm = input->transport.bpm_x10;
     seen_ticks = input->transport.ticks96;
     seen_playing = input->transport.playing;
+    seen_key = input->page_key;
     seen_own = input->values[input->track][1];
     edits_seen = input->edit_count;
     if (input->edit_count) last_edit = input->edits[input->edit_count - 1];
@@ -100,6 +101,8 @@ void tick(u32 expected_writes, const char* message) {
 
 // The hidden-pages check (synth_controls.cpp) runs once per GUI tick.
 void sdk_synth_pages() { ++page_checks; }
+u32 page_key;
+u32 sdk_synth_page_key(u32 track) { return track == 2 ? page_key : 0; }
 opxy::u32 sdk_benchmark_cycles() { return cycles; }
 const volatile unsigned short* stock_project_tempo() { return &tempo; }
 
@@ -270,6 +273,11 @@ int main() {
     playing[1] = 0;
     tick(0, "Timing rewrote the overlay");
     require(seen_elapsed == 1000000 && seen_playing == 0, "Elapsed time not capped");
+    // A hidden page key pressed on the host's track reaches the machine.
+    page_key = 4;
+    tick(0, "Page key rewrote the overlay");
+    require(seen_key == 4, "Page key not given");
+    page_key = 0;
 
     // Marks over every page: an overlaid selected track once the machine asks
     // for it, then a capture whether or not it asks.

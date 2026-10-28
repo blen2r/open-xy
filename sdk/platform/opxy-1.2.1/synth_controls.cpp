@@ -34,8 +34,9 @@ const SynthControls* owned(u32 engine, bool effect = false) {
     return nullptr;
 }
 
-// The last stock instrument page shown that the selected synth does not hide.
-u32 page_before;
+// The last stock instrument page shown that the selected synth does not hide,
+// and the track selected then.
+u32 page_before, track_before = kTracks;
 void set_page(u32 page) { stock<void(u32)>(0x8c0b19c4)(page); }
 
 // The slot each position shows, per track, while the track keeps an owned
@@ -186,15 +187,33 @@ u32 control_ratio(i32 value, const u32* anchors, u32 count) {
 
 // 8c0b19c4 sets the page word M1..M4 select, wherever stock does; the page
 // keys, track changes and menus all reach it. A tick after it shows a page the
-// selected synth hides, the page shown before it comes back.
+// selected synth hides, the page shown before it comes back. When the track
+// was already selected, that was a press of the page's key: it is kept for
+// the track's machine (sdk_synth_page_key).
+namespace {
+u32 key_track = kTracks, key_number;
+}
+
 void sdk_synth_pages() {
     const u32 track = selected_track();
     const u32 page = word(kInstrumentPage);
     const SynthControls* m = track < kTracks ? owned(track_engine(track)) : nullptr;
+    const bool same_track = track == track_before;
+    track_before = track;
     if (page >= opxy::page_controls) return;
     if (!m || !(m->hidden_pages >> page & 1)) {
         page_before = page;
         return;
     }
+    if (same_track && !(m->hidden_pages >> page_before & 1)) {
+        key_track = track;
+        key_number = page + 1;
+    }
     set_page(m->hidden_pages >> page_before & 1 ? 0 : page_before);
+}
+
+u32 sdk_synth_page_key(u32 track) {
+    if (track != key_track) return 0;
+    key_track = kTracks;
+    return key_number;
 }

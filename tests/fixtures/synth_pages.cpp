@@ -68,6 +68,7 @@ int main() {
     page = 2;
     sdk_synth_pages();
     require(page == 0 && sets == 2, "Filter page not replaced by the page before");
+    require(sdk_synth_page_key(2) == 3 && sdk_synth_page_key(2) == 0, "M3 press not kept once");
     // Selecting the track while on another track's envelope page: the engine page.
     selected = 3;
     page = 1;
@@ -75,11 +76,20 @@ int main() {
     selected = 2;
     sdk_synth_pages();
     require(page == 0 && sets == 3, "Hidden page kept after selecting the track");
+    // Pressing a hidden page's key on the selected track is kept for its
+    // machine, once; selecting the track while on that page is not a press.
+    require(sdk_synth_page_key(2) == 0, "Track selection taken for a key press");
+    sdk_synth_pages();  // the next tick, on the engine page
+    page = 2;
+    sdk_synth_pages();
+    require(page == 0 && sdk_synth_page_key(3) == 0 && sdk_synth_page_key(2) == 3 && sdk_synth_page_key(2) == 0,
+            "M3 press not kept once for its track");
     // Auxiliary tracks are left alone.
+    const u32 sets_before = sets;
     selected = 9;
     engines[9] = 40;
     page = 1;
     sdk_synth_pages();
-    require(page == 1 && sets == 3, "Auxiliary track's page changed");
+    require(page == 1 && sets == sets_before, "Auxiliary track's page changed");
     return 0;
 }
