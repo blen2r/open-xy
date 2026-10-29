@@ -20,6 +20,9 @@ extern "C" opxy::u32 sdk_project_clear(opxy::u32, opxy::u32, opxy::u32) __asm__(
 extern "C" opxy::u32 sdk_project_clear_random(opxy::u32, opxy::u32, opxy::u32) __asm__("sdk_project_clear_random");
 
 namespace {
+using opxy::u32;
+using opxy::platform::stock;
+
 const u32 kProjectLoading = 0x840a0528;
 
 // The format's 64 KiB, less what a reader never needs.
