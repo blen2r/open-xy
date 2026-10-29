@@ -99,6 +99,18 @@ class TrackControl(unittest.TestCase):
                                              {'stateBytes': 8, 'stateAlignment': 4, 'unique': True, 'aux': [11]}),
                                 'synth')
 
+    def test_a_machine_on_aux_tracks_is_not_in_the_instrument_list(self):
+        from tooling.adapters import catalog_entry
+        synth = copy.deepcopy(fixture('probesynth'))
+        self.assertTrue(catalog_entry(synth))
+        synth.definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4, 'unique': True,
+                                                         'aux': [12]}
+        self.assertEqual(catalog_entry(synth), '')
+        catalog = (ROOT / 'profiles/opxy-1.2.1/content/op1_factory.json').read_bytes()
+        plain = fixture('probesynth')
+        with_aux = native.extend_catalog(catalog, config(), [plain, synth])
+        self.assertEqual(with_aux, native.extend_catalog(catalog, config(), [plain]))
+
     def test_each_copy_of_a_machine_that_is_not_unique_has_its_own_state(self):
         synth = copy.deepcopy(fixture('probesynth'))
         synth.definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4}

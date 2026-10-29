@@ -685,7 +685,8 @@ def extend_catalog(catalog, profile, machines):
 
     The insertion offsets are bound to the exact authenticated stock catalog.
     """
-    groups = dict(engine_types=by_kind(machines, 'synth', 'sample'), fx_types=by_kind(machines, 'effect'))
+    listed = [m for m in machines if catalog_entry(m)]  # aux machines are not in tracks 1-8's list
+    groups = dict(engine_types=by_kind(listed, 'synth', 'sample'), fx_types=by_kind(listed, 'effect'))
     result, base = catalog, json.loads(catalog)
     for key, at in sorted(profile['stock_catalog_inserts'].items(), key=lambda item: -item[1]):
         result = result[:at] + ''.join(catalog_entry(m) for m in groups[key]).encode('utf-8') + result[at:]

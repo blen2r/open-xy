@@ -567,7 +567,8 @@ export async function recoverFirmware(kit, input, layout = null) {
 }
 
 export function presetPath(machine) {
-  if (machine.kind === 'effect') return null;
+  // An aux machine (no catalog entry) is never an instrument, so it has no instrument presets.
+  if (machine.kind === 'effect' || machine.catalog === '') return null;
   check(['synth', 'sample'].includes(machine.kind) && /^[a-z][a-z0-9_]{0,14}$/.test(machine.id),
     'Invalid preset instrument');
   return `content/presets/${machine.id}/default.json`;
@@ -634,7 +635,9 @@ export async function buildAssets(kit, selection, catalog, numbers) {
   const machines = kit.machines.filter(m => selection.includes(m.id));
   // Each machine's entry ends its stock list; the offsets are bound to the
   // authenticated stock catalog (tooling.native.extend_catalog).
-  const groups = {engine_types: machines.filter(m => m.kind !== 'effect'), fx_types: machines.filter(m => m.kind === 'effect')};
+  // Aux machines have no entry: they are chosen on their aux track, never in tracks 1-8's list.
+  const listed = machines.filter(m => m.catalog !== '');
+  const groups = {engine_types: listed.filter(m => m.kind !== 'effect'), fx_types: listed.filter(m => m.kind === 'effect')};
   const inserts = Object.entries(kit.profile.stock_catalog_inserts).sort((a, b) => b[1] - a[1]);
   check(inserts.map(([key]) => key).sort().join() === Object.keys(groups).sort().join(), 'Unexpected catalog insertion points');
   let extended = catalog;

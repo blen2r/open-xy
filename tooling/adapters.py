@@ -545,7 +545,10 @@ def catalog_defaults(definition):
 
 
 def catalog_entry(m):
-    """The stock catalog text inserted for a machine, in the reviewed byte layout."""
+    """The stock catalog text inserted for a machine, in the reviewed byte layout. A machine
+    that takes over aux tracks has none: it is chosen there, never in tracks 1-8's engine list."""
+    if track_control(m) and track_control(m).get('aux'):
+        return ''
     if m.kind == 'effect':
         return (',\n        {\n            "type": ' + json.dumps(m.native_name) +
                 ',\n            "id": ' + str(m.identity['effect']) +
