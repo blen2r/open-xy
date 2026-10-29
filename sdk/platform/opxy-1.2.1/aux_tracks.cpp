@@ -107,6 +107,12 @@ u32 releasing[control::all_tracks];
 // After a project loads, the next GUI tick gives back the role's controls of
 // every pattern that no longer holds a machine (one the build lacks).
 bool loaded;
+// Each aux track's current pattern block as the last GUI tick saw it. In song
+// mode, stock's scene change between two patterns holding the same machine
+// leaves the track's live values as they were until the next change; manual
+// pattern and scene changes publish them. So a held track's new pattern gets
+// its stored controls published on the next tick, as those do.
+u32 seen_block[control::all_tracks];
 
 bool takeable(u32 track) { return track < control::all_tracks && (kTakeable >> track & 1); }
 u32 pattern_block(u32 track, u32 pattern) {
@@ -453,7 +459,12 @@ void aux_tick() {
                 }
             }
         }
-        if (holder(t)) mark(t);
+        const ControlMachine* m = holder(t);
+        const u32 block = current_block(t);
+        if (m && seen_block[t] && block != seen_block[t])
+            for (u32 i = 0; i < kControls; ++i) live_set(t, i, base(t, i));
+        seen_block[t] = block;
+        if (m) mark(t);
         else unmark(t);
     }
     loaded = false;
