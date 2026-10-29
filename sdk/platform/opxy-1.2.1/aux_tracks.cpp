@@ -11,7 +11,9 @@
 // (M1..M4 as 0..3) the word at 0801eae4.
 // - Its shifted-key method (8c08f6b0) ignores Shift + M1..M4. Its Shift + M1
 //   case (8c08f6ec) is hooked (aux_hooks.s): on a track a machine can take
-//   over, it opens the chooser, titled "engine".
+//   over, it opens the chooser, titled "engine"; on the sends (14, 15), the
+//   effect list, as their Shift + track key does (8c08f60c), so Shift + M1
+//   chooses what runs on every aux track that has a choice.
 // - Shift + track key reaches 8c08f60c(controller, track), which opens the
 //   effect list on the sends only. The hook after its LINK (8c08f610) lists the
 //   presets of the machine holding the track, titled "preset", as Shift + track
@@ -210,10 +212,14 @@ extern "C" void sdk_aux_tick() {
 }
 
 // 8c08f6ec: Shift + M1 on an aux track, which stock ignores. A track a
-// machine can take over opens the chooser.
+// machine can take over opens the chooser; a send opens its effect list
+// through stock's Shift + track key (8c08f60c, from 8c091e24 with the aux
+// controller), whose hook passes the sends on to stock.
+const u32 kAuxController = 0x08014db4;
 void sdk_aux_shift_m1() {
     const u32 track = byte(kSelectedTrack);
     if (takeable(track)) open_chooser(track);
+    else if (track == 14 || track == 15) stock<void(u32, u32)>(0x8c08f60c)(kAuxController, track);
 }
 
 // 8c08f610: Shift + track key on an aux track. On one a machine holds, its
