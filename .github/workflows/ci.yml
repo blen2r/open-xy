@@ -34,8 +34,8 @@ jobs:
             exit 0
           fi
           changed=$(git diff --name-only origin/main...HEAD)
-          if [ "$changed" != catalog/machines.json ]; then
-            echo "::error::Only catalog/machines.json changes and the staging release merge into main; open other pull requests against staging. Changed: $(echo $changed)"
+          if [ -z "$changed" ] || grep -vqxE 'catalog/(machines|extensions)\.json' <<<"$changed"; then
+            echo "::error::Only catalog/machines.json and catalog/extensions.json changes and the staging release merge into main; open other pull requests against staging. Changed: $(echo $changed)"
             exit 1
           fi
       - uses: actions/setup-python@v5

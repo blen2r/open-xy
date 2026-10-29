@@ -133,9 +133,9 @@ class TrackControl(unittest.TestCase):
         hooks = [p for p in config()['patches'] if p.get('service') == 'control']
         self.assertEqual(sorted(p['symbol'] for p in hooks),
                          ['sdk_gui_tick', 'sdk_param_edit_set', 'sdk_param_shown_hook', 'sdk_project_clear',
-                          'sdk_project_clear_random', 'sdk_project_read'])
+                          'sdk_project_clear_random'])
         for machines, used in ((plain, False), ([steering], True)):
-            services = active_services(config(), native.machine_uses(machines))
+            services = active_services(config(), native.service_users(machines))
             self.assertEqual('control' in services, used)
             self.assertEqual(all(patch_active(p, services) for p in hooks), used)
             units = {step for _name, _m, step in native.plan(machines)}

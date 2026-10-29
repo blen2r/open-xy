@@ -8,17 +8,17 @@ const kit = await openKit(JSON.parse(readFileSync(resolve(directory, 'kit.json')
 const stock = new Uint8Array(readFileSync(stockFile));
 const catalog = new Uint8Array(readFileSync(resolve(content, 'op1_factory.json')));
 assert.deepEqual(await recoverFirmware(kit, stock), {stock, selected:null});
-for (const mask of checkedSelections(kit.machines)) {
-  const selected = kit.machines.filter((_, i) => mask & 2 ** i).map(m => m.id);
-  const linked = linkKit(kit, selected), target = resolve(directory, 'reference', String(mask));
+const selections = JSON.parse(readFileSync(resolve(directory, 'reference/selections.json')));
+for (const {name, selected, extensions} of selections) {
+  const linked = linkKit(kit, selected, null, extensions), target = resolve(directory, 'reference', name);
   const firmware = await patchFirmware(kit, linked, stock);
   const recovered = await recoverFirmware(kit, firmware);
-  assert.deepEqual(recovered, {stock, selected});
-  assert.deepEqual(await patchFirmware(kit, linkKit(kit, recovered.selected), recovered.stock), firmware);
+  assert.deepEqual(recovered, {stock, selected, extensions});
+  assert.deepEqual(await patchFirmware(kit, linkKit(kit, recovered.selected, null, recovered.extensions), recovered.stock), firmware);
   const profilingOff = await patchFirmware(kit, linked, stock, {profiling: false});
   assert.notDeepEqual(profilingOff, firmware);
-  assert.deepEqual(await recoverFirmware(kit, profilingOff), {stock, selected});
-  assert.deepEqual(await patchFirmware(kit, linkKit(kit, selected), stock, {profiling: false}), profilingOff);
+  assert.deepEqual(await recoverFirmware(kit, profilingOff), {stock, selected, extensions});
+  assert.deepEqual(await patchFirmware(kit, linkKit(kit, selected, null, extensions), stock, {profiling: false}), profilingOff);
   writeFileSync(target + '.profiling-off.ldr', profilingOff);
   const timingHooks = kit.profile.patches.filter(edit => edit.profiling === false);
   assert.ok(timingHooks.length > 1);
@@ -50,6 +50,6 @@ for (const mask of checkedSelections(kit.machines)) {
   }
 }
 // Relinking does not depend on checkbox order or mutate the object capsules.
-const all = kit.machines.map(m => m.id);
+const all = kit.linked ?? kit.machines.map(m => m.id);
 assert.deepEqual(linkKit(kit, all).module, linkKit(kit, [...all].reverse()).module);
 console.log('Browser container/assets checks: checked selections recovered in both profiling modes; altered builds recover only verified stock; foreign changes rejected.');
