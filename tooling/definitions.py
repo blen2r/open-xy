@@ -112,13 +112,22 @@ def control_positions(definition):
     return [parameter.get('control', i % SYNTH_POSITIONS) for i, parameter in enumerate(definition['parameters'])]
 
 
+# The stock instrument pages a synth may hide, by their page index (M1 is 0).
+HIDDEN_PAGES = {'envelope': 1, 'filter': 2, 'lfo': 3}
+
+
+def hidden_pages(definition):
+    """The stock instrument pages a synth hides, as a bitmask of page indices (SDK 1.4)."""
+    return sum(1 << HIDDEN_PAGES[p] for p in definition.get('hidePages', ()))
+
+
 def paged(definition):
     """Whether a press switches the synth's whole page (`"press": "page"`, SDK 1.3)."""
     return definition.get('press') == 'page'
 
 
 def validate_definition(value, kind):
-    optional = tuple(k for k in ('press',) if k in value)
+    optional = tuple(k for k in ('press', 'hidePages') if k in value)
     keys(value, ('schema', 'id', 'name', 'parameters', 'presets', 'resources', *optional), 'definition')
     require(type(value['schema']) is int and value['schema'] == 1, 'Unknown definition schema')
     stock_name(value['id']); label(value['name'])
@@ -169,6 +178,11 @@ def validate_definition(value, kind):
         require(kind == 'synth' and value['press'] == 'page' and 5 <= len(parameters) <= 8 and
                 len(set(alternates)) == len(alternates),
                 '"press": "page" needs five to eight synth parameters and at most one alternate per position')
+    # Stock instrument pages a synth hides: M2 (envelope), M3 (filter) and M4 (LFO).
+    if 'hidePages' in value:
+        pages = value['hidePages']
+        require(kind == 'synth' and isinstance(pages, list) and pages and len(set(pages)) == len(pages) and
+                all(p in HIDDEN_PAGES for p in pages), '"hidePages" lists "envelope", "filter" and/or "lfo" for a synth')
     require(isinstance(value['presets'], dict) and len(value['presets']) <= 64, 'Invalid presets')
     for name, preset in value['presets'].items():
         label(name); keys(preset, names, 'preset')

@@ -170,6 +170,17 @@ editing a shared control keeps the current page. Use the SDK's
 emphasis and motion. `sdk.py new` supplies it by default. Macro Osc is the
 [worked reference](https://github.com/etcetc000/open-xy-core-machines/blob/main/machines/macroosc/definition.json).
 
+A synth for which a stock instrument page means nothing (one that makes no
+sound of its own, say) may declare `"hidePages"` at the top of
+`definition.json` (SDK 1.5), listing any of `"envelope"` (M2), `"filter"` (M3)
+and `"lfo"` (M4). On its track, those keys then leave the page shown as it
+was, and selecting the track while another track shows a hidden page shows the
+engine page. The SDK
+corrects the page once per GUI tick, so the hidden page may flash for a frame.
+A synth that hides the LFO page also has the track's stock LFO switched off,
+since its page can no longer reach it: one the previous engine left on would
+otherwise keep moving the synth's controls.
+
 On instrument tracks, the Value, Random and Element LFOs can target every
 declared parameter of a custom synth or sample engine, including all eight
 when present. Destination names follow parameter order regardless of which
@@ -272,8 +283,8 @@ serialized access.
 
 ## Track control
 
-A synth can steer other tracks (SDK 1.5). A build without such a machine
-applies none of track control's
+A synth can steer other tracks (SDK 1.5). A build without such a machine (or
+one with [hidden pages](#alternate-controls)) applies none of track control's
 firmware edits and links none of its code. It declares
 `"trackControl": {"stateBytes": n, "stateAlignment": a}` in `resources`, with
 `"sdk": "1.5"` in `machine.json`, and supplies `control.cpp` with:
@@ -304,6 +315,7 @@ copy's first call and whenever a copy arrives on a track.
 | `edit_count`, `edits` | While capturing: up to 32 encoder edits of other instrument tracks' parameters since the last tick, oldest first, as track, index and edited value |
 | `elapsed_us` | Microseconds since the previous tick, from the core clock: 0 on the first tick after a reset, at most one second |
 | `transport` | The project's tempo in tenths of BPM (0 when unknown), the song position in 96ths of a quarter note, which advances only while playing, and whether the sequencer plays |
+| `page_key` | A stock page key the synth hides (`"hidePages"`), pressed on its track since the last tick: 2, 3 or 4 for M2, M3 or M4, else 0. The page stays as it was, so the key is free for the machine |
 
 `overlay` arrives empty; `opxy::control::add` appends up to 64 entries, each a
 track, parameter index and value for this tick. Entries for the machine's own

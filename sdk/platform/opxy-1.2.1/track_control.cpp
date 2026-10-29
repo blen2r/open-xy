@@ -30,6 +30,7 @@
 // them, so an LFO on one of them moves the machine like a turn.
 #include "track_control.hpp"
 #include "stock.hpp"
+#include "synth_controls.hpp"
 #include "benchmark.hpp"
 
 namespace {
@@ -217,6 +218,7 @@ extern "C" void sdk_param_edit_set(u32 project, u32 track, u32 index, i32 value)
 extern "C" void sdk_gui_tick() {
     stock<void()>(0x8d580074)();
     ++gui_ticks;
+    sdk_synth_pages();
     if (!sdk_control_machine_count && !applied_count) return;
     sdk_aux_tick();
 
@@ -263,6 +265,7 @@ extern "C" void sdk_gui_tick() {
             input.values[t][p] = shown(t, p);
         }
         input.track = t;
+        input.page_key = sdk_synth_page_key(t);
         input.capturing = capture_track == t;
         input.edit_count = input.capturing ? pending_count : 0;
         for (u32 i = 0; i < input.edit_count; ++i) input.edits[i] = pending[i];
