@@ -391,17 +391,19 @@ on its aux track only.
 
 - **Choosing:** Shift + M1 on track 12 opens a list, "engine", with the
   track's stock role (`cv`) first, then each machine that may take it over.
-  While a machine holds the track, CV and gate stay silent. The choice is kept
-  with the project; a new project starts with `cv`.
+  As tracks 1-8 hold an engine, each pattern holds its own choice: it applies
+  to the current pattern, is copied with it and saved with the project, and
+  chained patterns switch between CV and the machine. While a machine holds the
+  playing pattern, CV and gate stay silent. A new project starts with `cv`.
 - **Its page:** M1 shows the machine's display, and its encoders, presses and
   alternates work as on tracks 1-8. Its `hidePages` and `page_key` work there
   too: on an aux track M2..M4 are the track's other pages and its LFO. The
   LFO's four engine destinations, the track's words 0..3, are named after the
   machine's first four parameters, and move them as on tracks 1-8.
 - **Its controls:** words 0..7 of track 12, so they are sequenced, locked and
-  saved like any track parameter, and `values[11]` holds them. Taking the
-  track over sets the machine's defaults; giving it back restores the role's
-  values. A project opened with a build that lacks the machine gets the role's
+  saved like any track parameter, and `values[11]` holds them. Taking a
+  pattern over sets the machine's defaults; giving it back restores the role's
+  values (a pattern copied from one the machine held takes another pattern's). A project opened with a build that lacks the machine gets the role's
   values back too. Opened on stock firmware, CV plays the machine's values.
 - **Presets:** Shift + track key on track 12 lists presets in two columns, as
   stock's preset browser does: folders, then the presets in them that can run

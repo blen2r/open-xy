@@ -1,10 +1,10 @@
 // Track control machines on aux tracks (issue #220). A machine whose
 // trackControl lists "aux" tracks can take over one of them, chosen with
 // Shift + M1 on that track as an engine is on tracks 1-8; the list's first
-// entry is the track's stock role. While a machine holds the track, its M1 page
-// shows the machine's own page, its knobs edit the machine's controls
-// (synth_controls.cpp), track control runs it there (track_control.cpp) and the
-// stock role is kept silent. M2..M4 stay stock. Part of the control service.
+// entry is the track's stock role; each pattern holds its own choice (below).
+// While a machine holds the current pattern, its M1 page shows the machine's
+// own page, its knobs edit the machine's controls (synth_controls.cpp), track
+// control runs it there (track_control.cpp) and the stock role is kept silent. M2..M4 stay stock. Part of the control service.
 //
 // Stock OS 1.2.1, GUI side. The aux controller (method table 0803fb6c) serves
 // tracks 8..15; the selected track is the byte at 840a0534 and its page tab
@@ -26,11 +26,17 @@
 //   8d53d2a0 names them after the machine holding the track instead, through
 //   the engine record's names (8d506c4c), as tracks 1-8 name theirs.
 //
-// Taking a track over keeps the stock role's eight controls aside and gives the
-// machine its defaults, through stock's set (8d5acf28), which stores and
-// publishes them; giving it back restores them. The choice and the role's
-// controls are kept with the project (track_control_project.cpp); a new project
-// starts with every track stock.
+// A track holds a machine per pattern, as tracks 1-8 hold an engine: by its
+// engine number in the engine word (+0x18) of each pattern, which stock reads
+// with 8d58781c, sets with 8d5877e4 (marking the project changed), copies with
+// the pattern and saves. Stock keeps 18 there on aux tracks, and its readers on
+// them only compare it with stock engines (MIDI 29, Drumline 4, sample
+// engines). The project companion maps those numbers on load as it does tracks
+// 1-8's (project_companion.cpp), and a machine the build lacks becomes 18: the
+// stock role. Taking a pattern over keeps the stock role's eight controls aside
+// and gives the machine its defaults, through stock's set (8d5acf28), which
+// stores and publishes them; giving it back restores them. The role's controls
+// are kept with the project, by pattern (track_control_project.cpp).
 //
 // Silencing, audio side. GUI and audio share no memory: a held track carries
 // kAuxMark in its last live word, which stock never locks, and the GUI sets it
@@ -85,23 +91,45 @@ const char* role_name(u32 track) { return track == kCv ? "cv" : nullptr; }
 const u32 kMarkWord = control::track_parameters - 1;
 const u32 kReleaseTicks = 8;
 
-// Each aux track's holder, as 1 + its index in sdk_control_machines, or 0 for
-// the stock role; and the role's controls while a machine holds it.
-u32 holders[control::all_tracks];
-i32 kept[control::all_tracks][kControls];
+// The engine word stock keeps in an aux track's patterns, and the patterns a
+// track holds (8d587708: up to 16, 0x53f4 bytes apart, their count at +0x53f40
+// of the track's block, g_project (840a0524) + 0xd7c + track * 0x53f44).
+const u32 kRoleEngine = 18;
+const u32 kPatterns = 16;
+// The stock role's controls of each pattern a machine took over, and which.
+struct Kept { i32 values[kPatterns][kControls]; u32 patterns; };
+Kept cv_kept;
+Kept* kept_of(u32 track) { return track == kCv ? &cv_kept : nullptr; }
 // Whether this GUI set a track's mark (so it clears only its own), and the
 // ticks left showing its release.
 bool marked[control::all_tracks];
 u32 releasing[control::all_tracks];
-// A track whose project named a machine this build lacks: the role's controls
-// it kept, which the next GUI tick sets back.
-bool lost[control::all_tracks];
+// After a project loads, the next GUI tick gives back the role's controls of
+// every pattern that no longer holds a machine (one the build lacks).
+bool loaded;
 
 bool takeable(u32 track) { return track < control::all_tracks && (kTakeable >> track & 1); }
+u32 pattern_block(u32 track, u32 pattern) {
+    return word(0x840a0524) + 0xd7c + track * 0x53f44 + pattern * 0x53f4;
+}
+u32 pattern_count(u32 track) {
+    const u32 count = word(pattern_block(track, 0) + 0x53f40);
+    return count < kPatterns ? count : kPatterns;
+}
+// The current pattern's block, and its index.
+u32 current_block(u32 track) { return stock<u32(u32)>(0x8d587708)(track); }
+u32 current_pattern(u32 track) { return (current_block(track) - pattern_block(track, 0)) / 0x53f4; }
+// The machine that may run on `track` with engine number `engine`, or null.
+const ControlMachine* machine_for(u32 track, u32 engine) {
+    for (u32 i = 0; i < sdk_control_machine_count; ++i) {
+        const ControlMachine& m = sdk_control_machines[i];
+        if (m.engine() == engine && (m.aux >> track & 1) && m.page && m.ready() == 1) return &m;
+    }
+    return nullptr;
+}
+// The machine the current pattern of `track` holds, or null for the stock role.
 const ControlMachine* holder(u32 track) {
-    if (!takeable(track) || !holders[track] || holders[track] > sdk_control_machine_count) return nullptr;
-    const ControlMachine& m = sdk_control_machines[holders[track] - 1];
-    return m.ready() == 1 ? &m : nullptr;
+    return takeable(track) ? machine_for(track, word(current_block(track) + 0x18)) : nullptr;
 }
 
 i32 base(u32 track, u32 index) {
@@ -134,16 +162,32 @@ void unmark(u32 track) {
     }
 }
 
-// Gives the track to machine `choice` (1 + its index) or back to its role (0);
-// the next GUI tick clears the mark of a track given back.
+// Gives the track's current pattern to machine `choice` (1 + its index) or back
+// to its role (0); the next GUI tick clears the mark of a pattern given back.
+// A pattern copied from one a machine holds has no role controls of its own:
+// given back, it takes another pattern's, or keeps its values.
 void take(u32 track, u32 choice) {
-    if (choice == holders[track]) return;
-    if (!holders[track])
-        for (u32 i = 0; i < kControls; ++i) kept[track][i] = base(track, i);
-    holders[track] = choice;
-    const ControlMachine* m = holder(track);
-    if (m) mark(track);
-    for (u32 i = 0; i < kControls; ++i) param_set(track, i, m ? m->defaults[i] : kept[track][i]);
+    Kept* kept = kept_of(track);
+    const ControlMachine* before = holder(track);
+    const ControlMachine* m = choice ? &sdk_control_machines[choice - 1] : nullptr;
+    if (!kept || m == before) return;
+    const u32 p = current_pattern(track), bit = 1u << p;
+    if (!before) {
+        for (u32 i = 0; i < kControls; ++i) kept->values[p][i] = base(track, i);
+        kept->patterns |= bit;
+    }
+    stock<void(u32, u32)>(0x8d5877e4)(track, m ? m->engine() : kRoleEngine);
+    if (m) {
+        mark(track);
+        for (u32 i = 0; i < kControls; ++i) param_set(track, i, m->defaults[i]);
+        return;
+    }
+    u32 from = p;
+    if (!(kept->patterns & bit))
+        for (from = 0; from < kPatterns && !(kept->patterns & 1u << from); ++from) {}
+    if (from < kPatterns)
+        for (u32 i = 0; i < kControls; ++i) param_set(track, i, kept->values[from][i]);
+    kept->patterns &= ~bit;
 }
 
 // The chooser: the stock role, then each machine that may take the track over.
@@ -159,7 +203,7 @@ bool open_chooser(u32 track) {
     for (u32 i = 0; i < sdk_control_machine_count && count < kChoices; ++i) {
         const ControlMachine& m = sdk_control_machines[i];
         if (!(m.aux >> track & 1) || !m.page || m.ready() != 1) continue;
-        if (holders[track] == i + 1) initial = count;
+        if (holder(track) == &m) initial = count;
         chooser_machines[count] = i + 1;
         labels[count++] = m.name;
     }
@@ -395,14 +439,24 @@ u32 aux_engine(u32 track) {
 void aux_tick() {
     for (u32 t = kFirstAux; t < control::all_tracks; ++t) {
         if (!takeable(t)) continue;
-        if (lost[t]) {
-            lost[t] = false;
-            if (!holders[t])
-                for (u32 i = 0; i < kControls; ++i) param_set(t, i, kept[t][i]);
+        Kept* kept = kept_of(t);
+        if (loaded && kept) {
+            const u32 current = current_pattern(t), count = pattern_count(t);
+            for (u32 p = 0; p < kPatterns; ++p) {
+                if (!(kept->patterns & 1u << p)) continue;
+                if (p < count && machine_for(t, word(pattern_block(t, p) + 0x18))) continue;
+                kept->patterns &= ~(1u << p);
+                if (p >= count) continue;
+                for (u32 i = 0; i < kControls; ++i) {
+                    if (p == current) param_set(t, i, kept->values[p][i]);
+                    else *at<volatile i32>(pattern_block(t, p) + 0x3864 + i * 4) = kept->values[p][i];
+                }
+            }
         }
         if (holder(t)) mark(t);
         else unmark(t);
     }
+    loaded = false;
 }
 }
 
@@ -468,37 +522,29 @@ void sdk_cv_gate_on(u32 a, u32 b, u32 c) {
 }
 
 namespace {
-const char* aux_holder(u32 track) {
-    const ControlMachine* m = holder(track);
-    return m ? m->name : nullptr;
+// The role's controls kept aside for a pattern a machine holds, or null.
+const i32* aux_kept(u32 track, u32 pattern) {
+    const Kept* kept = kept_of(track);
+    return kept && pattern < kPatterns && kept->patterns & 1u << pattern ? kept->values[pattern] : nullptr;
 }
-const i32* aux_kept(u32 track) { return kept[track]; }
 
-// After a project loads: the machine named `id` holds `track` again, with the
-// role's controls as kept; for a machine this build lacks, the role gets those
-// controls back, so it does not play the machine's.
+// After a project loads: the role's controls kept for `pattern` of `track`.
 // Called from inside stock's project load, while the project is not yet in
 // use (stock asserts if its track data is touched then, data.cpp:985): it only
-// records the holder; the next GUI tick marks the track.
-void aux_restore(u32 track, const char* id, u32 id_length, const i32* controls) {
-    if (!takeable(track)) return;
-    for (u32 i = 0; i < sdk_control_machine_count; ++i) {
-        const ControlMachine& m = sdk_control_machines[i];
-        u32 n = 0;
-        while (n < id_length && m.name[n] == id[n]) ++n;
-        if (n != id_length || m.name[n] || !(m.aux >> track & 1) || m.ready() != 1) continue;
-        holders[track] = i + 1;
-        for (u32 c = 0; c < kControls; ++c) kept[track][c] = controls[c];
-        return;
-    }
-    for (u32 c = 0; c < kControls; ++c) kept[track][c] = controls[c];
-    lost[track] = true;
+// records them; the next GUI tick gives them back to a pattern that holds no
+// machine any more and marks the track.
+void aux_restore(u32 track, u32 pattern, const i32* controls) {
+    Kept* kept = kept_of(track);
+    if (!kept || pattern >= kPatterns) return;
+    for (u32 c = 0; c < kControls; ++c) kept->values[pattern][c] = controls[c];
+    kept->patterns |= 1u << pattern;
 }
 
-// Before a project loads, and for a new one: every aux track has its stock role.
-// Records only, as aux_restore does.
+// Before a project loads, and for a new one: no controls kept. Records only, as
+// aux_restore does.
 void aux_forget() {
-    for (u32 t = 0; t < control::all_tracks; ++t) holders[t] = 0, lost[t] = false;
+    cv_kept.patterns = 0;
+    loaded = true;
 }
 }
 
@@ -506,6 +552,6 @@ void aux_forget() {
 // companion and synth_controls.cpp, a shared unit, reach this service through
 // these pointers only.
 void sdk_aux_startup() {
-    sdk_aux = AuxService{aux_engine, aux_tick, aux_holder, aux_kept, aux_restore, aux_forget};
+    sdk_aux = AuxService{aux_engine, aux_tick, aux_kept, aux_restore, aux_forget};
     sdk_aux_engine = aux_engine;
 }

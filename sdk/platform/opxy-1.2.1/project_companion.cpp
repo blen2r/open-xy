@@ -14,8 +14,9 @@
 // pending. That call is hooked too: after a load that succeeds, the reader opens the
 // .oxy beside the .xy, requires its binding to match the file's size and CRC-32, and
 // maps each number its open-xy.machines section lists, by machine ID, to this
-// firmware's number in every pattern of the instrument tracks (engines) and send
-// tracks (effects), and a machine this firmware lacks to Prism or no effect. Any
+// firmware's number in every pattern of the instrument tracks and the CV track
+// (engines, aux_tracks.cpp) and send tracks (effects), and a machine this firmware
+// lacks to Prism (18, also what stock keeps on the CV track) or no effect. Any
 // problem leaves the project as saved; the load never fails because of its companion.
 // Then track control machines get back what they kept, through startup.cpp, which
 // does nothing in a build without the control service.
@@ -727,12 +728,12 @@ bool read_document(File* file, u32& bytes, u32& crc) {
     return read && p.end() && format && version && binding && sections && valid && applies;
 }
 
-// Rewrites every pattern's machine number on the instrument and send tracks
+// Rewrites every pattern's machine number on the instrument, CV and send tracks
 // (docs/abi-1.2.1.md, project companions).
 void remap(unsigned char* project) {
     for (u32 track = 0; track < 16; ++track) {
-        if (track >= 8 && track < 14) continue;  // tracks 8-13 hold no machine number
-        const u32* map = track < 8 ? engine_map : effect_map;
+        if (track >= 8 && track < 14 && track != 11) continue;  // the other aux tracks hold no machine number
+        const u32* map = track < 14 ? engine_map : effect_map;
         unsigned char* base = project + 0xd7c + track * 0x53f44;
         u32 patterns = *reinterpret_cast<u32*>(base + 0x53f40);
         if (patterns > 16) patterns = 16;

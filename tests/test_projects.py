@@ -12,7 +12,7 @@ from tooling import native
 from tooling.adapters import generate_project_companion_table
 from tooling.pipeline import ROOT, config
 from machine_fixtures import NAMES, fixture
-from tooling.projects import (FALLBACK, LIMIT, MACHINE_LIMIT, MACHINES, aux_holders, binding, canonical, companion,
+from tooling.projects import (FALLBACK, LIMIT, MACHINE_LIMIT, MACHINES, aux_kept, binding, canonical, companion,
                               companion_path, kept_data, main, parse, saved_numbers, translation)
 
 PROJECT = bytes(range(256)) * 4
@@ -162,7 +162,7 @@ class FirmwareWriter(unittest.TestCase):
             (folder / 'song.oxy').write_bytes(json.dumps(document).encode())
             self.assertEqual(run('1', 'read').stdout, '/0\n')
 
-    def test_an_aux_track_a_machine_holds_is_kept_with_the_project(self):
+    def test_the_role_controls_of_aux_patterns_a_machine_holds_are_kept_with_the_project(self):
         with tempfile.TemporaryDirectory(prefix='companion-') as directory:
             folder = Path(directory)
             writer, project = host_writer(folder), folder / 'song.xy'
@@ -171,21 +171,21 @@ class FirmwareWriter(unittest.TestCase):
                                                          text=True, timeout=30, env=env)
             self.assertEqual(run('1', env=held).returncode, 0)
             raw = (folder / 'song.oxy').read_bytes()
-            controls = [1, 2, 3, -4, 0x7fffffff, 6, 7, 8]
-            # The reference writer's bytes: the aux track's holder sorts before what machines keep.
-            self.assertEqual(raw, companion(project.read_bytes(), SAVED, kept={'morph': b'stat\xff'},
-                                            aux={11: ('morph', controls)}))
-            self.assertEqual(aux_holders(parse(raw), project.read_bytes()), {11: ('morph', controls)})
-            # Loading gives the track back to its machine with the role's controls, after
-            # what the machine kept; without a holder, nothing is restored.
-            self.assertEqual(run('1', 'read').stdout, 'aux 11 morph 1 2 3 -4 2147483647 6 7 8\n73746174ff/5\n')
+            kept = {11: {0: [1, 2, 3, -4, 0x7fffffff, 6, 7, 8], 10: [9, 0, 0, 0, 0, 0, 0, -1]}}
+            # The reference writer's bytes: aux patterns sort as strings, before what machines keep.
+            self.assertEqual(raw, companion(project.read_bytes(), SAVED, kept={'morph': b'stat\xff'}, aux=kept))
+            self.assertEqual(aux_kept(parse(raw), project.read_bytes()), kept)
+            # Loading gives back each pattern's role controls, after what the machine
+            # kept; with no pattern held, nothing is restored.
+            self.assertEqual(run('1', 'read').stdout, 'aux 11 0 1 2 3 -4 2147483647 6 7 8\n'
+                                                      'aux 11 10 9 0 0 0 0 0 0 -1\n73746174ff/5\n')
             self.assertEqual(run('1').returncode, 0)
             self.assertEqual(run('1', 'read').stdout, '73746174ff/5\n')
-            self.assertEqual(aux_holders(parse((folder / 'song.oxy').read_bytes()), project.read_bytes()), {})
+            self.assertEqual(aux_kept(parse((folder / 'song.oxy').read_bytes()), project.read_bytes()), {})
             # A build without the aux service keeps no aux track, and loading restores none.
             noaux = dict(os.environ, HOLD='1', NOAUX='1')
             self.assertEqual(run('1', env=noaux).returncode, 0)
-            self.assertEqual(aux_holders(parse((folder / 'song.oxy').read_bytes()), project.read_bytes()), {})
+            self.assertEqual(aux_kept(parse((folder / 'song.oxy').read_bytes()), project.read_bytes()), {})
 
     def test_a_failed_save_or_other_name_writes_nothing(self):
         with tempfile.TemporaryDirectory(prefix='companion-') as directory:
@@ -241,9 +241,10 @@ class FirmwareWriter(unittest.TestCase):
 HERE = {'fm2op': {'engine': 35, 'page': 60}, 'karplus': {'engine': 41, 'page': 90},
         'macroosc': {'engine': 36, 'page': 61}, 'pingpong': {'effect': 40, 'page': 21},
         'ringmod': {'effect': 36, 'page': 21}}
-# Saved patterns by track: instrument tracks 0-7 hold engines, sends 14 and 15 effects,
-# tracks 8-13 no machine. 36 is karplus's old engine and ringmod's effect here.
-TRACKS = {0: [36, 35, 18, 41, 50], 7: [36], 9: [36, 35], 14: [40, 36, 5], 15: [36]}
+# Saved patterns by track: instrument tracks 0-7 and the CV track 11 hold engines, sends
+# 14 and 15 effects, the other aux tracks no machine. 36 is karplus's old engine and
+# ringmod's effect here.
+TRACKS = {0: [36, 35, 18, 41, 50], 7: [36], 9: [36, 35], 11: [36, 18], 14: [40, 36, 5], 15: [36]}
 PRISM, NO_EFFECT = FALLBACK['engine'], FALLBACK['effect']
 
 
@@ -257,8 +258,8 @@ def reference(raw, data, tracks):
     if saved is None:
         return tracks
     table = translation(saved, HERE)
-    slot = lambda track: 'engine' if track < 8 else 'effect'
-    return {t: [n if 8 <= t < 14 or (slot(t), n) not in table else
+    slot = lambda track: 'engine' if track < 14 else 'effect'
+    return {t: [n if (8 <= t < 14 and t != 11) or (slot(t), n) not in table else
                 FALLBACK[slot(t)] if table[(slot(t), n)] is None else table[(slot(t), n)] for n in numbers]
             for t, numbers in tracks.items()}
 
@@ -315,7 +316,8 @@ class FirmwareReader(unittest.TestCase):
         self.check(companion(PROJECT, SAVED), {
             0: [41, PRISM, 18, 41, 50],       # karplus renumbered; timestretch missing, its 35 now fm2op's
             7: [41],                            # every instrument track
-            9: [36, 35],                        # tracks 8-13 hold no machine
+            9: [36, 35],                        # the other aux tracks hold no machine
+            11: [41, 18],                       # the CV track: a machine per pattern, or CV (18)
             14: [40, 36, 5],                    # pingpong kept; effect 36 is not karplus's engine 36
             15: [36]})
 

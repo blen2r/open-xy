@@ -25,7 +25,8 @@ LIMIT = 64 * 1024
 MACHINES = 'open-xy.machines'
 MACHINES_VERSION = 1
 # What track control machines keep with a project, base64 by machine ID, and
-# which machine holds each aux track it took over, by track index.
+# the stock role's controls kept aside for each aux track pattern a machine took
+# over, by track and pattern index.
 CONTROL = 'open-xy.control'
 CONTROL_VERSION = 1
 # owner.name: the owner is a GitHub user or organisation, lowercased; `open-xy` is the SDK's.
@@ -123,14 +124,16 @@ def kept_data(document, data):
     return {name: base64.b64decode(kept) for name, kept in section.get('machines', {}).items()}
 
 
-def aux_holders(document, data):
-    """Each aux track a machine held in these project bytes, by track index: the machine
-    ID and the stock role's eight controls, which the firmware gives back on release."""
+def aux_kept(document, data):
+    """The stock role's eight controls kept aside for each aux track pattern a machine
+    held in these project bytes, by track and pattern index; the firmware gives them
+    back on release, or after a load when it lacks the machine."""
     section = document['sections'].get(CONTROL)
     if not describes(document, data) or not section or section['version'] > CONTROL_VERSION:
         return {}
-    return {int(track): (held['machine'], list(struct.unpack('<8i', base64.b64decode(held['controls']))))
-            for track, held in section.get('aux', {}).items()}
+    return {int(track): {int(pattern): list(struct.unpack('<8i', base64.b64decode(controls)))
+                         for pattern, controls in patterns.items()}
+            for track, patterns in section.get('aux', {}).items()}
 
 
 def translation(saved, layout):
@@ -155,8 +158,8 @@ def translation(saved, layout):
 
 def companion(data, layout, previous=None, profile=None, kept=None, aux=None):
     """The companion for project bytes `data` saved with `layout`, what track control
-    machines `kept` (bytes by machine ID) and the `aux` tracks machines held (machine ID
-    and the role's eight controls, by track index), as the firmware writes it. Other
+    machines `kept` (bytes by machine ID) and the role's eight controls kept for `aux`
+    track patterns machines held (by track and pattern index), as the firmware writes it. Other
     sections are kept from `previous` only while it still describes the same bytes."""
     sections = {}
     if previous and describes(previous, data):
@@ -168,9 +171,9 @@ def companion(data, layout, previous=None, profile=None, kept=None, aux=None):
     if kept:
         sections[CONTROL]['machines'] = {name: base64.b64encode(value).decode() for name, value in kept.items()}
     if aux:
-        sections[CONTROL]['aux'] = {str(track): {'machine': machine,
-                                                 'controls': base64.b64encode(struct.pack('<8i', *controls)).decode()}
-                                    for track, (machine, controls) in aux.items()}
+        sections[CONTROL]['aux'] = {str(track): {str(pattern): base64.b64encode(struct.pack('<8i', *controls)).decode()
+                                                 for pattern, controls in patterns.items()}
+                                    for track, patterns in aux.items()}
     return canonical({'format': FORMAT, 'version': VERSION, 'project': binding(data), 'sections': sections})
 
 

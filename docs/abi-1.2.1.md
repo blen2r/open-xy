@@ -499,8 +499,14 @@ usable for that reason (its branches share `8c08fd60`).
 | `8d50e95c` | Note on's call of the CV gate `8d5b5fe0` | Skipped while a machine holds track 12 |
 | `8d53d2a0` | `P2 = 84056d50` in the aux LFO's destination label `8d53d160(track, group, slot)`, for group 0: stock's fixed `param1`..`param4` | While a machine holds the track, returns its parameter's name from the engine record (`8d506c4c`), as tracks 1-8 show theirs; otherwise replays the load |
 
-Which machine holds a track is GUI state ([`aux_tracks.cpp`](../sdk/platform/opxy-1.2.1/aux_tracks.cpp)),
-kept with the project in its [companion](projects.md#open-xycontrol). GUI and
+A track holds a machine per pattern, as tracks 0–7 hold an engine: by its
+engine number in the pattern's engine word (`+0x18`), which `8d58781c` reads
+and `8d5877e4` sets, marking the project changed. Stock keeps 18 there on aux
+tracks, copies the word with a pattern and saves it; its readers on aux tracks
+only compare it with stock engines (MIDI 29, Drumline 4, the sample engines).
+Taking a pattern over keeps the role's eight controls aside, with the project
+in its [companion](projects.md#open-xycontrol)
+([`aux_tracks.cpp`](../sdk/platform/opxy-1.2.1/aux_tracks.cpp)). GUI and
 audio share no memory: while a machine holds track 12, the GUI writes the mark
 `0x4f584155` to its last live word (57), which stock never locks, through
 `8d5acea8`, which publishes it; the audio hooks read it from the audio side's
@@ -690,14 +696,17 @@ A project holds its machine per pattern: track `t` (0–15) starts at
 `+ 0x53f40`, pattern `k` starts at track `+ k * 0x53f4`, and the pattern's
 machine number is the word at pattern `+ 0x18`, the one stock's track-engine
 getter reads. Instrument tracks 0–7 hold engine numbers there and send tracks
-14 and 15 effect numbers; tracks 8–13 hold none. Projects store no page number.
-The reader maps every pattern's number on tracks 0–7 through the companion's
-engines and on 14–15 through its effects, all at once, so two machines can
-trade numbers. A number the companion does not list, a stock machine's, stays.
+14 and 15 effect numbers. Stock keeps 18 on tracks 8–13; on the CV track (11) a
+pattern a machine [took over](#aux-tracks) holds its engine number. Projects
+store no page number. The reader maps every pattern's number on tracks 0–7 and
+11 through the companion's engines and on 14–15 through its effects, all at
+once, so two machines can trade numbers. A number the companion does not list,
+a stock machine's, stays.
 
 A listed machine this firmware lacks (absent, left out of a kit, or now the
 other kind) gets stock's own fallback written into every pattern: Prism (18)
-on an instrument track and no effect (0) on a send. No pattern is left with a
+on an instrument track, which on the CV track is stock's own value, so the
+pattern is CV again, and no effect (0) on a send. No pattern is left with a
 number stock would have to correct, and none can open the machine this
 firmware's layout gave the old number. A number two listed machines claim is
 treated the same way, and a machine listed twice counts once, by its last
