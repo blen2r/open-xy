@@ -130,7 +130,7 @@ class TrackControl(unittest.TestCase):
         # Only builds with a machine on aux tracks change stock's allowlist.
         steering = copy.deepcopy(fixture('probesynth'))
         steering.definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4}
-        plain = active_services(config(), native.machine_uses([fixture('probesynth'), steering]))
+        plain = active_services(config(), native.service_users([fixture('probesynth'), steering]))
         self.assertFalse(any(patch_active(p, plain) for p in edits.values()))
 
     def test_a_machine_on_aux_tracks_is_not_in_the_instrument_list(self):
@@ -209,7 +209,7 @@ class TrackControl(unittest.TestCase):
         hooks = [p for p in config()['patches'] if p.get('service') == 'control' and p['kind'] == 'hook']
         self.assertEqual(sorted(p['symbol'] for p in hooks),
                          ['sdk_gui_tick', 'sdk_param_edit_set', 'sdk_param_shown_hook', 'sdk_project_clear',
-                          'sdk_project_clear_random', 'sdk_project_read'])
+                          'sdk_project_clear_random'])
         # Aux tracks are a service of their own: its hooks and MTP allowlist edits.
         aux_edits = [p for p in config()['patches'] if p.get('service') == 'aux']
         self.assertEqual(sorted(p.get('symbol', p['address']) for p in aux_edits),
@@ -217,7 +217,7 @@ class TrackControl(unittest.TestCase):
                           'sdk_aux_shift_m1_hook', 'sdk_aux_shift_track_hook', 'sdk_cv_gate_on', 'sdk_cv_output'])
         for machines, used, aux_used in ((plain, False, False), ([hiding], True, False), ([steering], True, False),
                                          ([aux], True, True)):
-            services = active_services(config(), native.machine_uses(machines))
+            services = active_services(config(), native.service_users(machines))
             self.assertEqual(('control' in services, 'aux' in services), (used, aux_used))
             self.assertEqual(all(patch_active(p, services) for p in hooks), used)
             self.assertEqual(all(patch_active(p, services) for p in aux_edits), aux_used)

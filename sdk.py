@@ -7,8 +7,8 @@ COMMANDS = '''Commands:
   check     Contributor checks: python sdk.py check [--help]
   preview   Browser audition build: python sdk.py preview --machine ../mymachine --out local/preview-001
   new       Start a machine repository: python sdk.py new --repository [--kind synth|effect] [--controls 4..8] --id mymachine --name "My Machine" --out ../mymachine
-  test      Check machine folders anywhere: python sdk.py test --machine ../mymachine [--firmware]
-  catalog   Published machines: python sdk.py catalog check | fetch | test [--tags]
+  test      Check machine and extension folders anywhere: python sdk.py test --machine ../mymachine | --extension ../myextension [--firmware]
+  catalog   Published machines and extensions: python sdk.py catalog check | fetch | test [--tags]
   project   Project companions: python sdk.py project write --layout layout.json song.xy | check song.xy
   compile   Native module only: python sdk.py compile --help
   build     Native firmware package: python sdk.py build [--machine <folder>] --help

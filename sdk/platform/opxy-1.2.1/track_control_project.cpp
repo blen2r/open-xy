@@ -6,8 +6,9 @@
 // companion open, at the start of its sections.
 //
 // Stock loads every project through one call of read(project, path) (8d599b10, from
-// 8d58913e in 8d5890b0). After a read that succeeds, track control machines get back
-// what they kept. A new project reads no file: stock clears the project (8d588114,
+// 8d58913e in 8d5890b0), which the project companion hooks (project_companion.cpp);
+// after a read that succeeds, it calls sdk_control_kept_load, through startup.cpp, and
+// track control machines get back what they kept. A new project reads no file: stock clears the project (8d588114,
 // from 8d572f70) or clears it at random (8d588988, from 8d572ff8). Both do nothing
 // while a project is loading (the word at 840a0528); otherwise machines then get
 // nothing back, as after loading a project without their data.
@@ -16,12 +17,11 @@
 #include "track_control.hpp"
 
 extern "C" opxy::u32 sdk_control_kept_write(void* file) __asm__("sdk_control_kept_write");
-extern "C" opxy::u32 sdk_project_read(void* project, const char* path) __asm__("sdk_project_read");
+extern "C" void sdk_control_kept_load(const char* path) __asm__("sdk_control_kept_load");
 extern "C" opxy::u32 sdk_project_clear(opxy::u32, opxy::u32, opxy::u32) __asm__("sdk_project_clear");
 extern "C" opxy::u32 sdk_project_clear_random(opxy::u32, opxy::u32, opxy::u32) __asm__("sdk_project_clear_random");
 
 namespace {
-u32 read(void* project, const char* path) { return stock<u32(void*, const char*)>(0x8d599b10)(project, path); }
 const u32 kProjectLoading = 0x840a0528;
 
 // The format's 64 KiB, less what a reader never needs.
@@ -34,7 +34,7 @@ const char kBase64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123
 // Writes through a small buffer straight to the open companion.
 class Stream {
 public:
-    explicit Stream(File* file) : file(file) {}
+    explicit Stream(kept_files::File* file) : file(file) {}
     ~Stream() { flush(); }
     void put(const char* s) { while (*s) byte(*s++); }
     void byte(char c) {
@@ -52,10 +52,10 @@ public:
     }
 private:
     void flush() {
-        if (count) file_write(buffer, count, 1, file);
+        if (count) kept_files::file_write(buffer, count, 1, file);
         count = 0;
     }
-    File* file;
+    kept_files::File* file;
     char buffer[256];
     u32 count = 0;
 };
@@ -198,10 +198,10 @@ void load_kept(const char* path) {
     if (!keeping) return;  // nothing to give back: no project I/O
     u32 bytes, crc, length = 0, at = 0, to = 0;
     bool found = false;
-    if (companion_path(path) && measure(path, bytes, crc)) {
-        if (File* file = file_open(companion, "rb")) {
-            length = file_read(project_text, 1, kReadBytes, file);
-            file_close(file);
+    if (kept_files::companion_path(path) && kept_files::measure(path, bytes, crc)) {
+        if (kept_files::File* file = kept_files::file_open(kept_files::companion, "rb")) {
+            length = kept_files::file_read(project_text, 1, kReadBytes, file);
+            kept_files::file_close(file);
         }
         const Reader r = {length < kReadBytes ? length : 0};
         found = r.length && kept_section(r, bytes, crc, at, to);
@@ -249,7 +249,7 @@ void forget_kept() {
 // index, and what each track control machine keeps, by machine ID, in the
 // canonical form (docs/projects.md): keys sorted, two-space indentation.
 extern "C" u32 sdk_control_kept_write(void* file) {
-    Stream out(static_cast<File*>(file));
+    Stream out(static_cast<kept_files::File*>(file));
     // Aux track keys sort as strings: 10..15, then 8 and 9.
     static const u32 kAuxOrder[] = {10, 11, 12, 13, 14, 15, 8, 9};
     u32 held = 0, listed = 0;
@@ -285,11 +285,9 @@ extern "C" u32 sdk_control_kept_write(void* file) {
     return held + listed;
 }
 
-u32 sdk_project_read(void* project, const char* path) {
-    const u32 loaded = read(project, path);
-    if (loaded && path) load_kept(path);
-    return loaded;
-}
+// From the companion's load hook, after a read that succeeded, before stock makes the
+// project pending.
+void sdk_control_kept_load(const char* path) { load_kept(path); }
 
 u32 sdk_project_clear(u32 a, u32 b, u32 c) {
     const bool cleared = !opxy::platform::word(kProjectLoading);

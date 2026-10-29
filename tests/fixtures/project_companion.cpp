@@ -8,6 +8,7 @@
 #include <track_control_project.cpp>
 
 extern "C" opxy::u32 sdk_project_kept(void* file) { return sdk_control_kept_write(file); }
+extern "C" void sdk_project_loaded(const char* path) { sdk_control_kept_load(path); }
 
 using opxy::platform::Address;
 
@@ -122,7 +123,9 @@ int main(int argc, char** argv) {
     const std::string mode = argv[3];
     loading = mode == "busy";
     if (mode == "read") {
-        if (sdk_project_read(nullptr, saving) != save_result) return 1;
+        // The companion's load hook (project_load.cpp tests it) gives track control
+        // the path after a load that succeeds, and nothing after one that fails.
+        if (save_result) sdk_control_kept_load(saving);
     } else if (mode == "clear" || mode == "busy") {
         sdk_project_clear(0, 0, 0);
         if (clears != (loading ? 0u : 1u)) return 1;

@@ -43,12 +43,14 @@ def render(prefixes, effects=(), stock_page=(), control=False, aux=False):
                'stock_catalog_insert(catalog, name, id) : 0;' for prefix in prefixes]
     owned = [f'    if (page == value({prefix}_page_id)) return {prefix}_ready() == 1;'
              for prefix in prefixes if prefix not in stock_page]
-    kept = 'u32 sdk_project_kept(void*) { return 0; }'
+    kept = 'u32 sdk_project_kept(void*) { return 0; }\nvoid sdk_project_loaded(const char*) {}'
     if control:
         declarations += ['void sdk_overlay_startup() __asm__("sdk_overlay_startup");',
-                         'u32 sdk_control_kept_write(void*) __asm__("sdk_control_kept_write");']
+                         'u32 sdk_control_kept_write(void*) __asm__("sdk_control_kept_write");',
+                         'void sdk_control_kept_load(const char*) __asm__("sdk_control_kept_load");']
         screens.append('    sdk_overlay_startup();')
-        kept = 'u32 sdk_project_kept(void* file) { return sdk_control_kept_write(file); }'
+        kept = ('u32 sdk_project_kept(void* file) { return sdk_control_kept_write(file); }\n'
+                'void sdk_project_loaded(const char* path) { sdk_control_kept_load(path); }')
     if aux:
         require(control, 'The aux service needs the control service')
         declarations.append('void sdk_aux_startup() __asm__("sdk_aux_startup");')
