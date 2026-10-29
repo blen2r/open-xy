@@ -155,8 +155,10 @@ bool open_chooser(u32 track) {
                         static_cast<i32>(track));
 }
 
-// Presets for aux tracks, as files the builder installs (docs: content/aux_presets):
-// content/aux_presets/<folder>/<name>.json, each naming what it is for in "type"
+// Presets for aux tracks, as files: those the builder installs in
+// content/aux_presets/<folder>/<name>.json, then the user's beside their
+// instrument presets, /fat32/presets/<folder>/<name>.json (which MTP accepts and
+// stock reads its own .preset folders from). Each names what it is for in "type"
 // (a machine's ID, or a stock role such as "cv") and its eight controls in
 // "params" (0..32767, as instrument presets store them). Shift + track key on a
 // track a machine can take over lists, as stock's preset browser does, the
@@ -179,8 +181,8 @@ u32 file_read(void* data, u32 bytes, void* file) {
 }
 void file_close(void* file) { stock<int(void*)>(0x8fed00ae)(file); }
 
-const u32 kFolders = 8, kPresets = 32, kNameBytes = 16, kPathBytes = 96, kPresetBytes = 2048;
-const char kPresetRoot[] = "content/aux_presets";
+const u32 kFolders = 16, kPresets = 64, kNameBytes = 16, kPathBytes = 128, kPresetBytes = 2048;
+const char* const kPresetRoots[] = {"content/aux_presets", "/fat32/presets"};
 struct Preset { u32 choice; i32 values[kControls]; };
 browser::detail::Row folders[kFolders];
 browser::detail::Item items[kPresets];
@@ -260,16 +262,14 @@ bool before(const browser::detail::String& a, const browser::detail::String& b) 
     return a.length < b.length;
 }
 
-// The entries of content/aux_presets for this track: folders with at least one
-// preset that can run on it. Returns the folder count.
-u32 scan_presets(u32 track) {
-    u32 count = 0;
-    preset_count = 0;
-    void* root = folder_open(kPresetRoot);
-    if (!root) return 0;
+// The folders of both roots with at least one preset that can run on this track,
+// the installed ones first. Returns the folder count.
+u32 scan_root(const char* root_path, u32 track, u32 count) {
+    void* root = folder_open(root_path);
+    if (!root) return count;
     char folder_path[kPathBytes], file_path[kPathBytes];
     for (const char* name; count < kFolders && (name = folder_next(root));) {
-        if (name[0] == '.' || !join(folder_path, kPresetRoot, name)) continue;
+        if (name[0] == '.' || !join(folder_path, root_path, name)) continue;
         void* folder = folder_open(folder_path);
         if (!folder) continue;
         browser::detail::Row& row = folders[count];
@@ -299,6 +299,13 @@ u32 scan_presets(u32 track) {
         ++count;
     }
     folder_close(root);
+    return count;
+}
+
+u32 scan_presets(u32 track) {
+    preset_count = 0;
+    u32 count = 0;
+    for (const char* root : kPresetRoots) count = scan_root(root, track, count);
     // By name, as stock lists its folders; each row keeps its own items.
     for (u32 i = 1; i < count; ++i)
         for (u32 j = i; j > 0 && before(folders[j].name, folders[j - 1].name); --j) {
