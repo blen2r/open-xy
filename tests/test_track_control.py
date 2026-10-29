@@ -56,7 +56,7 @@ class TrackControl(unittest.TestCase):
         self.assertNotIn('sdk/track_control_table.o', native.object_owners(machines))
         with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
             table = generate_track_controls(folder, machines).read_text(encoding='utf-8')
-        self.assertIn('{nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}, nullptr, 0}', table)
+        self.assertIn('{nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}}', table)
         self.assertNotIn('probesynth', table)
 
     def test_a_machine_that_keeps_data_exports_save_and_load(self):
@@ -73,21 +73,26 @@ class TrackControl(unittest.TestCase):
         self.assertIn('control_save(states[0], data, 100)', binding)
         self.assertIn('return bytes <= 100 ? bytes : 0;', binding)
 
-    def test_a_machine_on_aux_tracks_lists_its_presets(self):
+    def test_a_machine_on_aux_tracks_installs_its_presets_as_files(self):
+        import json
+        from tooling.adapters import aux_preset_files
         synth = copy.deepcopy(fixture('probesynth'))
+        self.assertEqual(aux_preset_files(synth), {})
         synth.definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4, 'unique': True,
                                                          'aux': [12]}
         names = [p['id'] for p in synth.definition['parameters']]
         synth.definition['presets'] = {'Soft': {names[0]: 0.5}, 'Full': {n: 1 for n in names}}
+        files = aux_preset_files(synth)
+        self.assertEqual(sorted(files), [f'content/aux_presets/{synth.id}/full.json',
+                                         f'content/aux_presets/{synth.id}/soft.json'])
+        soft = json.loads(files[f'content/aux_presets/{synth.id}/soft.json'])
+        self.assertEqual((soft['type'], soft['params'][0], len(soft['params'])), (synth.id, 16384, 8))
+        self.assertEqual(json.loads(files[f'content/aux_presets/{synth.id}/full.json'])['params'][:len(names)],
+                         [32767] * len(names))
         with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
             table = generate_track_controls(folder, [synth]).read_text(encoding='utf-8')
-            p = synth.prefix
-            # Track 12 is index 11; names lowercased for the list; values as stored words.
-            self.assertIn(f'true, 0x800u, {p}_page_id, ', table)
-            self.assertIn(f'{p}_aux_presets, 2}}', table)
-            self.assertIn('{"soft", {1073741824, ', table)
-            self.assertIn('{"full", {2147418112, 2147418112, ', table)
-            # A name the list cannot show, or an aux machine that is not unique, is refused.
+            self.assertIn(f'true, 0x800u, {synth.prefix}_page_id, ', table)
+            # A name the list cannot show is refused.
             synth.definition['presets'] = {'A name too long to show': {}}
             with self.assertRaises(ValueError):
                 generate_track_controls(folder, [synth])

@@ -578,6 +578,16 @@ export function presetPath(machine) {
 // each a version 4 preset of this machine, pointing at no samples. Its own
 // default replaces the generated init preset.
 export function presetFiles(machine) {
+  // An aux machine's presets: the files the kit generated (tooling.adapters.aux_preset_files).
+  if (machine.catalog === '') {
+    const files = {};
+    for (const [path, text] of Object.entries(machine.auxPresets ?? {})) {
+      check(new RegExp(`^content/aux_presets/${machine.id}/[a-z0-9][a-z0-9 _-]{0,14}\\.json$`).test(path) &&
+        JSON.parse(text).type === machine.id, 'Invalid aux preset: ' + path);
+      files[path] = JSON.parse(text);
+    }
+    return files;
+  }
   const path = presetPath(machine);
   if (!path) return {};
   const presets = machine.presets ?? {};

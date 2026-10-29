@@ -4,9 +4,7 @@
 #include <opxy/track_control.hpp>
 
 namespace opxy { namespace platform {
-// One of a machine's presets from its definition: its name and its eight
-// controls' values, as stored words.
-struct ControlPreset { const char* name; i32 values[8]; };
+
 // In a browser kit an unselected machine's ready resolves to a function returning 0.
 struct ControlMachine {
     const char* id;  // absolute symbol: the engine ID, supplied at link time
@@ -27,9 +25,6 @@ struct ControlMachine {
     u32 aux;
     const char* page;
     i32 defaults[8];
-    // Its presets, which Shift + track key lists on an aux track it holds.
-    const ControlPreset* presets;
-    u32 preset_count;
     u32 engine() const { return static_cast<u32>(reinterpret_cast<__UINTPTR_TYPE__>(id)); }
     u32 page_id() const { return static_cast<u32>(reinterpret_cast<__UINTPTR_TYPE__>(page)); }
 };

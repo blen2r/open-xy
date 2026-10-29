@@ -463,7 +463,7 @@ def control_callbacks(m):
 
 def generate_track_controls(directory, machines):
     """The collection's synths with track control, as one table (track_control.hpp)."""
-    declarations, rows, tables = [], [], []
+    declarations, rows = [], []
     for m in machines:
         if not track_control(m):
             continue
@@ -486,23 +486,12 @@ def generate_track_controls(directory, machines):
         if m.display != 'stock':
             declarations.append(f'extern const char {p}_page_id[] __asm__("{p}_page_id");')
         defaults = ', '.join(str(d << 16) for d in catalog_defaults(m.definition))
-        # Its definition's presets, for an aux track it holds; as words, as its defaults are.
-        names = [parameter['id'] for parameter in m.definition['parameters']]
-        values = [[math.floor(preset.get(name, parameter['default']) * 32767 + 0.5) << 16
-                   for name, parameter in zip(names, m.definition['parameters'])] + [0] * (8 - len(names))
-                  for preset in m.definition['presets'].values()]
-        presets = 'nullptr, 0'
+        # Its presets become files in content/aux_presets (aux_preset_files), named by them.
         require(not aux or all(len(name) <= 15 for name in m.definition['presets']),
                 'A machine that takes over aux tracks names its presets in at most 15 characters')
-        if aux and values:
-            tables.append(f'const ControlPreset {p}_aux_presets[] = {{\n' + ''.join(
-                f'    {{{json.dumps(name.lower())}, {{{", ".join(map(str, v))}}}}},\n'
-                for name, v in zip(m.definition['presets'], values)) + '};')
-            presets = f'{p}_aux_presets, {len(values)}'
         rows.append(f'    {{{p}_engine_id, {p}_ready, {p}_control_reset, {p}_control, "{m.id}", {saved}, {callbacks}, '
-                    f'{unique}, {aux:#x}u, {page}, {{{defaults}}}, {presets}}},')
-    return expand('track_control_table.cpp.in', dict(CONTROL_DECLS='\n'.join(declarations), MACHINES='\n'.join(rows),
-                                                     PRESETS='\n'.join(tables)),
+                    f'{unique}, {aux:#x}u, {page}, {{{defaults}}}}},')
+    return expand('track_control_table.cpp.in', dict(CONTROL_DECLS='\n'.join(declarations), MACHINES='\n'.join(rows)),
                   Path(directory) / 'track_control_table.cpp')
 
 
@@ -536,6 +525,22 @@ def generate_fx_object(directory, m, benchmark=False):
 def stock_labels(m):
     """Control names as the stock parameter page shows them."""
     return ', '.join(json.dumps(p['label'].lower()) for p in m.definition['parameters'])
+
+
+def aux_preset_files(m):
+    """A machine that takes over aux tracks: its definition's presets as the files the
+    aux preset list reads (aux_tracks.cpp), by path. Each names the machine in "type"
+    and holds its eight controls as instrument presets store them (0..32767)."""
+    if not (track_control(m) and track_control(m).get('aux')):
+        return {}
+    parameters = m.definition['parameters']
+    files = {}
+    for name, preset in m.definition['presets'].items():
+        params = [math.floor(preset.get(p['id'], p['default']) * 32767 + 0.5) for p in parameters]
+        params += [0] * (8 - len(params))
+        document = {'params': params, 'platform': 'OP-XY', 'type': m.id, 'version': 1}
+        files[f'content/aux_presets/{m.id}/{name.lower()}.json'] = (json.dumps(document, indent=2) + '\n').encode()
+    return files
 
 
 def catalog_defaults(definition):

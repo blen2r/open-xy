@@ -16,8 +16,8 @@
 //   chooses what runs on every aux track that has a choice.
 // - Shift + track key reaches 8c08f60c(controller, track), which opens the
 //   effect list on the sends only. The hook after its LINK (8c08f610) lists the
-//   presets of the machine holding the track, titled "preset", as Shift + track
-//   key does on tracks 1-8; choosing one sets the machine's eight controls.
+//   presets for the track from content/aux_presets, titled "preset", as Shift +
+//   track key does on tracks 1-8 (below).
 // Both lists show the track's number under the title, as stock's do.
 // - Its page method 8c08f53c answers the screen page for the selected track
 //   and tab; the hook at 8c08f540 answers the machine's page on tab 0.
@@ -155,26 +155,190 @@ bool open_chooser(u32 track) {
                         static_cast<i32>(track));
 }
 
-// The presets of the machine holding a track, as Shift + track key lists them.
-const u32 kPresetChoices = 16;
-browser::StockSelector<kPresetChoices> preset_list = {};
-u32 preset_track;
-const ControlMachine* preset_machine;
-void apply_preset(void*, u32 index) {
-    if (holder(preset_track) != preset_machine || index >= preset_machine->preset_count) return;
-    for (u32 i = 0; i < kControls; ++i) param_set(preset_track, i, preset_machine->presets[index].values[i]);
+// Presets for aux tracks, as files the builder installs (docs: content/aux_presets):
+// content/aux_presets/<folder>/<name>.json, each naming what it is for in "type"
+// (a machine's ID, or a stock role such as "cv") and its eight controls in
+// "params" (0..32767, as instrument presets store them). Shift + track key on a
+// track a machine can take over lists, as stock's preset browser does, the
+// folders and in each the presets that can run on the track; choosing one gives
+// the track to its machine (or role) and sets the controls.
+//
+// Stock's folder calls, as its preset scan (8d56db50) makes them: 8c0be54a(path)
+// opens a folder (0 when it can't), 8c0be6a4(folder) gives the next entry (its
+// name inline at +0xb) or 0, 8c0be7b2(folder) closes it; newlib's fopen family
+// reads the files.
+void* folder_open(const char* path) { return stock<void*(const char*)>(0x8c0be54a)(path); }
+const char* folder_next(void* folder) {
+    const char* entry = stock<const char*(void*)>(0x8c0be6a4)(folder);
+    return entry ? entry + 0xb : nullptr;
+}
+void folder_close(void* folder) { stock<void(void*)>(0x8c0be7b2)(folder); }
+void* file_open(const char* path) { return stock<void*(const char*, const char*)>(0x8fed0348)(path, "rb"); }
+u32 file_read(void* data, u32 bytes, void* file) {
+    return stock<u32(void*, u32, u32, void*)>(0x8fed05bc)(data, 1, bytes, file);
+}
+void file_close(void* file) { stock<int(void*)>(0x8fed00ae)(file); }
+
+const u32 kFolders = 8, kPresets = 32, kNameBytes = 16, kPathBytes = 96, kPresetBytes = 2048;
+const char kPresetRoot[] = "content/aux_presets";
+struct Preset { u32 choice; i32 values[kControls]; };
+browser::detail::Row folders[kFolders];
+browser::detail::Item items[kPresets];
+Preset presets[kPresets];
+browser::detail::Session preset_session;
+u32 preset_track, preset_count, picked = kPresets;
+char text[kPresetBytes];
+
+// a + "/" + b into path; false when it doesn't fit.
+bool join(char* path, const char* a, const char* b) {
+    u32 n = 0;
+    for (const char* p = a; *p; ++p) { if (n + 2 >= kPathBytes) return false; path[n++] = *p; }
+    path[n++] = '/';
+    for (const char* p = b; *p; ++p) { if (n + 1 >= kPathBytes) return false; path[n++] = *p; }
+    path[n] = 0;
+    return true;
+}
+bool same(const char* a, const char* b, u32 n) {
+    for (u32 i = 0; i < n; ++i) if (a[i] != b[i]) return false;
+    return !b[n];
+}
+
+// What a preset's "type" names, for this track: 1 + a machine's index, 0 for the
+// track's stock role, or -1 when it can't run here.
+i32 choice_for(const char* type, u32 length, u32 track) {
+    if (role_name(track) && same(type, role_name(track), length)) return 0;
+    for (u32 i = 0; i < sdk_control_machine_count; ++i) {
+        const ControlMachine& m = sdk_control_machines[i];
+        if ((m.aux >> track & 1) && m.page && m.ready() == 1 && same(type, m.name, length))
+            return static_cast<i32>(i + 1);
+    }
+    return -1;
+}
+
+// The span of the string or array after "key": in text[0, length), or false.
+bool field(u32 length, const char* key, u32& at) {
+    for (u32 i = 0; i + 1 < length; ++i) {
+        if (text[i] != '"') continue;
+        u32 k = 0;
+        while (key[k] && i + 1 + k < length && text[i + 1 + k] == key[k]) ++k;
+        if (key[k] || i + 1 + k >= length || text[i + 1 + k] != '"') continue;
+        u32 j = i + 2 + k;
+        while (j < length && (text[j] == ' ' || text[j] == ':' || text[j] == '\n' || text[j] == '\t' || text[j] == '\r')) ++j;
+        if (j < length) { at = j; return true; }
+    }
+    return false;
+}
+
+// Reads one preset file: true with its choice and controls when it can run on track.
+bool read_preset(const char* path, u32 track, Preset& preset) {
+    void* file = file_open(path);
+    if (!file) return false;
+    const u32 length = file_read(text, kPresetBytes - 1, file);
+    file_close(file);
+    if (!length || length >= kPresetBytes - 1) return false;
+    u32 at, end;
+    if (!field(length, "type", at) || text[at] != '"') return false;
+    for (end = at + 1; end < length && text[end] != '"'; ++end) {}
+    const i32 choice = choice_for(text + at + 1, end - at - 1, track);
+    if (choice < 0 || !field(length, "params", at) || text[at] != '[') return false;
+    preset.choice = static_cast<u32>(choice);
+    u32 n = 0, i = at + 1;
+    while (n < kControls) {
+        while (i < length && (text[i] == ' ' || text[i] == ',' || text[i] == '\n' || text[i] == '\t' || text[i] == '\r')) ++i;
+        if (i >= length || text[i] < '0' || text[i] > '9') break;
+        u32 v = 0;
+        while (i < length && text[i] >= '0' && text[i] <= '9') v = v > 32767 ? v : v * 10 + static_cast<u32>(text[i++] - '0');
+        if (v > 32767) return false;
+        preset.values[n++] = static_cast<i32>(v << 16);
+    }
+    return n == kControls;
+}
+
+// The entries of content/aux_presets for this track: folders with at least one
+// preset that can run on it. Returns the folder count.
+u32 scan_presets(u32 track) {
+    u32 count = 0;
+    preset_count = 0;
+    void* root = folder_open(kPresetRoot);
+    if (!root) return 0;
+    char folder_path[kPathBytes], file_path[kPathBytes];
+    for (const char* name; count < kFolders && (name = folder_next(root));) {
+        if (name[0] == '.' || !join(folder_path, kPresetRoot, name)) continue;
+        void* folder = folder_open(folder_path);
+        if (!folder) continue;
+        browser::detail::Row& row = folders[count];
+        row = browser::detail::Row{};
+        if (!browser::detail::name(row.name, name)) { folder_close(folder); continue; }
+        row.id = static_cast<i32>(count);
+        browser::detail::Item* first = items + preset_count;
+        for (const char* file; preset_count < kPresets && (file = folder_next(folder));) {
+            u32 n = 0;
+            while (file[n]) ++n;
+            if (file[0] == '.' || n < 6 || n - 5 >= kNameBytes || !same(file + n - 5, ".json", 5)) continue;
+            if (!join(file_path, folder_path, file) || !read_preset(file_path, track, presets[preset_count])) continue;
+            char label[kNameBytes];
+            for (u32 i = 0; i < n - 5; ++i) label[i] = file[i];
+            label[n - 5] = 0;
+            browser::detail::Item& item = items[preset_count];
+            item = browser::detail::Item{};
+            if (!browser::detail::name(item.name, label)) continue;
+            // Preset ids follow folder ids, so a highlight tells the two apart.
+            item.id = static_cast<i32>(kFolders + preset_count);
+            ++preset_count;
+        }
+        folder_close(folder);
+        browser::detail::Item* last = items + preset_count;
+        if (first == last) continue;  // nothing for this track in it
+        row.items = browser::detail::Vector<browser::detail::Item>{0, first, last, last};
+        ++count;
+    }
+    folder_close(root);
+    return count;
+}
+
+// DIAGNOSTIC (to remove once the modes are known): each highlight's mode and
+// id in the heading, as "m<mode> i<id>"; the last preset id highlighted is
+// what a click applies.
+void show(i32 value, char*& out) {
+    u32 v = value < 0 ? static_cast<u32>(-value) : static_cast<u32>(value);
+    if (value < 0) *out++ = '-';
+    char digits[10];
+    u32 n = 0;
+    do { digits[n++] = static_cast<char>('0' + v % 10); v /= 10; } while (v && n < 10);
+    while (n) *out++ = digits[--n];
+}
+void preset_highlight(void*, u32 mode, i32 id) {
+    if (id >= static_cast<i32>(kFolders) && id < static_cast<i32>(kFolders + preset_count))
+        picked = static_cast<u32>(id) - kFolders;
+    char readout[16], *out = readout;
+    *out++ = 'm';
+    show(static_cast<i32>(mode > 99 ? 99 : mode), out);
+    *out++ = ' ';
+    *out++ = 'i';
+    show(id > 9999 ? 9999 : id < -999 ? -999 : id, out);
+    *out = 0;
+    browser::detail::heading(static_cast<i32>(preset_track), readout);
+}
+void apply_preset(void*, u32) {
+    if (picked >= preset_count) return;
+    const Preset& preset = presets[picked];
+    take(preset_track, preset.choice);
+    for (u32 i = 0; i < kControls; ++i) param_set(preset_track, i, preset.values[i]);
 }
 
 bool open_presets(u32 track) {
-    const ControlMachine* m = holder(track);
-    if (!m || !m->preset_count) return false;
-    const char* labels[kPresetChoices];
-    const u32 count = m->preset_count < kPresetChoices ? m->preset_count : kPresetChoices;
-    for (u32 i = 0; i < count; ++i) labels[i] = m->presets[i].name;
+    if (!takeable(track)) return false;
+    const u32 count = scan_presets(track);
+    if (!count) return false;
     preset_track = track;
-    preset_machine = m;
-    return preset_list.open("preset", labels, count, 0, browser::Callbacks{nullptr, apply_preset, nullptr},
-                            static_cast<i32>(track));
+    picked = kPresets;
+    u32 initial = 0;
+    if (const ControlMachine* m = holder(track))
+        for (u32 i = 0; i < count; ++i)
+            if (same(folders[i].name.text, m->name, folders[i].name.length)) initial = i;
+    return browser::detail::open_rows(preset_session, folders, count, "preset", initial,
+                                      browser::Callbacks{nullptr, apply_preset, nullptr, preset_highlight},
+                                      static_cast<i32>(track));
 }
 
 // The audio side's copy of a track's words, as stock's audio loop reads them.

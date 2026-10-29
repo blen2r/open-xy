@@ -50,9 +50,9 @@ void load(const opxy::u8* data, opxy::u32 bytes) {
 
 extern "C" {
 const opxy::platform::ControlMachine sdk_control_machines[] = {
-    {nullptr, ready, nullptr, nullptr, "morph", 16, save, load, true, 1u << 11, nullptr, {}, nullptr, 0},
-    {nullptr, ready, nullptr, nullptr, "plain", 0, nullptr, nullptr, false, 0, nullptr, {}, nullptr, 0},
-    {nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}, nullptr, 0}};
+    {nullptr, ready, nullptr, nullptr, "morph", 16, save, load, true, 1u << 11, nullptr, {}},
+    {nullptr, ready, nullptr, nullptr, "plain", 0, nullptr, nullptr, false, 0, nullptr, {}},
+    {nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}}};
 const opxy::u32 sdk_control_machine_count = 2;
 }
 

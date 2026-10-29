@@ -13,7 +13,7 @@ import struct
 import tempfile
 import unittest
 
-from tooling.adapters import catalog_entry
+from tooling.adapters import aux_preset_files, catalog_entry
 from unittest.mock import patch
 
 from tooling import native
@@ -135,7 +135,9 @@ class PackageVerification(unittest.TestCase):
         files = {p.relative_to(self.package / 'candidate').as_posix()
                  for p in (self.package / 'candidate').rglob('*') if p.is_file()}
         marks = {'content/display/openxy_overlay.svg'} if any(map(native.track_control, self.machines)) else set()
-        self.assertEqual(files, {'os.ldr', 'content/op1_factory.json'} | {f'content/display/{n}.svg' for n in displays} | marks)
+        presets = {path for m in self.machines for path in aux_preset_files(m)}
+        self.assertEqual(files, {'os.ldr', 'content/op1_factory.json'} | {f'content/display/{n}.svg' for n in displays} |
+                         marks | presets)
 
     def test_changed_os_elf_module_and_asset_fail_even_with_new_hash(self):
         names = ['candidate/os.ldr', 'analysis/module.elf', 'analysis/module.bin', 'candidate/content/op1_factory.json',

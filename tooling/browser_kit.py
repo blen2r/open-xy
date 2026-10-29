@@ -12,7 +12,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from .adapters import catalog_entry, control_callbacks, sample_callbacks
+from .adapters import aux_preset_files, catalog_entry, control_callbacks, sample_callbacks
 from .catalog import official
 from .definitions import control_positions, paged
 from .formats import require, sha
@@ -67,6 +67,10 @@ def export(package, output, tools, preview_cxx='clang++', *, stock_catalog, pers
         if uses:
             entry['features'] = uses
         entry['presetDefaults'] = m.preset_defaults
+        # A machine that takes over aux tracks: its preset files, which the builder installs as they are.
+        aux_presets = aux_preset_files(m)
+        if aux_presets:
+            entry['auxPresets'] = {path: data.decode('utf-8') for path, data in aux_presets.items()}
         if m.presets:
             entry['presets'] = m.presets
         if m.icon:

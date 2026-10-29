@@ -7,6 +7,8 @@ struct Callbacks {
     void* context;
     void (*confirm)(void*, u32 index);
     void (*cancel)(void*); // Optional; called on close without confirmation.
+    // Optional: every highlight stock reports, as its mode and the row's or item's id.
+    void (*highlight)(void*, u32 mode, i32 id);
 };
 namespace detail {
 struct String { u32 allocator; char text[16]; u32 length, capacity; };
@@ -53,6 +55,12 @@ static_assert(sizeof(Address) != 4 || sizeof(Catalog) == 20, "Stock browser cata
 static_assert(sizeof(Methods) == 16 * sizeof(void(*)()), "Stock browser delegate ABI");
 bool open(Session&, Row*, u32 count, const char* title,
           const char* const* labels, u32 initial, Callbacks, i32 track = -1);
+// Rows the caller filled, each possibly holding items (a second column): the
+// same modal as open. name() fills a stock string from 1..15 printable characters.
+bool name(String&, const char*);
+bool open_rows(Session&, Row*, u32 count, const char* title, u32 initial, Callbacks, i32 track = -1);
+// Sets the open browser's heading, as open does (for a GUI readout).
+void heading(i32 track, const char* title);
 }
 // Declare as a zero-initialized static aggregate. Storage and callback context
 // must outlive the modal. Titles and labels are copied, printable ASCII 1..15.

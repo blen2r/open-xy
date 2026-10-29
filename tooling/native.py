@@ -19,7 +19,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 from . import benchmark, screen, startup_label, stock_tables
-from .adapters import (catalog_entry, generate_control, generate_display, generate_fx_object,
+from .adapters import (aux_preset_files, catalog_entry, generate_control, generate_display, generate_fx_object,
                        generate_registration, generate_registration_stock, generate_sample_voice,
                        generate_sample_callbacks, generate_screen, generate_screen_order,
                        generate_synth_controls, generate_project_companion_table, generate_track_controls,
@@ -705,6 +705,8 @@ def prepare_assets(catalog, profile, machines):
             outputs[f'content/display/{m.native_name}.svg'] = screen.compose(validate_panel(m))
     if any(track_control(m) for m in machines):
         outputs['content/display/openxy_overlay.svg'] = control_artwork(machines)
+    for m in machines:
+        outputs.update(aux_preset_files(m))
     return outputs
 
 
