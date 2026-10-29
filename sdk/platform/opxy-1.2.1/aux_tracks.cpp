@@ -220,11 +220,22 @@ void sdk_aux_shift_m1() {
 // presets; 1 when the list opened, else 0 and stock goes on (the sends' effects).
 u32 sdk_aux_shift_track(u32, u32 track) { return open_presets(track) ? 1 : 0; }
 
-// 8c08f540: the selected aux track's page on tab 0 while a machine holds it, or
+// Whether the machine holding a track hides one of its pages ("hidePages").
+bool hides(const ControlMachine& m, u32 tab) {
+    for (u32 i = 0; i < sdk_synth_control_count; ++i) {
+        const SynthControls& c = sdk_synth_controls[i];
+        if (c.engine() == m.engine() && !c.effect) return c.hidden_pages >> tab & 1;
+    }
+    return false;
+}
+
+// 8c08f540: the selected aux track's page on tab 0 while a machine holds it, and
+// on a tab it hides until the GUI tick sets the tab back (synth_pages.cpp); or
 // -1 for stock's.
 i32 sdk_aux_page() {
-    const ControlMachine* m = word(kAuxTab) == 0 ? holder(byte(kSelectedTrack)) : nullptr;
-    return m ? static_cast<i32>(m->page_id()) : -1;
+    const u32 tab = word(kAuxTab);
+    const ControlMachine* m = holder(byte(kSelectedTrack));
+    return m && (tab == 0 || (tab < 4 && hides(*m, tab))) ? static_cast<i32>(m->page_id()) : -1;
 }
 
 // 8d512214, audio side: CV output, unless a machine holds the CV track.

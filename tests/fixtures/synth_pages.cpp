@@ -1,5 +1,6 @@
 // Host boundary double for the real hidden-pages check in synth_pages.cpp:
-// stock's page word, its page setter, the selected track and track engines.
+// stock's page words and setters (instrument and aux), the selected track,
+// track engines and the machines holding aux tracks.
 #include <cstdio>
 #include <cstdlib>
 #include <initializer_list>
@@ -14,6 +15,13 @@ void require(bool condition, const char* message) {
 }
 u32 page, sets, selected, engines[16];
 void stock_set_page(u32 value) { page = value; ++sets; }
+// The aux controller's tab word and its setter, and the machine holding each aux track.
+u32 aux_tab, aux_sets, aux_engines[16];
+void stock_set_aux_tab(u32 controller, u32 value) {
+    require(controller == 0x08014db4, "Aux tab set on another controller");
+    aux_tab = value;
+    ++aux_sets;
+}
 u32 stock_selected() { return selected; }
 u32 stock_engine(u32 track) { return track < 16 ? engines[track] : 0; }
 // Each track's stock LFO on/off byte, and how many times stock's setter ran.
@@ -38,8 +46,14 @@ const opxy::platform::SynthControls sdk_synth_controls[] = {
 const u32 sdk_synth_control_count = 3;
 }
 
+u32 opxy::platform::control_engine(u32 track) {
+    return track < 8 ? engines[track] : track < 16 ? aux_engines[track] : 0;
+}
+
 Address opxy::platform::host_stock_address(Address address) {
     if (address == 0x080238bc) return reinterpret_cast<Address>(&page);
+    if (address == 0x0801eae4) return reinterpret_cast<Address>(&aux_tab);
+    if (address == 0x8c08f74c) return reinterpret_cast<Address>(&stock_set_aux_tab);
     if (address == 0x8c0b19c4) return reinterpret_cast<Address>(&stock_set_page);
     if (address == 0x8d4d6f14) return reinterpret_cast<Address>(&stock_selected);
     if (address == 0x8d58781c) return reinterpret_cast<Address>(&stock_engine);
@@ -94,13 +108,25 @@ int main() {
     sdk_synth_pages();
     require(page == 0 && sdk_synth_page_key(3) == 0 && sdk_synth_page_key(2) == 3 && sdk_synth_page_key(2) == 0,
             "M3 press not kept once for its track");
-    // Auxiliary tracks are left alone.
+    // An aux track nothing holds is left alone, whatever its stock engine word says.
     const u32 sets_before = sets;
     selected = 9;
     engines[9] = 40;
-    page = 1;
+    aux_tab = 1;
     sdk_synth_pages();
-    require(page == 1 && sets == sets_before, "Auxiliary track's page changed");
+    require(aux_tab == 1 && sets == sets_before && aux_sets == 0, "Auxiliary track's page changed");
+    // One a machine holds hides its pages on the aux controller's tab, and keeps a
+    // press of a hidden page's key for the machine, as on an instrument track.
+    selected = 11;
+    aux_engines[11] = 42;
+    aux_tab = 0;
+    sdk_synth_pages();
+    aux_tab = 3;
+    sdk_synth_pages();
+    require(aux_tab == 0 && aux_sets == 1 && sets == sets_before, "Held aux track's hidden tab kept");
+    require(sdk_synth_page_key(11) == 4 && sdk_synth_page_key(11) == 0, "M4 press on a held aux track not kept once");
+    aux_engines[11] = 0;
+    sdk_synth_pages();
 
     // A stock LFO left on is switched off, once, on tracks whose synth hides
     // the LFO page (engine 42, track 4), whether or not they are selected;
