@@ -254,6 +254,12 @@ bool read_preset(const char* path, u32 track, Preset& preset) {
     return n == kControls;
 }
 
+bool before(const browser::detail::String& a, const browser::detail::String& b) {
+    for (u32 i = 0; i < a.length && i < b.length; ++i)
+        if (a.text[i] != b.text[i]) return a.text[i] < b.text[i];
+    return a.length < b.length;
+}
+
 // The entries of content/aux_presets for this track: folders with at least one
 // preset that can run on it. Returns the folder count.
 u32 scan_presets(u32 track) {
@@ -293,6 +299,14 @@ u32 scan_presets(u32 track) {
         ++count;
     }
     folder_close(root);
+    // By name, as stock lists its folders; each row keeps its own items.
+    for (u32 i = 1; i < count; ++i)
+        for (u32 j = i; j > 0 && before(folders[j].name, folders[j - 1].name); --j) {
+            const browser::detail::Row row = folders[j];
+            folders[j] = folders[j - 1];
+            folders[j - 1] = row;
+        }
+    for (u32 i = 0; i < count; ++i) folders[i].id = static_cast<i32>(i);
     return count;
 }
 
@@ -338,7 +352,7 @@ bool open_presets(u32 track) {
             if (same(folders[i].name.text, m->name, folders[i].name.length)) initial = i;
     return browser::detail::open_rows(preset_session, folders, count, "preset", initial,
                                       browser::Callbacks{nullptr, apply_preset, nullptr, preset_highlight},
-                                      static_cast<i32>(track));
+                                      static_cast<i32>(track), true);
 }
 
 // The audio side's copy of a track's words, as stock's audio loop reads them.

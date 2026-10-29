@@ -47,6 +47,7 @@ struct Session {
     char title[16];
     u32 count, candidate;
     bool accepted, closing;
+    bool columns;  // rows with items: the second column's controls are on
 };
 static_assert(sizeof(String) == 28, "Stock inline string ABI");
 static_assert(sizeof(Address) != 4 || sizeof(Item) == 36, "Stock browser item ABI");
@@ -58,7 +59,10 @@ bool open(Session&, Row*, u32 count, const char* title,
 // Rows the caller filled, each possibly holding items (a second column): the
 // same modal as open. name() fills a stock string from 1..15 printable characters.
 bool name(String&, const char*);
-bool open_rows(Session&, Row*, u32 count, const char* title, u32 initial, Callbacks, i32 track = -1);
+// With columns, the browser's second column (the rows' items) gets its controls,
+// as stock's preset browser has them: knobs 2-4 scroll and press it.
+bool open_rows(Session&, Row*, u32 count, const char* title, u32 initial, Callbacks, i32 track = -1,
+               bool columns = false);
 // Sets the open browser's heading, as open does (for a GUI readout).
 void heading(i32 track, const char* title);
 }
