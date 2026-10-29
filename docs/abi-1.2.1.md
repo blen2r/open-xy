@@ -30,7 +30,7 @@ version is rejected. The output differs from stock in exactly these places:
 | Sample analysis | 10 | Schedules bounded background work, snapshots committed assignments, releases cached analysis and reports progress |
 | Drum-page services | 20 | Routes controls, octave publication, assignment, waveform projection and held-pad slice/copy/paste and multi-edit actions |
 | Recorder | 6 | Recognizes owned sample engines when the stock recorder selects, releases and saves a pad, and assigns completed recordings to owned pads |
-| Relocated tables | 22 | Moves the effect records (63), engine records (63) and screen slots (128) into the last 8 KiB of the reservation |
+| Relocated tables | 21 + 1 hook | Moves the effect records (63), engine records (256) and screen slots (256) into the last 16 KiB of the reservation; the engine validity check's 7-bit bound is a call (`sdk_engine_bound`) that compares against 256 |
 | Screen order | 1 | Paints a selected owned synth page before stock overlays |
 | Synth and effect controls | 7 | Lets an encoder press on an owned synth's or send effect's page select an alternate parameter, which its turns, titles and values then follow; scales fine turns on owned synth and send-effect pages; steps owned enums one choice per detent; names owned enums' choices, and an owned effect's division values on the send page |
 | LFO destinations | 15 | Selects and modulates all declared engine parameters on owned instrument machines with five to eight parameters, using their assigned encoder icons |
@@ -211,8 +211,8 @@ and then completes the stock epilogue it replaced.
 
 | Table | Size | Never use | Notes |
 | --- | --- | --- | --- |
-| Engines | 63 (relocated) | 33 (stock "none"), IDs stock registers | IDs above 32 exist only with the relocated tables |
-| Screen pages | 128 (relocated) | 81 (stock "none") | Sample engines show stock page 2 or 7 instead |
+| Engines | 256 (relocated) | 33 (stock "none"), IDs stock registers | IDs above 32 exist only with the relocated tables |
+| Screen pages | 256 (relocated) | 81 (stock "none") | Sample engines show stock page 2 or 7 instead |
 | Effects | 63 (relocated) | 19 (stock "none"), IDs stock registers, stock engine IDs (2–4, 6, 7, 20, 22, 29–33) | Free IDs: 1, 8, 11, 21, 23–28, 34–62; all effects use page 21 |
 
 Presets store the engine **name**. Projects store the engine **number**.
@@ -469,7 +469,7 @@ declarations retain 64-word output.
 The stock stereo PCM reader consumes packed left/right 16-bit pairs, while
 its output writes alternating 32-bit left/right words.
 
-Requirements: flag 1, an engine ID of 34–62, and page 2 or 7. The engine never
+Requirements: flag 1, an engine ID of 34–255, and page 2 or 7. The engine never
 touches the sample cache or its lock.
 
 Stock's sample predicate and note-region dispatcher also have explicit engine

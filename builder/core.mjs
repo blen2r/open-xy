@@ -3,7 +3,7 @@
 // Every firmware rule (edits, hooks, identity ranges, catalog offsets, table
 // bytes) comes from the reviewed profile, authenticated by this digest. The
 // Python SDK reads the same constant.
-export const PROFILE_SHA256 = '9384f28922a7239d09383fdade043030d402b1ecc9257da6bdbd56a73b39589b';
+export const PROFILE_SHA256 = 'fb58d5a5f8e6accd399ce397fd96e1b78d38d0d658d397d0305b48a90d08383e';
 export function requireThat(ok, message) { if (!ok) throw new Error(message); }
 const check = requireThat;
 const utf8 = new TextEncoder();
@@ -96,16 +96,17 @@ export function readObject(bytes) {
   return {sections, symbols, relocations};
 }
 
-// The selections the release checks link, as bit masks over kit.machines: every
-// combination of Open-XY's own machines, each other machine with all of those, and
-// the machines the native package links (kit.linked; all of them when they fit).
+// The selections the release checks link, as BigInt bit masks over kit.machines (a
+// kit holds more machines than a 32-bit mask): every combination of Open-XY's own
+// machines, each other machine with all of those, and the machines the native package
+// links (kit.linked; all of them when they fit).
+export const selectionBit = i => 1n << BigInt(i);
 export function checkedSelections(machines, linked = machines.map(m => m.id)) {
-  const bit = i => 2 ** i;
-  const core = machines.reduce((mask, m, i) => m.origin === 'official' ? mask + bit(i) : mask, 0);
-  const masks = new Set([machines.reduce((mask, m, i) => linked.includes(m.id) ? mask + bit(i) : mask, 0)]);
-  for (let mask = core; mask; mask = (mask - 1) & core) masks.add(mask);
-  machines.forEach((m, i) => { if (!(core & bit(i))) masks.add(core + bit(i)); });
-  return [...masks].sort((a, b) => a - b);
+  const core = machines.reduce((mask, m, i) => m.origin === 'official' ? mask | selectionBit(i) : mask, 0n);
+  const masks = new Set([machines.reduce((mask, m, i) => linked.includes(m.id) ? mask | selectionBit(i) : mask, 0n)]);
+  for (let mask = core; mask; mask = (mask - 1n) & core) masks.add(mask);
+  machines.forEach((m, i) => { if (!(core & selectionBit(i))) masks.add(core | selectionBit(i)); });
+  return [...masks].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 // The profile's identity rules, as tooling.machines.check_identity applies them.
@@ -340,7 +341,7 @@ export const moduleBytes = profile => profile.reserved_bytes - profile.table_byt
 const screenTemplateOk = async kit => typeof kit.screenTemplate === 'string' &&
   await sha256(utf8.encode(kit.screenTemplate)) === kit.profile.screen_template_sha256;
 export async function openKit(kit) {
-  check(kit.format === 'opxy-browser-kit/1' && kit.machines.length > 0 && kit.machines.length <= 32,
+  check(kit.format === 'opxy-browser-kit/1' && kit.machines.length > 0 && kit.machines.length <= 256,
     'Unsupported curated kit');
   // The release version, which every build's boot label shows (tooling.startup_label).
   check(typeof kit.version === 'string' && /^\d+\.\d+\.\d+$/.test(kit.version), 'Unsupported curated kit version');
