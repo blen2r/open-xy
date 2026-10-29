@@ -109,6 +109,15 @@ class Services(unittest.TestCase):
         plain.pop('after'); tagged['service'] = 'missing'
         with self.assertRaisesRegex(ValueError, 'Undeclared service'):
             check_patch_boundaries(profile, len(profile['patches']))
+        # So may a service's text edit (an MTP allowlist edit), but not a fixed one.
+        profile = copy.deepcopy(config())
+        tagged = next(p for p in profile['patches'] if p['kind'] == 'text' and p.get('service'))
+        plain = next(p for p in profile['patches'] if p['kind'] == 'text' and not p.get('service'))
+        tagged['after'] = tagged['before']
+        check_patch_boundaries(profile, len(profile['patches']))
+        plain['after'] = plain['before']
+        with self.assertRaisesRegex(ValueError, 'Invalid instruction edit'):
+            check_patch_boundaries(profile, len(profile['patches']))
 
 
 class SourceContracts(unittest.TestCase):
