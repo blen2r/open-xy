@@ -213,7 +213,7 @@ class FirmwareWriter(unittest.TestCase):
 
     def test_mtp_shows_companions_beside_projects(self):
         import re
-        edits = [p for p in config()['patches'] if p['kind'] == 'text']
+        edits = [p for p in config()['patches'] if p['kind'] == 'text' and 'service' not in p]
         self.assertEqual(len(edits), 3)
         for edit in edits:
             before = bytes.fromhex(edit['before']).rstrip(b'\0').decode()

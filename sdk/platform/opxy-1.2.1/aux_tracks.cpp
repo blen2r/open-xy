@@ -156,9 +156,10 @@ bool open_chooser(u32 track) {
 }
 
 // Presets for aux tracks, as files: those the builder installs in
-// content/aux_presets/<folder>/<name>.json, then the user's beside their
-// instrument presets, /fat32/presets/<folder>/<name>.json (which MTP accepts and
-// stock reads its own .preset folders from). Each names what it is for in "type"
+// content/aux_presets/<folder>/<name>.json, then the user's in
+// /fat32/aux_presets/<folder>/<name>.json, which MTP shows (allowlist edits in the
+// profile) and stock's instrument browser never reads: it lists any .json in
+// /fat32/presets' folders. Each names what it is for in "type"
 // (a machine's ID, or a stock role such as "cv") and its eight controls in
 // "params" (0..32767, as instrument presets store them). Shift + track key on a
 // track a machine can take over lists, as stock's preset browser does, the
@@ -182,7 +183,7 @@ u32 file_read(void* data, u32 bytes, void* file) {
 void file_close(void* file) { stock<int(void*)>(0x8fed00ae)(file); }
 
 const u32 kFolders = 16, kPresets = 64, kNameBytes = 16, kPathBytes = 128, kPresetBytes = 2048;
-const char* const kPresetRoots[] = {"content/aux_presets", "/fat32/presets"};
+const char* const kPresetRoots[] = {"content/aux_presets", "/fat32/aux_presets"};
 struct Preset { u32 choice; i32 values[kControls]; };
 browser::detail::Row folders[kFolders];
 browser::detail::Item items[kPresets];

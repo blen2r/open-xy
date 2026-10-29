@@ -104,6 +104,27 @@ class TrackControl(unittest.TestCase):
                                              {'stateBytes': 8, 'stateAlignment': 4, 'unique': True, 'aux': [11]}),
                                 'synth')
 
+    def test_mtp_shows_the_users_aux_presets(self):
+        import re
+        from tooling.firmware import active_services, patch_active
+        edits = [p for p in config()['patches'] if p['kind'] == 'text' and p.get('service') == 'control']
+        self.assertEqual([p['address'] for p in edits], ['0x840aed90', '0x840aedfc', '0x840aee6c'])
+        before = [bytes.fromhex(p['before']).rstrip(b'\0').decode() for p in edits]
+        after = [bytes.fromhex(p['after']).rstrip(b'\0').decode() for p in edits]
+        matches = lambda patterns, path: any(re.fullmatch(p, path) for p in patterns)
+        # A preset folder's samples: .aif, .aiff and .aifc in one pattern now, as before in three.
+        for sample in ('/presets/a/b c.preset/x.aif', '/presets/a/b.preset/x.AIFF', '/presets/a/b.preset/x.aifc'):
+            self.assertTrue(matches(before, sample) and matches(after, sample), sample)
+        self.assertFalse(matches(after, '/presets/a/b.preset/x.aifx'))
+        # The user's aux presets, folders and .json files, and nothing else there.
+        for path in ('/aux_presets', '/aux_presets/', '/aux_presets/my kit', '/aux_presets/my kit/morph half.json'):
+            self.assertTrue(matches(after, path) and not matches(before, path), path)
+        for path in ('/aux_presets/a/b/c.json', '/aux_presets/a/b.txt', '/aux_presetsx/a/b.json', '/other/a/b.json'):
+            self.assertFalse(matches(after, path), path)
+        # Only builds with track control change stock's allowlist.
+        plain = active_services(config(), native.machine_uses([fixture('probesynth')]))
+        self.assertFalse(any(patch_active(p, plain) for p in edits))
+
     def test_a_machine_on_aux_tracks_is_not_in_the_instrument_list(self):
         from tooling.adapters import catalog_entry
         synth = copy.deepcopy(fixture('probesynth'))
@@ -175,7 +196,7 @@ class TrackControl(unittest.TestCase):
         hiding.definition['hidePages'] = ['envelope']
         steering = copy.deepcopy(fixture('probesynth'))
         steering.definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4}
-        hooks = [p for p in config()['patches'] if p.get('service') == 'control']
+        hooks = [p for p in config()['patches'] if p.get('service') == 'control' and p['kind'] == 'hook']
         self.assertEqual(sorted(p['symbol'] for p in hooks),
                          ['sdk_aux_page_hook', 'sdk_aux_shift_m1_hook', 'sdk_aux_shift_track_hook', 'sdk_cv_gate_on', 'sdk_cv_output', 'sdk_gui_tick',
                           'sdk_param_edit_set', 'sdk_param_shown_hook', 'sdk_project_clear',
