@@ -17,6 +17,15 @@
   entry ([submission workflow](docs/catalog.md#submit-a-machine)). A machine that
   needs SDK changes only on `staging` targets `staging` instead. CI refuses a
   submission from a fork that changes anything else.
+- **Changing how the OP-XY behaves** (an extension: recording, controls, the
+  sequencer): like a machine, it lives in a repository of its own and reaches
+  the builder through `catalog/extensions.json`; capture, in
+  open-xy-core-machines, is the worked example. Read
+  [extensions](docs/extensions.md) first, and check it with
+  `python ../open-xy/sdk.py test --extension .`. Reuse or widen an existing
+  event; a new event, claim or action is a separate SDK pull request, proposed
+  as that page describes, never a hook beside an existing one for the same
+  stage. Extensions never patch the firmware or name stock addresses.
 - **Changing the SDK, builder or docs:** branch from `origin/staging` and open the
   pull request against `staging`. Apart from catalog entries, `main` only receives
   releases from `staging`; never base other work on it or target it.

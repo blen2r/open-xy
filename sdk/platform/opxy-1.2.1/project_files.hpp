@@ -1,10 +1,10 @@
-// Stock OS 1.2.1 file access for project companions, shared by the companion
-// writer (project_companion.cpp) and track control's saved data
-// (track_control_project.cpp); each unit has its own copy.
+// Stock OS 1.2.1 file access for track control's saved data
+// (track_control_project.cpp), in a namespace of its own: the project companion
+// (project_companion.cpp) keeps its own copy, and host tests build both in one unit.
 #pragma once
 #include "stock.hpp"
 
-namespace {
+namespace kept_files { namespace {
 using opxy::u32;
 using opxy::platform::stock;
 
@@ -67,4 +67,4 @@ bool companion_path(const char* path) {
     companion[length + 1] = 0;
     return true;
 }
-}
+}}

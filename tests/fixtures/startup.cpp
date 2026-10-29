@@ -29,6 +29,7 @@ int effect_fx_register() { calls += "effect "; return 1; }
 u32 stock_gui_role() { calls += "role "; return gui; }
 void sdk_overlay_startup() { calls += "overlay "; }
 u32 sdk_control_kept_write(void* file) { calls += "kept "; return file ? 2 : 0; }
+void sdk_control_kept_load(const char* path) { calls += path; }
 u32 stock_catalog_insert(void*, const void*, u32 id) { inserted = id; return 7; }
 
 static u32 catalog(const char* name, u32 id) {
@@ -68,6 +69,10 @@ int main() {
     // The companion writer reaches the control service's kept data.
     calls.clear();
     require(sdk_project_kept(&calls) == 2 && calls == "kept ");
+    // A project load gives the control service the project's path.
+    calls.clear();
+    sdk_project_loaded("song.xy");
+    require(calls == "song.xy");
 
     // Only a ready machine's own page is owned; readiness must be exactly 1.
     calls.clear();
