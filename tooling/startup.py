@@ -14,11 +14,12 @@ def _declare(name, signature='()'):
     return f'int {name}{signature} __asm__("{name}");'
 
 
-def render(prefixes, effects=(), stock_page=(), control=False):
+def render(prefixes, effects=(), stock_page=(), control=False, aux=False):
     """stock_page: engines that show a stock page (e.g. sample engines on the
     sampler page); they register on the GUI role without an own-page guard.
     control: the build links the control service; its marks screen registers
-    last. Without it, the companion's calls into the service do nothing."""
+    last. Without it, the companion's calls into the service do nothing.
+    aux: the build links the aux service (aux tracks), which starts after it."""
     require(1 <= len(prefixes) <= MAX_ENGINES and len(set(prefixes)) == len(prefixes),
             'Startup needs distinct engine prefixes')
     require(len(set(effects)) == len(effects) <= MAX_ENGINES and not set(effects) & set(prefixes),
@@ -48,6 +49,10 @@ def render(prefixes, effects=(), stock_page=(), control=False):
                          'u32 sdk_control_kept_write(void*) __asm__("sdk_control_kept_write");']
         screens.append('    sdk_overlay_startup();')
         kept = 'u32 sdk_project_kept(void* file) { return sdk_control_kept_write(file); }'
+    if aux:
+        require(control, 'The aux service needs the control service')
+        declarations.append('void sdk_aux_startup() __asm__("sdk_aux_startup");')
+        screens.append('    sdk_aux_startup();')
     values = dict(DECLARATIONS='\n'.join(declarations), OWNED_SCREENS='\n'.join(owned),
                   EFFECTS='\n'.join(f'    {prefix}_fx_register();' for prefix in effects),
                   ENGINES='\n'.join(f'    {prefix}_register();' for prefix in prefixes),
@@ -61,7 +66,7 @@ def render(prefixes, effects=(), stock_page=(), control=False):
     return source
 
 
-def generate(directory, prefixes, effects=(), stock_page=(), control=False):
+def generate(directory, prefixes, effects=(), stock_page=(), control=False, aux=False):
     destination = Path(directory) / 'startup.cpp'
-    destination.write_text(render(prefixes, effects, stock_page, control), encoding='utf-8', newline='\n')
+    destination.write_text(render(prefixes, effects, stock_page, control, aux), encoding='utf-8', newline='\n')
     return destination

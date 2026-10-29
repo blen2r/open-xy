@@ -28,10 +28,19 @@ struct ControlMachine {
     u32 engine() const { return static_cast<u32>(reinterpret_cast<__UINTPTR_TYPE__>(id)); }
     u32 page_id() const { return static_cast<u32>(reinterpret_cast<__UINTPTR_TYPE__>(page)); }
 };
-// The engine whose machine runs on a track: the machine holding an aux track,
-// else stock's engine on an instrument track; 0 on an aux track nothing holds.
-// GUI only (aux_tracks.cpp).
+// The engine whose machine runs on a track: stock's engine on an instrument
+// track, the machine holding an aux track, else 0. GUI only (track_control.cpp).
 u32 control_engine(u32 track);
+// The aux service (aux_tracks.cpp), linked only for a machine that takes over aux
+// tracks: its entry points, which its startup fills in; null without it.
+struct AuxService {
+    u32 (*engine)(u32 track);           // the engine of the machine holding an aux track, or 0
+    void (*tick)();                     // once per GUI tick, before the machines run
+    const char* (*holder)(u32 track);   // what to save: the holder's machine ID, or null
+    const i32* (*kept)(u32 track);      // and the stock role's controls kept aside
+    void (*restore)(u32 track, const char* id, u32 id_length, const i32* controls);  // after a load
+    void (*forget)();                   // before a load and for a new project: every role stock
+};
 // The marks track control shows over every page (track_control_overlay.cpp.in):
 // a machine captures edits, or the selected track holds an overlay from one that
 // marks; `machine` indexes sdk_control_machines. GUI only.
@@ -46,9 +55,9 @@ extern const opxy::u32 sdk_control_machine_count __asm__("sdk_control_machine_co
 void sdk_gui_tick() __asm__("sdk_gui_tick");
 // Registers the marks' screen slot on the GUI role, after the machines' screens.
 void sdk_overlay_startup() __asm__("sdk_overlay_startup");
-// Once per GUI tick, before the machines run: aux tracks taken over keep their
-// mark word published (aux_tracks.cpp).
-void sdk_aux_tick() __asm__("sdk_aux_tick");
+extern opxy::platform::AuxService sdk_aux __asm__("sdk_aux");
+// The aux service's startup on the GUI role, from startup.cpp when it is linked.
+void sdk_aux_startup() __asm__("sdk_aux_startup");
 void sdk_param_edit_set(opxy::u32 project, opxy::u32 track, opxy::u32 index, opxy::i32 value)
     __asm__("sdk_param_edit_set");
 // The value stock's displayed-value getter shows before its LFO amount, through

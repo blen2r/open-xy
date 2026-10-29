@@ -182,6 +182,10 @@ class FirmwareWriter(unittest.TestCase):
             self.assertEqual(run('1').returncode, 0)
             self.assertEqual(run('1', 'read').stdout, '73746174ff/5\n')
             self.assertEqual(aux_holders(parse((folder / 'song.oxy').read_bytes()), project.read_bytes()), {})
+            # A build without the aux service keeps no aux track, and loading restores none.
+            noaux = dict(os.environ, HOLD='1', NOAUX='1')
+            self.assertEqual(run('1', env=noaux).returncode, 0)
+            self.assertEqual(aux_holders(parse((folder / 'song.oxy').read_bytes()), project.read_bytes()), {})
 
     def test_a_failed_save_or_other_name_writes_nothing(self):
         with tempfile.TemporaryDirectory(prefix='companion-') as directory:

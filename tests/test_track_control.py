@@ -107,7 +107,7 @@ class TrackControl(unittest.TestCase):
     def test_mtp_shows_the_users_aux_presets(self):
         import re
         from tooling.firmware import active_services, patch_active
-        edits = {p['address']: p for p in config()['patches'] if p['kind'] == 'text' and p.get('service') == 'control'}
+        edits = {p['address']: p for p in config()['patches'] if p['kind'] == 'text' and p.get('service') == 'aux'}
         # Stock's MTP table lists folder patterns first (840ae308 and 840ae32c among them),
         # then file patterns (840aedfc, 840aee6c).
         self.assertEqual(sorted(edits), ['0x840ae308', '0x840ae32c', '0x840aedfc', '0x840aee6c'])
@@ -127,8 +127,10 @@ class TrackControl(unittest.TestCase):
         self.assertTrue(matches('after', files, '/aux_presets/my kit/morph half.json'))
         for path in ('/aux_presets/a/b', '/aux_presets/a/b/c.json', '/aux_presets/a/b.txt', '/aux_presetsx/a/b.json'):
             self.assertFalse(matches('after', folders + files, path), path)
-        # Only builds with track control change stock's allowlist.
-        plain = active_services(config(), native.machine_uses([fixture('probesynth')]))
+        # Only builds with a machine on aux tracks change stock's allowlist.
+        steering = copy.deepcopy(fixture('probesynth'))
+        steering.definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4}
+        plain = active_services(config(), native.machine_uses([fixture('probesynth'), steering]))
         self.assertFalse(any(patch_active(p, plain) for p in edits.values()))
 
     def test_a_machine_on_aux_tracks_is_not_in_the_instrument_list(self):
@@ -202,19 +204,29 @@ class TrackControl(unittest.TestCase):
         hiding.definition['hidePages'] = ['envelope']
         steering = copy.deepcopy(fixture('probesynth'))
         steering.definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4}
+        aux = copy.deepcopy(steering)
+        aux.definition['resources']['trackControl'].update(unique=True, aux=[12])
         hooks = [p for p in config()['patches'] if p.get('service') == 'control' and p['kind'] == 'hook']
         self.assertEqual(sorted(p['symbol'] for p in hooks),
-                         ['sdk_aux_page_hook', 'sdk_aux_shift_m1_hook', 'sdk_aux_shift_track_hook', 'sdk_cv_gate_on', 'sdk_cv_output', 'sdk_gui_tick',
-                          'sdk_param_edit_set', 'sdk_param_shown_hook', 'sdk_project_clear',
+                         ['sdk_gui_tick', 'sdk_param_edit_set', 'sdk_param_shown_hook', 'sdk_project_clear',
                           'sdk_project_clear_random', 'sdk_project_read'])
-        for machines, used in ((plain, False), ([hiding], True), ([steering], True)):
+        # Aux tracks are a service of their own: its hooks and MTP allowlist edits.
+        aux_edits = [p for p in config()['patches'] if p.get('service') == 'aux']
+        self.assertEqual(sorted(p.get('symbol', p['address']) for p in aux_edits),
+                         ['0x840ae308', '0x840ae32c', '0x840aedfc', '0x840aee6c', 'sdk_aux_page_hook',
+                          'sdk_aux_shift_m1_hook', 'sdk_aux_shift_track_hook', 'sdk_cv_gate_on', 'sdk_cv_output'])
+        for machines, used, aux_used in ((plain, False, False), ([hiding], True, False), ([steering], True, False),
+                                         ([aux], True, True)):
             services = active_services(config(), native.machine_uses(machines))
-            self.assertEqual('control' in services, used)
+            self.assertEqual(('control' in services, 'aux' in services), (used, aux_used))
             self.assertEqual(all(patch_active(p, services) for p in hooks), used)
+            self.assertEqual(all(patch_active(p, services) for p in aux_edits), aux_used)
             units = {step for _name, _m, step in native.plan(machines)}
             for unit in ('track_control', 'track_control_table', 'track_control_hooks', 'track_control_overlay',
-                         'track_control_project', 'synth_pages', 'aux_tracks', 'aux_hooks'):
+                         'track_control_project', 'synth_pages'):
                 self.assertEqual(unit in units, used)
+            for unit in ('aux_tracks', 'aux_hooks'):
+                self.assertEqual(unit in units, aux_used)
         # Startup reaches the saved data's writer only with the service.
         from tooling.startup import render
         plain_startup, control_startup = render(['probe']), render(['probe'], control=True)
@@ -223,6 +235,10 @@ class TrackControl(unittest.TestCase):
         self.assertNotIn('sdk_control_kept_write', plain_startup)
         self.assertIn('    sdk_overlay_startup();', control_startup)
         self.assertIn('{ return sdk_control_kept_write(file); }', control_startup)
+        # The aux service starts after the control service's marks, only when linked.
+        aux_startup = render(['probe'], control=True, aux=True)
+        self.assertNotIn('sdk_aux_startup', control_startup)
+        self.assertLess(aux_startup.index('    sdk_overlay_startup();'), aux_startup.index('    sdk_aux_startup();'))
 
     def test_gui_tick_is_a_reviewed_call_in_a_shared_unit(self):
         hooks = [p for p in config()['patches']

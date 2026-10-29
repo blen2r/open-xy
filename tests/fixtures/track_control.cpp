@@ -126,10 +126,9 @@ void sdk_synth_pages() { ++page_checks; }
 u32 page_key;
 u32 sdk_synth_page_key(u32 track) { return track == 2 ? page_key : 0; }
 opxy::u32 sdk_benchmark_cycles() { return cycles; }
-opxy::u32 opxy::platform::control_engine(opxy::u32 track) {
-    return track < control::tracks ? engines[track] : track < control::all_tracks ? aux_engines[track] : 0;
-}
-void sdk_aux_tick() { ++aux_ticks; }
+// The aux service's entry points, which its startup fills in on the device.
+opxy::u32 aux_engine(opxy::u32 track) { return track < control::all_tracks ? aux_engines[track] : 0; }
+void aux_tick() { ++aux_ticks; }
 const volatile unsigned short* stock_project_tempo() { return &tempo; }
 
 extern "C" {
@@ -384,6 +383,13 @@ int main() {
     tick(1, "Departed copy's overlay not released");
     require(value(0, 2) == before && value(0, 1) == 500, "Departed copy not released alone");
     engines[6] = 0;
+
+    // Without the aux service, aux tracks hold nothing; with it, its entry points answer.
+    aux_engines[11] = 40;
+    require(opxy::platform::control_engine(11) == 0 && sdk_control_copies(11) == 0, "Aux track held without the service");
+    aux_engines[11] = 0;
+    sdk_aux.engine = aux_engine;
+    sdk_aux.tick = aux_tick;
 
     // A machine holding an aux track runs there after the instrument tracks,
     // reads its own controls from that track, and counts as a copy as it would

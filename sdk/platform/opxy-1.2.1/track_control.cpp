@@ -103,6 +103,16 @@ u32 original_count;
 // What each track's machine passed to its display last tick.
 i32 shown_words[control::all_tracks][control::display_words];
 
+}
+
+opxy::platform::AuxService sdk_aux;
+
+u32 opxy::platform::control_engine(u32 track) {
+    if (track < control::tracks) return track_engine(track);
+    return sdk_aux.engine ? sdk_aux.engine(track) : 0;
+}
+
+namespace {
 const ControlMachine* owner(u32 track) {
     const u32 engine = control_engine(track);
     if (!engine) return nullptr;
@@ -220,7 +230,7 @@ extern "C" void sdk_gui_tick() {
     ++gui_ticks;
     sdk_synth_pages();
     if (!sdk_control_machine_count && !applied_count) return;
-    sdk_aux_tick();
+    if (sdk_aux.tick) sdk_aux.tick();
 
     // A value that differs from the one written is stock's: an edit, a lock or a step.
     for (u32 i = 0; i < applied_count; ++i) {

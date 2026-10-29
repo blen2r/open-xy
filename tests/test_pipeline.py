@@ -89,8 +89,8 @@ class Services(unittest.TestCase):
         machines = [fixture(name) for name in NAMES]  # every kind, as a full collection holds
         self.assertTrue(any(m.kind == 'sample' for m in machines))
         steps = lambda selection: [step for _name, m, step in native.plan(selection) if m is None]
-        # The fixtures declare no track control or hidden pages: the control service stays off.
-        control = [u for u, service in native.UNIT_SERVICES.items() if service == 'control']
+        # The fixtures declare no track control, hidden pages or aux tracks: those services stay off.
+        control = [u for u, service in native.UNIT_SERVICES.items() if service in ('control', 'aux')]
         self.assertEqual(steps(machines), [u for u in native.SDK_UNITS if u not in control])  # in link order
         without = [m for m in machines if m.kind != 'sample']
         self.assertEqual(steps(without), [u for u in native.SDK_UNITS if u not in native.UNIT_SERVICES])

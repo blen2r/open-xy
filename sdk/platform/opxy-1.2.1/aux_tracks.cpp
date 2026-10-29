@@ -54,11 +54,6 @@ void sdk_cv_output(opxy::u32) __asm__("sdk_cv_output");
 void sdk_cv_gate_on(opxy::u32, opxy::u32, opxy::u32) __asm__("sdk_cv_gate_on");
 // For track_control_project.cpp: the machine ID holding each aux track, and
 // the stock role's controls kept aside, to save; and their restoration on load.
-const char* sdk_aux_holder_id(opxy::u32 track) __asm__("sdk_aux_holder_id");
-const opxy::i32* sdk_aux_kept_controls(opxy::u32 track) __asm__("sdk_aux_kept_controls");
-void sdk_aux_restore(opxy::u32 track, const char* id, opxy::u32 id_length, const opxy::i32* controls)
-    __asm__("sdk_aux_restore");
-void sdk_aux_forget() __asm__("sdk_aux_forget");
 }
 
 namespace {
@@ -362,23 +357,20 @@ bool cv_held() {
 bool cv_silenced;  // audio side: the held CV notes were cleared and the gate lowered
 }
 
-u32 opxy::platform::control_engine(u32 track) {
-    if (track < control::tracks) return track_engine(track);
-    const ControlMachine* m = holder(track);
+namespace {
+// The service's entry points (track_control.hpp's AuxService).
+u32 aux_engine(u32 track) {
+    const ControlMachine* m = track >= kFirstAux ? holder(track) : nullptr;
     return m ? m->engine() : 0;
 }
 
-// For synth_controls.cpp, a shared unit that links without track control too:
-// it asks through sdk_aux_engine, which the first GUI tick points here.
-static u32 aux_engine(u32 track) { return track >= kFirstAux ? control_engine(track) : 0; }
-
-extern "C" void sdk_aux_tick() {
-    sdk_aux_engine = aux_engine;
+void aux_tick() {
     for (u32 t = kFirstAux; t < control::all_tracks; ++t) {
         if (!takeable(t)) continue;
         if (holder(t)) mark(t);
         else unmark(t);
     }
+}
 }
 
 // 8c08f6ec: Shift + M1 on an aux track, which stock ignores. A track a
@@ -433,18 +425,19 @@ void sdk_cv_gate_on(u32 a, u32 b, u32 c) {
         stock<void(u32, u32, u32)>(0x8d5b5fe0)(a, b, c);
 }
 
-const char* sdk_aux_holder_id(u32 track) {
+namespace {
+const char* aux_holder(u32 track) {
     const ControlMachine* m = holder(track);
     return m ? m->name : nullptr;
 }
-const i32* sdk_aux_kept_controls(u32 track) { return kept[track]; }
+const i32* aux_kept(u32 track) { return kept[track]; }
 
 // After a project loads: the machine named `id` holds `track` again, with the
 // role's controls as kept; a machine this build lacks leaves the role in place.
 // Called from inside stock's project load, while the project is not yet in
 // use (stock asserts if its track data is touched then, data.cpp:985): it only
 // records the holder; the next GUI tick marks the track.
-void sdk_aux_restore(u32 track, const char* id, u32 id_length, const i32* controls) {
+void aux_restore(u32 track, const char* id, u32 id_length, const i32* controls) {
     if (!takeable(track)) return;
     for (u32 i = 0; i < sdk_control_machine_count; ++i) {
         const ControlMachine& m = sdk_control_machines[i];
@@ -458,7 +451,16 @@ void sdk_aux_restore(u32 track, const char* id, u32 id_length, const i32* contro
 }
 
 // Before a project loads, and for a new one: every aux track has its stock role.
-// Records only, as sdk_aux_restore does.
-void sdk_aux_forget() {
+// Records only, as aux_restore does.
+void aux_forget() {
     for (u32 t = 0; t < control::all_tracks; ++t) holders[t] = 0;
+}
+}
+
+// On the GUI role at startup (startup.cpp): track control, the project
+// companion and synth_controls.cpp, a shared unit, reach this service through
+// these pointers only.
+void sdk_aux_startup() {
+    sdk_aux = AuxService{aux_engine, aux_tick, aux_holder, aux_kept, aux_restore, aux_forget};
+    sdk_aux_engine = aux_engine;
 }

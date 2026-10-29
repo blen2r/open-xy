@@ -3,7 +3,7 @@
 // Every firmware rule (edits, hooks, identity ranges, catalog offsets, table
 // bytes) comes from the reviewed profile, authenticated by this digest. The
 // Python SDK reads the same constant.
-export const PROFILE_SHA256 = 'd3daf2b273529c01ad4dadbe146e0bd3b0d8142027dee399852d22beaee59ee4';
+export const PROFILE_SHA256 = 'df2473c9601ecbaa7201138697a485b9f05f7ad8276fa6b3cba06d9d79533e4d';
 export function requireThat(ok, message) { if (!ok) throw new Error(message); }
 const check = requireThat;
 const utf8 = new TextEncoder();
@@ -448,7 +448,8 @@ export async function patchFirmware(kit, linked, stock, {profiling = true} = {})
       covering[0].offset + 16 + site - covering[0].target === offset &&
       equal(stock.subarray(offset, offset + before.length), before), 'Patch preimage/mapping mismatch');
     let after;
-    check(edit.service === undefined || (edit.kind === 'hook' && Object.hasOwn(p.services ?? {}, edit.service)),
+    // A service's hooks, and its text edits (the MTP allowlist), apply only with it.
+    check(edit.service === undefined || (['hook', 'text'].includes(edit.kind) && Object.hasOwn(p.services ?? {}, edit.service)),
       'Undeclared service: ' + edit.service);
     check(edit.profiling === undefined || (edit.profiling === false && edit.kind === 'hook'),
       'Invalid profiling hook');

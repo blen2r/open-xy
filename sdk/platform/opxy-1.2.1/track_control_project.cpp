@@ -19,13 +19,6 @@ extern "C" opxy::u32 sdk_control_kept_write(void* file) __asm__("sdk_control_kep
 extern "C" opxy::u32 sdk_project_read(void* project, const char* path) __asm__("sdk_project_read");
 extern "C" opxy::u32 sdk_project_clear(opxy::u32, opxy::u32, opxy::u32) __asm__("sdk_project_clear");
 extern "C" opxy::u32 sdk_project_clear_random(opxy::u32, opxy::u32, opxy::u32) __asm__("sdk_project_clear_random");
-extern "C" {
-const char* sdk_aux_holder_id(opxy::u32 track) __asm__("sdk_aux_holder_id");
-const opxy::i32* sdk_aux_kept_controls(opxy::u32 track) __asm__("sdk_aux_kept_controls");
-void sdk_aux_restore(opxy::u32 track, const char* id, opxy::u32 id_length, const opxy::i32* controls)
-    __asm__("sdk_aux_restore");
-void sdk_aux_forget() __asm__("sdk_aux_forget");
-}
 
 namespace {
 u32 read(void* project, const char* path) { return stock<u32(void*, const char*)>(0x8d599b10)(project, path); }
@@ -225,8 +218,8 @@ void load_kept(const char* path) {
     }
     // Each aux track a machine held: {"machine": id, "controls": base64 of the
     // role's eight controls}. Tracks without one keep their stock role.
-    sdk_aux_forget();
-    if (!found || !r.member(at, to, "aux", aux_at, aux_to)) return;
+    if (sdk_aux.forget) sdk_aux.forget();
+    if (!found || !sdk_aux.restore || !r.member(at, to, "aux", aux_at, aux_to)) return;
     for (u32 t = 0; t < opxy::control::all_tracks; ++t) {
         u32 a, b, c, d, e, f;
         if (!r.member(aux_at, aux_to, kAuxKeys[t], a, b) || !r.member(a, b, "machine", c, d) ||
@@ -237,7 +230,7 @@ void load_kept(const char* path) {
         for (u32 i = 0; i < kAuxControls; ++i)
             controls[i] = static_cast<opxy::i32>(kept[4 * i] | kept[4 * i + 1] << 8 | kept[4 * i + 2] << 16 |
                                                  static_cast<u32>(kept[4 * i + 3]) << 24);
-        sdk_aux_restore(t, project_text + c + 1, d - c - 2, controls);
+        sdk_aux.restore(t, project_text + c + 1, d - c - 2, controls);
     }
 }
 
@@ -248,7 +241,7 @@ void forget_kept() {
         const opxy::platform::ControlMachine& m = sdk_control_machines[i];
         if (m.load && m.ready() == 1) m.load(kept, 0);
     }
-    sdk_aux_forget();
+    if (sdk_aux.forget) sdk_aux.forget();
 }
 }
 
@@ -261,12 +254,12 @@ extern "C" u32 sdk_control_kept_write(void* file) {
     static const u32 kAuxOrder[] = {10, 11, 12, 13, 14, 15, 8, 9};
     u32 held = 0, listed = 0;
     for (u32 t : kAuxOrder) {
-        const char* id = sdk_aux_holder_id(t);
+        const char* id = sdk_aux.holder ? sdk_aux.holder(t) : nullptr;
         if (!id) continue;
         out.put(held++ ? "\n        },\n        \"" : "    \"open-xy.control\": {\n      \"aux\": {\n        \"");
         out.put(kAuxKeys[t]);
         out.put("\": {\n          \"controls\": \"");
-        const opxy::i32* controls = sdk_aux_kept_controls(t);
+        const opxy::i32* controls = sdk_aux.kept(t);
         for (u32 i = 0; i < kAuxControls; ++i)
             for (u32 b = 0; b < 4; ++b) kept[4 * i + b] = static_cast<unsigned char>(static_cast<u32>(controls[i]) >> (8 * b));
         out.base64(kept, kAuxControls * 4);

@@ -97,6 +97,9 @@
     "control": [
       "trackControl",
       "hidePages"
+    ],
+    "aux": [
+      "auxTrack"
     ]
   },
   "patches": [
@@ -927,7 +930,7 @@
       "length": 36,
       "before": "5e2f73616d706c65732f5b5c775c645c215c2b5c2d5c405c5b5c5d20232d295d2b240000",
       "after": "5e2f6175785f707265736574732f3f5b5c775c2d20232d295d2a24000000000000000000",
-      "service": "control"
+      "service": "aux"
     },
     {
       "kind": "text",
@@ -937,7 +940,7 @@
       "length": 60,
       "before": "5e2f73616d706c65732f5b5c775c645c215c2b5c2d5c405c5b5c5d20232d295d2b2f5b5c775c645c215c2b5c2d5c405c5b5c5d20232d295d2b240000",
       "after": "5e2f73616d706c65732f5b5c775c215c2b5c2d5c405c5b5c5d20232d295d2b2f3f5b5c775c215c2b5c2d5c405c5b5c5d20232d295d2a240000000000",
-      "service": "control"
+      "service": "aux"
     },
     {
       "kind": "text",
@@ -947,7 +950,7 @@
       "length": 112,
       "before": "5e2f707265736574732f5b5c775c645c215c2b5c2d5c405c5b5c5d20232d295d2b2f5b5c775c645c215c2b5c2d5c405c5b5c5d20232d295d2b5c2e7072657365742f5b5c775c645c215c2b5c2d5c405c5b5c5d20232d295d2b5c2e5b61415d5b69495d5b66465d5b66465d2400000000",
       "after": "5e2f707265736574732f5b5c775c215c2b5c2d5c405c5b5c5d20232d295d2b2f5b5c775c215c2b5c2d5c405c5b5c5d20232d295d2b5c2e7072657365742f5b5c775c215c2b5c2d5c405c5b5c5d20232d295d2b5c2e5b61415d5b69495d5b66465d5b664663435d240000000000000000",
-      "service": "control"
+      "service": "aux"
     },
     {
       "kind": "text",
@@ -957,7 +960,7 @@
       "length": 112,
       "before": "5e2f707265736574732f5b5c775c645c215c2b5c2d5c405c5b5c5d20232d295d2b2f5b5c775c645c215c2b5c2d5c405c5b5c5d20232d295d2b5c2e7072657365742f5b5c775c645c215c2b5c2d5c405c5b5c5d20232d295d2b5c2e5b61415d5b69495d5b66465d5b63435d2400000000",
       "after": "5e2f6175785f707265736574732f5b5c775c215c2b5c2d5c405c5b5c5d20232d295d2b2f5b5c775c215c2b5c2d5c405c5b5c5d20232d295d2b5c2e6a736f6e24000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-      "service": "control"
+      "service": "aux"
     },
     {
       "kind": "hook",
@@ -1268,7 +1271,7 @@
       "before": "01e8000008601000",
       "symbol": "sdk_aux_shift_m1_hook",
       "call": true,
-      "service": "control"
+      "service": "aux"
     },
     {
       "kind": "hook",
@@ -1279,7 +1282,7 @@
       "before": "09da0a8434050000",
       "symbol": "sdk_aux_page_hook",
       "call": true,
-      "service": "control"
+      "service": "aux"
     },
     {
       "kind": "hook",
@@ -1290,7 +1293,7 @@
       "before": "6005213039307160",
       "symbol": "sdk_aux_shift_track_hook",
       "call": true,
-      "service": "control"
+      "service": "aux"
     },
     {
       "kind": "hook",
@@ -1301,7 +1304,7 @@
       "before": "ffe3dce7",
       "symbol": "sdk_cv_output",
       "call": true,
-      "service": "control"
+      "service": "aux"
     },
     {
       "kind": "hook",
@@ -1312,7 +1315,7 @@
       "before": "05e3423b",
       "symbol": "sdk_cv_gate_on",
       "call": true,
-      "service": "control"
+      "service": "aux"
     },
     {
       "kind": "startup",

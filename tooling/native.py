@@ -189,6 +189,8 @@ def machine_uses(machines):
         uses.add(m.kind)
         if track_control(m):
             uses.add('trackControl')
+            if track_control(m).get('aux'):
+                uses.add('auxTrack')
         if 'hidePages' in m.definition:
             uses.add('hidePages')
     return uses
@@ -203,8 +205,10 @@ UNIT_SERVICES = dict.fromkeys(('sample_machines', 'sample_hooks', 'sample_callba
 # registers at startup only in builds that link it, and startup stands in for the
 # saved data's entry points in builds that don't.
 UNIT_SERVICES.update(dict.fromkeys(('track_control', 'track_control_table', 'track_control_hooks',
-                                    'track_control_overlay', 'track_control_project', 'synth_pages', 'aux_tracks',
-                                    'aux_hooks'), 'control'))
+                                    'track_control_overlay', 'track_control_project', 'synth_pages'), 'control'))
+# Machines that take over aux tracks: the chooser, presets, pages and the stock
+# roles' silencers; startup starts it, and control reaches it through sdk_aux.
+UNIT_SERVICES.update(dict.fromkeys(('aux_tracks', 'aux_hooks'), 'aux'))
 
 
 def module_bytes(profile):
@@ -308,9 +312,10 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
                 return assemble_unit(startup_label.generate(folder, version), obj)
             if step == 'startup':
                 prefixes = [x.prefix for x in by_kind(machines, 'synth', 'sample')]
-                control = 'control' in active_services(profile, machine_uses(machines))
+                services = active_services(profile, machine_uses(machines))
                 return cxx(str(generate_startup(folder, prefixes, [x.prefix for x in effects],
-                                                [x.prefix for x in sample_engines], control)), obj)
+                                                [x.prefix for x in sample_engines], 'control' in services,
+                                                'aux' in services)), obj)
             if (ROOT / TEMPLATES / (step + '.cpp')).is_file():
                 return cxx(TEMPLATES + step + '.cpp', obj)
             return assemble_unit(ROOT / TEMPLATES / (step + '.s'), obj)

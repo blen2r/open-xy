@@ -65,15 +65,18 @@ opxy::u32 restored_track = 99, restored_length;
 char restored_id[16];
 opxy::i32 restored_controls[8];
 }
-const char* sdk_aux_holder_id(opxy::u32 track) { return track == 11 ? held_id : nullptr; }
-const opxy::i32* sdk_aux_kept_controls(opxy::u32) { return held_controls; }
-void sdk_aux_restore(opxy::u32 track, const char* id, opxy::u32 length, const opxy::i32* controls) {
+opxy::platform::AuxService sdk_aux;
+namespace {
+const char* aux_holder(opxy::u32 track) { return track == 11 ? held_id : nullptr; }
+const opxy::i32* aux_kept(opxy::u32) { return held_controls; }
+void aux_restore(opxy::u32 track, const char* id, opxy::u32 length, const opxy::i32* controls) {
     restored_track = track;
     restored_length = length;
     for (opxy::u32 i = 0; i < length && i < 15; ++i) restored_id[i] = id[i];
     for (opxy::u32 i = 0; i < 8; ++i) restored_controls[i] = controls[i];
 }
-void sdk_aux_forget() { restored_track = 99; }
+void aux_forget() { restored_track = 99; }
+}
 
 namespace {
 opxy::u32 stock_read(void*, const char*) { return save_result; }
@@ -113,6 +116,8 @@ int main(int argc, char** argv) {
     saving = argv[1];
     save_result = static_cast<unsigned>(std::atoi(argv[2]));
     if (std::getenv("HOLD")) held_id = "morph";
+    // The aux service, as its startup fills it in (unless NOAUX: a build without it).
+    if (!std::getenv("NOAUX")) sdk_aux = opxy::platform::AuxService{nullptr, nullptr, aux_holder, aux_kept, aux_restore, aux_forget};
     if (argc == 3) return sdk_project_save(nullptr, saving) == save_result ? 0 : 1;
     const std::string mode = argv[3];
     loading = mode == "busy";
