@@ -97,7 +97,7 @@ class PackageVerification(unittest.TestCase):
 
     def test_service_hooks_live_in_their_units_and_only_their_users_reach_them(self):
         services = native.object_services(self.machines)
-        uses = {m.id: native.machine_uses([m]) for m in self.machines}
+        uses = {m.id: set(native.service_users([m])) for m in self.machines}
         owner_of, needs = {}, {}
         for name, owner in self.report['objects'].items():
             defined, undefined = object_symbols(read(self.package / 'analysis' / name))
@@ -113,7 +113,7 @@ class PackageVerification(unittest.TestCase):
                 service = services.get(owner_of.get(symbol))
                 if service and name not in services:
                     # The startup, generated per selection, starts a service it links.
-                    user = native.machine_uses(self.machines) if name == 'sdk/startup.o' else uses.get(owner, set())
+                    user = set(native.service_users(self.machines)) if name == 'sdk/startup.o' else uses.get(owner, set())
                     self.assertTrue(user & set(users[service]), (name, symbol))
 
     def test_only_curated_engines_are_linked_and_added_to_stock_content(self):
