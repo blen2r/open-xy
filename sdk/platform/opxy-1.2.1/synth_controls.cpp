@@ -12,10 +12,8 @@ opxy::u32 sdk_synth_turn(opxy::u32, opxy::u32, opxy::u32, opxy::u32) __asm__("sd
 opxy::u32 sdk_effect_turn(opxy::u32, opxy::u32, opxy::u32, opxy::u32) __asm__("sdk_effect_turn");
 const char* sdk_fx_title(opxy::u32, opxy::u32) __asm__("sdk_fx_title");
 const char* sdk_synth_title(opxy::u32, opxy::u32) __asm__("sdk_synth_title");
-// The machine holding an aux track, as its engine, or 0 (aux_tracks.cpp, which
-// only builds with track control link; otherwise the symbol is null).
-opxy::u32 sdk_aux_engine(opxy::u32) __asm__("sdk_aux_engine") __attribute__((weak));
 }
+opxy::u32 (*sdk_aux_engine)(opxy::u32) = nullptr;
 
 namespace {
 using opxy::u32;
@@ -33,7 +31,7 @@ const u32 kAuxController = 0x0803fb6c;
 const u32 kAuxTab = 0x0801eae4;  // the aux page shown: M1..M4 as 0..3
 const u32 kSendTracks = 14;  // send tracks 14 and 15
 const u32 kAllTracks = 16;
-u32 aux_engine(u32 track) { return &sdk_aux_engine ? sdk_aux_engine(track) : 0; }
+u32 aux_engine(u32 track) { return sdk_aux_engine ? sdk_aux_engine(track) : 0; }
 // The controller on top of the GUI stack, which receives key events.
 u32 top_controller_vtable() { return *stock<const u32*()>(0x8c0944b0)(); }
 

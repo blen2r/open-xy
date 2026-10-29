@@ -33,6 +33,7 @@
 #include "track_control.hpp"
 #include "stock.hpp"
 #include "stock_browser.hpp"
+#include "synth_controls.hpp"
 
 extern "C" {
 void sdk_aux_m1(opxy::u32 controller, opxy::u32 tab) __asm__("sdk_aux_m1");
@@ -139,11 +140,12 @@ u32 opxy::platform::control_engine(u32 track) {
     return m ? m->engine() : 0;
 }
 
-// For synth_controls.cpp, which links without track control too.
-extern "C" u32 sdk_aux_engine(u32 track) __asm__("sdk_aux_engine");
-extern "C" u32 sdk_aux_engine(u32 track) { return track >= kFirstAux ? control_engine(track) : 0; }
+// For synth_controls.cpp, a shared unit that links without track control too:
+// it asks through sdk_aux_engine, which the first GUI tick points here.
+static u32 aux_engine(u32 track) { return track >= kFirstAux ? control_engine(track) : 0; }
 
 extern "C" void sdk_aux_tick() {
+    sdk_aux_engine = aux_engine;
     for (u32 t = kFirstAux; t < control::all_tracks; ++t) {
         const bool held = holder(t) != nullptr;
         if (held && live(t, kMarkWord) != kMark) live_set(t, kMarkWord, kMark);
