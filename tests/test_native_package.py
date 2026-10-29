@@ -106,7 +106,8 @@ class PackageVerification(unittest.TestCase):
             owner_of.update(dict.fromkeys(defined, name))
             needs[name] = (owner, undefined)
         for patch in self.report['patches']:
-            if patch.get('service') and patch['after'] != patch['before']:
+            # Service hooks call into their service's units; service text edits call nothing.
+            if patch.get('service') and patch['kind'] == 'hook' and patch['after'] != patch['before']:
                 self.assertEqual(services.get(owner_of[patch['symbol']]), patch['service'], patch['symbol'])
         # Only a service's own units and machines of the kinds or features it serves may use its symbols.
         users = self.patch_profile['services']
