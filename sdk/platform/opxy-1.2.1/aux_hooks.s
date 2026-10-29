@@ -1,7 +1,6 @@
-/* Aux track hooks in the aux controller (aux_tracks.cpp). Both replace eight
- * bytes with an absolute CALL into a stub here; neither site has live
- * caller-saved registers that the C++ they call could clobber, and no stock
- * branch lands inside either site's eight bytes.
+/* Aux track hooks in the aux controller (aux_tracks.cpp). Each replaces eight
+ * bytes with an absolute CALL into a stub here; no stock branch lands inside
+ * any site's eight bytes.
  */
 .section .text
 .align 2
@@ -25,6 +24,39 @@ sdk_aux_shift_m1_hook:
     R0 = 1;
     RTS;
 .size sdk_aux_shift_m1_hook, .-sdk_aux_shift_m1_hook
+
+/* 8c08f610: Shift + track key on an aux track reaches 8c08f60c(controller,
+ * track), which opens the effect list for the sends and does nothing else.
+ * Just after its LINK, `[--SP] = (R7:4); R4 = R1; R7 = R1; R1 = 14` fills
+ * eight bytes. The stub asks sdk_aux_shift_track(controller, track): when it
+ * opened a list (1), it leaves the method as its UNLINK; RTS would; otherwise it
+ * makes the replaced instructions and returns into stock at 8c08f618.
+ */
+.extern sdk_aux_shift_track
+.global sdk_aux_shift_track_hook
+.type sdk_aux_shift_track_hook, STT_FUNC
+sdk_aux_shift_track_hook:
+    LINK 0;
+    [--SP] = R0;
+    [--SP] = R1;
+    SP += -12;
+    CALL sdk_aux_shift_track;
+    SP += 12;
+    R2 = R0;
+    R1 = [SP++];
+    R0 = [SP++];
+    UNLINK;
+    CC = R2 == 0;
+    IF CC JUMP 1f;
+    UNLINK;
+    RTS;
+1:
+    [--SP] = (R7:4);
+    R4 = R1;
+    R7 = R1;
+    R1 = 14;
+    RTS;
+.size sdk_aux_shift_track_hook, .-sdk_aux_shift_track_hook
 
 /* 8c08f540: the aux page method 8c08f53c, just after its LINK 0xc, loads
  * P1 = 840a0534 (the selected track) over eight bytes. sdk_aux_page() answers

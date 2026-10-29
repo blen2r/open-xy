@@ -56,7 +56,7 @@ class TrackControl(unittest.TestCase):
         self.assertNotIn('sdk/track_control_table.o', native.object_owners(machines))
         with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
             table = generate_track_controls(folder, machines).read_text(encoding='utf-8')
-        self.assertIn('{nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}}', table)
+        self.assertIn('{nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}, nullptr, 0}', table)
         self.assertNotIn('probesynth', table)
 
     def test_a_machine_that_keeps_data_exports_save_and_load(self):
@@ -72,6 +72,32 @@ class TrackControl(unittest.TestCase):
         self.assertIn('ControlState states[1];', binding)
         self.assertIn('control_save(states[0], data, 100)', binding)
         self.assertIn('return bytes <= 100 ? bytes : 0;', binding)
+
+    def test_a_machine_on_aux_tracks_lists_its_presets(self):
+        synth = copy.deepcopy(fixture('probesynth'))
+        synth.definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4, 'unique': True,
+                                                         'aux': [12]}
+        names = [p['id'] for p in synth.definition['parameters']]
+        synth.definition['presets'] = {'Soft': {names[0]: 0.5}, 'Full': {n: 1 for n in names}}
+        with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
+            table = generate_track_controls(folder, [synth]).read_text(encoding='utf-8')
+            p = synth.prefix
+            # Track 12 is index 11; names lowercased for the list; values as stored words.
+            self.assertIn(f'true, 0x800u, {p}_page_id, ', table)
+            self.assertIn(f'{p}_aux_presets, 2}}', table)
+            self.assertIn('{"soft", {1073741824, ', table)
+            self.assertIn('{"full", {2147418112, 2147418112, ', table)
+            # A name the list cannot show, or an aux machine that is not unique, is refused.
+            synth.definition['presets'] = {'A name too long to show': {}}
+            with self.assertRaises(ValueError):
+                generate_track_controls(folder, [synth])
+        with self.assertRaises(ValueError):
+            validate_definition(with_control(fixture('probesynth').definition,
+                                             {'stateBytes': 8, 'stateAlignment': 4, 'aux': [12]}), 'synth')
+        with self.assertRaises(ValueError):
+            validate_definition(with_control(fixture('probesynth').definition,
+                                             {'stateBytes': 8, 'stateAlignment': 4, 'unique': True, 'aux': [11]}),
+                                'synth')
 
     def test_each_copy_of_a_machine_that_is_not_unique_has_its_own_state(self):
         synth = copy.deepcopy(fixture('probesynth'))
@@ -132,7 +158,7 @@ class TrackControl(unittest.TestCase):
         steering.definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4}
         hooks = [p for p in config()['patches'] if p.get('service') == 'control']
         self.assertEqual(sorted(p['symbol'] for p in hooks),
-                         ['sdk_aux_page_hook', 'sdk_aux_shift_m1_hook', 'sdk_cv_gate_on', 'sdk_cv_output', 'sdk_gui_tick',
+                         ['sdk_aux_page_hook', 'sdk_aux_shift_m1_hook', 'sdk_aux_shift_track_hook', 'sdk_cv_gate_on', 'sdk_cv_output', 'sdk_gui_tick',
                           'sdk_param_edit_set', 'sdk_param_shown_hook', 'sdk_project_clear',
                           'sdk_project_clear_random', 'sdk_project_read'])
         for machines, used in ((plain, False), ([steering], True)):

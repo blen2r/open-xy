@@ -52,7 +52,7 @@ static_assert(sizeof(Address) != 4 || sizeof(Row) == 72, "Stock browser row ABI"
 static_assert(sizeof(Address) != 4 || sizeof(Catalog) == 20, "Stock browser catalog ABI");
 static_assert(sizeof(Methods) == 16 * sizeof(void(*)()), "Stock browser delegate ABI");
 bool open(Session&, Row*, u32 count, const char* title,
-          const char* const* labels, u32 initial, Callbacks);
+          const char* const* labels, u32 initial, Callbacks, i32 track = -1);
 }
 // Declare as a zero-initialized static aggregate. Storage and callback context
 // must outlive the modal. Titles and labels are copied, printable ASCII 1..15.
@@ -65,9 +65,11 @@ template<u32 N> struct StockSelector {
     bool open(const char* title, const char* const (&labels)[N], u32 initial, Callbacks callbacks) {
         return detail::open(session, rows, N, title, labels, initial, callbacks);
     }
-    // The same with the first `count` rows, 1..N.
-    bool open(const char* title, const char* const* labels, u32 count, u32 initial, Callbacks callbacks) {
-        return count <= N && detail::open(session, rows, count, title, labels, initial, callbacks);
+    // The same with the first `count` rows, 1..N, and the heading's track
+    // number shown under the title as stock's own selectors show it (-1: none).
+    bool open(const char* title, const char* const* labels, u32 count, u32 initial, Callbacks callbacks,
+              i32 track = -1) {
+        return count <= N && detail::open(session, rows, count, title, labels, initial, callbacks, track);
     }
 };
 }}}

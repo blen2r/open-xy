@@ -463,7 +463,7 @@ def control_callbacks(m):
 
 def generate_track_controls(directory, machines):
     """The collection's synths with track control, as one table (track_control.hpp)."""
-    declarations, rows = [], []
+    declarations, rows, tables = [], [], []
     for m in machines:
         if not track_control(m):
             continue
@@ -486,9 +486,23 @@ def generate_track_controls(directory, machines):
         if m.display != 'stock':
             declarations.append(f'extern const char {p}_page_id[] __asm__("{p}_page_id");')
         defaults = ', '.join(str(d << 16) for d in catalog_defaults(m.definition))
+        # Its definition's presets, for an aux track it holds; as words, as its defaults are.
+        names = [parameter['id'] for parameter in m.definition['parameters']]
+        values = [[math.floor(preset.get(name, parameter['default']) * 32767 + 0.5) << 16
+                   for name, parameter in zip(names, m.definition['parameters'])] + [0] * (8 - len(names))
+                  for preset in m.definition['presets'].values()]
+        presets = 'nullptr, 0'
+        require(not aux or all(len(name) <= 15 for name in m.definition['presets']),
+                'A machine that takes over aux tracks names its presets in at most 15 characters')
+        if aux and values:
+            tables.append(f'const ControlPreset {p}_aux_presets[] = {{\n' + ''.join(
+                f'    {{{json.dumps(name.lower())}, {{{", ".join(map(str, v))}}}}},\n'
+                for name, v in zip(m.definition['presets'], values)) + '};')
+            presets = f'{p}_aux_presets, {len(values)}'
         rows.append(f'    {{{p}_engine_id, {p}_ready, {p}_control_reset, {p}_control, "{m.id}", {saved}, {callbacks}, '
-                    f'{unique}, {aux:#x}u, {page}, {{{defaults}}}}},')
-    return expand('track_control_table.cpp.in', dict(CONTROL_DECLS='\n'.join(declarations), MACHINES='\n'.join(rows)),
+                    f'{unique}, {aux:#x}u, {page}, {{{defaults}}}, {presets}}},')
+    return expand('track_control_table.cpp.in', dict(CONTROL_DECLS='\n'.join(declarations), MACHINES='\n'.join(rows),
+                                                     PRESETS='\n'.join(tables)),
                   Path(directory) / 'track_control_table.cpp')
 
 

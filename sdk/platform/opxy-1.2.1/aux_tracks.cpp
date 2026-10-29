@@ -11,7 +11,12 @@
 // (M1..M4 as 0..3) the word at 0801eae4.
 // - Its shifted-key method (8c08f6b0) ignores Shift + M1..M4. Its Shift + M1
 //   case (8c08f6ec) is hooked (aux_hooks.s): on a track a machine can take
-//   over, it opens the chooser.
+//   over, it opens the chooser, titled "engine".
+// - Shift + track key reaches 8c08f60c(controller, track), which opens the
+//   effect list on the sends only. The hook after its LINK (8c08f610) lists the
+//   presets of the machine holding the track, titled "preset", as Shift + track
+//   key does on tracks 1-8; choosing one sets the machine's eight controls.
+// Both lists show the track's number under the title, as stock's do.
 // - Its page method 8c08f53c answers the screen page for the selected track
 //   and tab; the hook at 8c08f540 answers the machine's page on tab 0.
 //
@@ -41,6 +46,7 @@
 
 extern "C" {
 void sdk_aux_shift_m1() __asm__("sdk_aux_shift_m1");
+opxy::u32 sdk_aux_shift_track(opxy::u32 controller, opxy::u32 track) __asm__("sdk_aux_shift_track");
 opxy::i32 sdk_aux_page() __asm__("sdk_aux_page");
 void sdk_cv_output(opxy::u32) __asm__("sdk_cv_output");
 void sdk_cv_gate_on(opxy::u32, opxy::u32, opxy::u32) __asm__("sdk_cv_gate_on");
@@ -143,7 +149,30 @@ bool open_chooser(u32 track) {
     }
     if (count == 1) return false;  // nothing to choose: M1 as stock
     chooser_track = track;
-    return chooser.open("engine", labels, count, initial, browser::Callbacks{nullptr, choose, nullptr});
+    return chooser.open("engine", labels, count, initial, browser::Callbacks{nullptr, choose, nullptr},
+                        static_cast<i32>(track));
+}
+
+// The presets of the machine holding a track, as Shift + track key lists them.
+const u32 kPresetChoices = 16;
+browser::StockSelector<kPresetChoices> preset_list = {};
+u32 preset_track;
+const ControlMachine* preset_machine;
+void apply_preset(void*, u32 index) {
+    if (holder(preset_track) != preset_machine || index >= preset_machine->preset_count) return;
+    for (u32 i = 0; i < kControls; ++i) param_set(preset_track, i, preset_machine->presets[index].values[i]);
+}
+
+bool open_presets(u32 track) {
+    const ControlMachine* m = holder(track);
+    if (!m || !m->preset_count) return false;
+    const char* labels[kPresetChoices];
+    const u32 count = m->preset_count < kPresetChoices ? m->preset_count : kPresetChoices;
+    for (u32 i = 0; i < count; ++i) labels[i] = m->presets[i].name;
+    preset_track = track;
+    preset_machine = m;
+    return preset_list.open("preset", labels, count, 0, browser::Callbacks{nullptr, apply_preset, nullptr},
+                            static_cast<i32>(track));
 }
 
 // The audio side's copy of a track's words, as stock's audio loop reads them.
@@ -186,6 +215,10 @@ void sdk_aux_shift_m1() {
     const u32 track = byte(kSelectedTrack);
     if (takeable(track)) open_chooser(track);
 }
+
+// 8c08f610: Shift + track key on an aux track. On one a machine holds, its
+// presets; 1 when the list opened, else 0 and stock goes on (the sends' effects).
+u32 sdk_aux_shift_track(u32, u32 track) { return open_presets(track) ? 1 : 0; }
 
 // 8c08f540: the selected aux track's page on tab 0 while a machine holds it, or
 // -1 for stock's.

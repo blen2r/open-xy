@@ -1242,6 +1242,17 @@
     },
     {
       "kind": "hook",
+      "name": "Shift + track key on an aux track a machine holds lists its presets",
+      "address": "0x8c08f610",
+      "file_offset": "0xc684c",
+      "length": 8,
+      "before": "6005213039307160",
+      "symbol": "sdk_aux_shift_track_hook",
+      "call": true,
+      "service": "control"
+    },
+    {
+      "kind": "hook",
       "name": "CV output stays silent while a machine holds the CV track",
       "address": "0x8d512214",
       "file_offset": "0x149470",
