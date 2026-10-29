@@ -96,13 +96,22 @@ void live_set(u32 track, u32 index, i32 value) {
     stock<void(u32, u32, u32, i32)>(0x8d5acea8)(kProject, track, index, value);
 }
 
-// Gives the track to machine `choice` (1 + its index) or back to its role (0).
+// Publishes a held track's mark before anything else reaches the audio side,
+// so the role stays silent from the first word the machine sets.
+void mark(u32 track) {
+    if (live(track, kMarkWord) != kMark) live_set(track, kMarkWord, kMark);
+    marked[track] = true;
+}
+
+// Gives the track to machine `choice` (1 + its index) or back to its role (0);
+// the next GUI tick clears the mark of a track given back.
 void take(u32 track, u32 choice) {
     if (choice == holders[track]) return;
     if (!holders[track])
         for (u32 i = 0; i < kControls; ++i) kept[track][i] = base(track, i);
     holders[track] = choice;
     const ControlMachine* m = holder(track);
+    if (m) mark(track);
     for (u32 i = 0; i < kControls; ++i) param_set(track, i, m ? m->defaults[i] : kept[track][i]);
 }
 
@@ -147,10 +156,12 @@ static u32 aux_engine(u32 track) { return track >= kFirstAux ? control_engine(tr
 extern "C" void sdk_aux_tick() {
     sdk_aux_engine = aux_engine;
     for (u32 t = kFirstAux; t < control::all_tracks; ++t) {
-        const bool held = holder(t) != nullptr;
-        if (held && live(t, kMarkWord) != kMark) live_set(t, kMarkWord, kMark);
-        else if (!held && marked[t] && live(t, kMarkWord) == kMark) live_set(t, kMarkWord, base(t, kMarkWord));
-        marked[t] = held;
+        if (holder(t)) {
+            mark(t);
+        } else if (marked[t]) {
+            if (live(t, kMarkWord) == kMark) live_set(t, kMarkWord, base(t, kMarkWord));
+            marked[t] = false;
+        }
     }
 }
 
@@ -204,6 +215,7 @@ void sdk_aux_restore(u32 track, const char* id, u32 id_length, const i32* contro
         if (n != id_length || m.name[n] || !(m.aux >> track & 1) || m.ready() != 1) continue;
         holders[track] = i + 1;
         for (u32 c = 0; c < kControls; ++c) kept[track][c] = controls[c];
+        mark(track);
         return;
     }
 }
