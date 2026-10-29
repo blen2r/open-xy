@@ -9,10 +9,9 @@
 // Stock OS 1.2.1, GUI side. The aux controller (method table 0803fb6c) serves
 // tracks 8..15; the selected track is the byte at 840a0534 and its page tab
 // (M1..M4 as 0..3) the word at 0801eae4.
-// - Its key method selects tab 0 for M1 with 8c08f74c(controller, 0), which
-//   returns to 8c08fd60, ignoring Shift. The selector's last call (8d560ac8,
-//   at 8c08f75a) is hooked (aux_hooks.s): after M1, while Shift is held on a
-//   track a machine can take over, the chooser opens.
+// - Its shifted-key method (8c08f6b0) ignores Shift + M1..M4. Its Shift + M1
+//   case (8c08f6ec) is hooked (aux_hooks.s): on a track a machine can take
+//   over, it opens the chooser.
 // - Its page method 8c08f53c answers the screen page for the selected track
 //   and tab; the hook at 8c08f540 answers the machine's page on tab 0.
 //
@@ -37,7 +36,7 @@
 #include "synth_controls.hpp"
 
 extern "C" {
-void sdk_aux_tab(opxy::u32 argument, opxy::u32 from) __asm__("sdk_aux_tab");
+void sdk_aux_shift_m1() __asm__("sdk_aux_shift_m1");
 opxy::i32 sdk_aux_page() __asm__("sdk_aux_page");
 void sdk_cv_output(opxy::u32) __asm__("sdk_cv_output");
 void sdk_cv_gate_on(opxy::u32, opxy::u32, opxy::u32) __asm__("sdk_cv_gate_on");
@@ -166,14 +165,11 @@ extern "C" void sdk_aux_tick() {
     }
 }
 
-// 8c08f75a: the aux tab selector's last call, made as stock makes it. When the
-// selector ran for M1 (it returns to 8c08fd60) with Shift held on a track a
-// machine can take over, the chooser opens over the first page.
-const u32 kFromM1 = 0x8c08fd60;
-void sdk_aux_tab(u32 argument, u32 from) {
-    stock<void(u32)>(0x8d560ac8)(argument);
+// 8c08f6ec: Shift + M1 on an aux track, which stock ignores. A track a
+// machine can take over opens the chooser.
+void sdk_aux_shift_m1() {
     const u32 track = byte(kSelectedTrack);
-    if (from == kFromM1 && shift_held() && takeable(track)) open_chooser(track);
+    if (takeable(track)) open_chooser(track);
 }
 
 // 8c08f540: the selected aux track's page on tab 0 while a machine holds it, or

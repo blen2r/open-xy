@@ -6,26 +6,25 @@
 .section .text
 .align 2
 
-/* 8c08f75a: the aux tab selector 8c08f74c(controller, tab) stores the tab and
- * then makes this CALL.A 8d560ac8 with the C ABI. The stub passes the
- * argument on and the selector's own return address, which its LINK saved at
- * [FP + 4], to sdk_aux_tab(argument, from); a return to 8c08fd60 means the key
- * method's M1. (The key method's own call site is no hook site: its branches
- * share the epilogue at 8c08fd60, inside those bytes.)
+/* 8c08f6ec: Shift + M1 in the aux controller's shifted-key method (method
+ * table entry +0x10, 8c08f6b0), reached through its jump table for key code 6:
+ * `UNLINK; R0 = 1; RTS`, which ignores the key and reports it handled. The
+ * stub calls sdk_aux_shift_m1(), then leaves the method as those eight bytes
+ * did.
  */
-.extern sdk_aux_tab
-.global sdk_aux_tab_hook
-.type sdk_aux_tab_hook, STT_FUNC
-sdk_aux_tab_hook:
+.extern sdk_aux_shift_m1
+.global sdk_aux_shift_m1_hook
+.type sdk_aux_shift_m1_hook, STT_FUNC
+sdk_aux_shift_m1_hook:
     LINK 0;
     SP += -12;
-    P0 = [FP];
-    R1 = [P0 + 4];
-    CALL sdk_aux_tab;
+    CALL sdk_aux_shift_m1;
     SP += 12;
     UNLINK;
+    UNLINK;
+    R0 = 1;
     RTS;
-.size sdk_aux_tab_hook, .-sdk_aux_tab_hook
+.size sdk_aux_shift_m1_hook, .-sdk_aux_shift_m1_hook
 
 /* 8c08f540: the aux page method 8c08f53c, just after its LINK 0xc, loads
  * P1 = 840a0534 (the selected track) over eight bytes. sdk_aux_page() answers
