@@ -9,9 +9,10 @@
 // Stock OS 1.2.1, GUI side. The aux controller (method table 0803fb6c) serves
 // tracks 8..15; the selected track is the byte at 840a0534 and its page tab
 // (M1..M4 as 0..3) the word at 0801eae4.
-// - Its key method selects tab 0 for M1 with 8c08f74c(controller, 0) at
-//   8c08fd5a, ignoring Shift; the hook there (aux_hooks.s) opens the chooser
-//   instead while Shift is held on a track a machine can take over.
+// - Its key method selects tab 0 for M1 with 8c08f74c(controller, 0), which
+//   returns to 8c08fd60, ignoring Shift. The selector's last call (8d560ac8,
+//   at 8c08f75a) is hooked (aux_hooks.s): after M1, while Shift is held on a
+//   track a machine can take over, the chooser opens.
 // - Its page method 8c08f53c answers the screen page for the selected track
 //   and tab; the hook at 8c08f540 answers the machine's page on tab 0.
 //
@@ -36,7 +37,7 @@
 #include "synth_controls.hpp"
 
 extern "C" {
-void sdk_aux_m1(opxy::u32 controller, opxy::u32 tab) __asm__("sdk_aux_m1");
+void sdk_aux_tab(opxy::u32 argument, opxy::u32 from) __asm__("sdk_aux_tab");
 opxy::i32 sdk_aux_page() __asm__("sdk_aux_page");
 void sdk_cv_output(opxy::u32) __asm__("sdk_cv_output");
 void sdk_cv_gate_on(opxy::u32, opxy::u32, opxy::u32) __asm__("sdk_cv_gate_on");
@@ -165,12 +166,14 @@ extern "C" void sdk_aux_tick() {
     }
 }
 
-// 8c08fd5a: M1 on an aux track. With Shift held, a track a machine can take over
-// opens the chooser; otherwise, or when it cannot open, M1 selects tab 0 as stock.
-void sdk_aux_m1(u32 controller, u32 tab) {
+// 8c08f75a: the aux tab selector's last call, made as stock makes it. When the
+// selector ran for M1 (it returns to 8c08fd60) with Shift held on a track a
+// machine can take over, the chooser opens over the first page.
+const u32 kFromM1 = 0x8c08fd60;
+void sdk_aux_tab(u32 argument, u32 from) {
+    stock<void(u32)>(0x8d560ac8)(argument);
     const u32 track = byte(kSelectedTrack);
-    if (shift_held() && takeable(track) && open_chooser(track)) return;
-    stock<void(u32, u32)>(0x8c08f74c)(controller, tab);
+    if (from == kFromM1 && shift_held() && takeable(track)) open_chooser(track);
 }
 
 // 8c08f540: the selected aux track's page on tab 0 while a machine holds it, or

@@ -1221,11 +1221,11 @@
     {
       "kind": "hook",
       "name": "Shift + M1 on an aux track opens the machine chooser",
-      "address": "0x8c08fd5a",
-      "file_offset": "0xc6f96",
+      "address": "0x8c08f75a",
+      "file_offset": "0xc6996",
       "length": 8,
-      "before": "0160ffe3f8fc666c",
-      "symbol": "sdk_aux_m1_hook",
+      "before": "00de568dc80a0000",
+      "symbol": "sdk_aux_tab_hook",
       "call": true,
       "service": "control"
     },

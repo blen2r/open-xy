@@ -1,28 +1,31 @@
 /* Aux track hooks in the aux controller (aux_tracks.cpp). Both replace eight
  * bytes with an absolute CALL into a stub here; neither site has live
- * caller-saved registers that the C++ they call could clobber.
+ * caller-saved registers that the C++ they call could clobber, and no stock
+ * branch lands inside either site's eight bytes.
  */
 .section .text
 .align 2
 
-/* 8c08fd5a: M1 in the aux controller's key method, `R1 = 0; CALL 8c08f74c;
- * SP += 12`, with the controller in R0. The stub calls sdk_aux_m1(controller,
- * 0), which selects tab 0 as stock does or opens the chooser, then makes the
- * replaced SP += 12 before returning to the method's epilogue at 8c08fd62.
+/* 8c08f75a: the aux tab selector 8c08f74c(controller, tab) stores the tab and
+ * then makes this CALL.A 8d560ac8 with the C ABI. The stub passes the
+ * argument on and the selector's own return address, which its LINK saved at
+ * [FP + 4], to sdk_aux_tab(argument, from); a return to 8c08fd60 means the key
+ * method's M1. (The key method's own call site is no hook site: its branches
+ * share the epilogue at 8c08fd60, inside those bytes.)
  */
-.extern sdk_aux_m1
-.global sdk_aux_m1_hook
-.type sdk_aux_m1_hook, STT_FUNC
-sdk_aux_m1_hook:
+.extern sdk_aux_tab
+.global sdk_aux_tab_hook
+.type sdk_aux_tab_hook, STT_FUNC
+sdk_aux_tab_hook:
     LINK 0;
     SP += -12;
-    R1 = 0;
-    CALL sdk_aux_m1;
+    P0 = [FP];
+    R1 = [P0 + 4];
+    CALL sdk_aux_tab;
     SP += 12;
     UNLINK;
-    SP += 12;
     RTS;
-.size sdk_aux_m1_hook, .-sdk_aux_m1_hook
+.size sdk_aux_tab_hook, .-sdk_aux_tab_hook
 
 /* 8c08f540: the aux page method 8c08f53c, just after its LINK 0xc, loads
  * P1 = 840a0534 (the selected track) over eight bytes. sdk_aux_page() answers
