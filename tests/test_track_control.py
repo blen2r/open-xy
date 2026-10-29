@@ -56,7 +56,7 @@ class TrackControl(unittest.TestCase):
         self.assertNotIn('sdk/track_control_table.o', native.object_owners(machines))
         with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
             table = generate_track_controls(folder, machines).read_text(encoding='utf-8')
-        self.assertIn('{nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false}', table)
+        self.assertIn('{nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}}', table)
         self.assertNotIn('probesynth', table)
 
     def test_a_machine_that_keeps_data_exports_save_and_load(self):
@@ -68,7 +68,7 @@ class TrackControl(unittest.TestCase):
             table = generate_track_controls(folder, [synth]).read_text(encoding='utf-8')
             binding = generate_control(folder, synth).read_text(encoding='utf-8')
         p = synth.prefix
-        self.assertIn(f'"{synth.id}", 100, {p}_control_save, {p}_control_load, true}}', table)
+        self.assertIn(f'"{synth.id}", 100, {p}_control_save, {p}_control_load, true, 0x0u, {p}_page_id, ', table)
         self.assertIn('ControlState states[1];', binding)
         self.assertIn('control_save(states[0], data, 100)', binding)
         self.assertIn('return bytes <= 100 ? bytes : 0;', binding)
@@ -79,7 +79,7 @@ class TrackControl(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
             table = generate_track_controls(folder, [synth]).read_text(encoding='utf-8')
             binding = generate_control(folder, synth).read_text(encoding='utf-8')
-        self.assertIn('nullptr, nullptr, false}', table)
+        self.assertIn('nullptr, nullptr, false, 0x0u, ', table)
         self.assertIn('ControlState states[8];', binding)
         self.assertIn('control_reset(states[copy])', binding)
         self.assertIn('control(states[copy], *input, *overlay)', binding)
@@ -132,7 +132,8 @@ class TrackControl(unittest.TestCase):
         steering.definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4}
         hooks = [p for p in config()['patches'] if p.get('service') == 'control']
         self.assertEqual(sorted(p['symbol'] for p in hooks),
-                         ['sdk_gui_tick', 'sdk_param_edit_set', 'sdk_param_shown_hook', 'sdk_project_clear',
+                         ['sdk_aux_m1_hook', 'sdk_aux_page_hook', 'sdk_cv_gate_on', 'sdk_cv_output', 'sdk_gui_tick',
+                          'sdk_param_edit_set', 'sdk_param_shown_hook', 'sdk_project_clear',
                           'sdk_project_clear_random', 'sdk_project_read'])
         for machines, used in ((plain, False), ([steering], True)):
             services = active_services(config(), native.machine_uses(machines))
@@ -140,7 +141,7 @@ class TrackControl(unittest.TestCase):
             self.assertEqual(all(patch_active(p, services) for p in hooks), used)
             units = {step for _name, _m, step in native.plan(machines)}
             for unit in ('track_control', 'track_control_table', 'track_control_hooks', 'track_control_overlay',
-                         'track_control_project'):
+                         'track_control_project', 'aux_tracks', 'aux_hooks'):
                 self.assertEqual(unit in units, used)
         # Startup reaches the saved data's writer only with the service.
         from tooling.startup import render

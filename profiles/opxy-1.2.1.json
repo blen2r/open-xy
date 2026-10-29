@@ -1219,6 +1219,50 @@
       "service": "control"
     },
     {
+      "kind": "hook",
+      "name": "Shift + M1 on an aux track opens the machine chooser",
+      "address": "0x8c08fd5a",
+      "file_offset": "0xc6f96",
+      "length": 8,
+      "before": "0160ffe3f8fc666c",
+      "symbol": "sdk_aux_m1_hook",
+      "call": true,
+      "service": "control"
+    },
+    {
+      "kind": "hook",
+      "name": "An aux track a machine holds shows the machine's page",
+      "address": "0x8c08f540",
+      "file_offset": "0xc677c",
+      "length": 8,
+      "before": "09da0a8434050000",
+      "symbol": "sdk_aux_page_hook",
+      "call": true,
+      "service": "control"
+    },
+    {
+      "kind": "hook",
+      "name": "CV output stays silent while a machine holds the CV track",
+      "address": "0x8d512214",
+      "file_offset": "0x149470",
+      "length": 4,
+      "before": "ffe3dce7",
+      "symbol": "sdk_cv_output",
+      "call": true,
+      "service": "control"
+    },
+    {
+      "kind": "hook",
+      "name": "CV gate stays low while a machine holds the CV track",
+      "address": "0x8d50e95c",
+      "file_offset": "0x145bb8",
+      "length": 4,
+      "before": "05e3423b",
+      "symbol": "sdk_cv_gate_on",
+      "call": true,
+      "service": "control"
+    },
+    {
       "kind": "startup",
       "name": "Boot-screen version label",
       "address": "0x8c0b85dc",

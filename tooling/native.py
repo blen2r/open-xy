@@ -180,7 +180,8 @@ SDK_UNITS = ('divide', 'memory', 'registration', 'registration_stock', 'startup'
              'pad_assignment_stock', 'drum_page', 'drum_controls_stock', 'drum_display_stock', 'screen_order',
              'screen_hooks', 'synth_controls', 'synth_control_table', 'note_activity', 'project_companion',
              'project_companion_table', 'profiling', 'lfo', 'lfo_stock', 'lfo_hooks', 'stock_browser', 'track_control',
-             'track_control_table', 'track_control_hooks', 'track_control_overlay', 'track_control_project')
+             'track_control_table', 'track_control_hooks', 'track_control_overlay', 'track_control_project',
+             'aux_tracks', 'aux_hooks')
 def machine_uses(machines):
     """What machines use, for profile services: their kinds and the features they declare."""
     uses = set()
@@ -200,7 +201,8 @@ UNIT_SERVICES = dict.fromkeys(('sample_machines', 'sample_hooks', 'sample_callba
 # registers at startup only in builds that link it, and startup stands in for the
 # saved data's entry points in builds that don't.
 UNIT_SERVICES.update(dict.fromkeys(('track_control', 'track_control_table', 'track_control_hooks',
-                                    'track_control_overlay', 'track_control_project'), 'control'))
+                                    'track_control_overlay', 'track_control_project', 'aux_tracks', 'aux_hooks'),
+                                   'control'))
 
 
 def module_bytes(profile):

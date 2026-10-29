@@ -11,6 +11,7 @@ import binascii
 import json
 from pathlib import Path
 import re
+import struct
 import zlib
 
 from .formats import require
@@ -23,7 +24,8 @@ SUFFIX = '.oxy'
 LIMIT = 64 * 1024
 MACHINES = 'open-xy.machines'
 MACHINES_VERSION = 1
-# What track control machines keep with a project, base64 by machine ID.
+# What track control machines keep with a project, base64 by machine ID, and
+# which machine holds each aux track it took over, by track index.
 CONTROL = 'open-xy.control'
 CONTROL_VERSION = 1
 # owner.name: the owner is a GitHub user or organisation, lowercased; `open-xy` is the SDK's.
@@ -97,7 +99,17 @@ def kept_data(document, data):
     section = document['sections'].get(CONTROL)
     if not describes(document, data) or not section or section['version'] > CONTROL_VERSION:
         return {}
-    return {name: base64.b64decode(kept) for name, kept in section['machines'].items()}
+    return {name: base64.b64decode(kept) for name, kept in section.get('machines', {}).items()}
+
+
+def aux_holders(document, data):
+    """Each aux track a machine held in these project bytes, by track index: the machine
+    ID and the stock role's eight controls, which the firmware gives back on release."""
+    section = document['sections'].get(CONTROL)
+    if not describes(document, data) or not section or section['version'] > CONTROL_VERSION:
+        return {}
+    return {int(track): (held['machine'], list(struct.unpack('<8i', base64.b64decode(held['controls']))))
+            for track, held in section.get('aux', {}).items()}
 
 
 def translation(saved, layout):
@@ -114,18 +126,24 @@ def translation(saved, layout):
     return result
 
 
-def companion(data, layout, previous=None, profile=None, kept=None):
-    """The companion for project bytes `data` saved with `layout`, and what track control
-    machines `kept` (bytes by machine ID), as the firmware writes it. Other sections are
-    kept from `previous` only while it still describes the same bytes."""
+def companion(data, layout, previous=None, profile=None, kept=None, aux=None):
+    """The companion for project bytes `data` saved with `layout`, what track control
+    machines `kept` (bytes by machine ID) and the `aux` tracks machines held (machine ID
+    and the role's eight controls, by track index), as the firmware writes it. Other
+    sections are kept from `previous` only while it still describes the same bytes."""
     sections = {}
     if previous and describes(previous, data):
         sections = {name: section for name, section in previous['sections'].items() if name != MACHINES}
     sections[MACHINES] = {'version': MACHINES_VERSION, 'profile': profile or config()['id'],
                           'machines': check_layout_numbers(layout, 'the layout')}
+    if kept or aux:
+        sections[CONTROL] = {'version': CONTROL_VERSION}
     if kept:
-        sections[CONTROL] = {'version': CONTROL_VERSION,
-                             'machines': {name: base64.b64encode(value).decode() for name, value in kept.items()}}
+        sections[CONTROL]['machines'] = {name: base64.b64encode(value).decode() for name, value in kept.items()}
+    if aux:
+        sections[CONTROL]['aux'] = {str(track): {'machine': machine,
+                                                 'controls': base64.b64encode(struct.pack('<8i', *controls)).decode()}
+                                    for track, (machine, controls) in aux.items()}
     return canonical({'format': FORMAT, 'version': VERSION, 'project': binding(data), 'sections': sections})
 
 

@@ -7,7 +7,8 @@
 // publishes to the audio side. The saved project holds separate base values,
 // so an overlay written here never reaches a saved project. Each tick the SDK
 // notices stock's own writes over an overlaid value, runs every machine on
-// tracks 0..7 in track order with every value without overlays, writes their
+// tracks 0..7, then on the aux tracks machines took over (aux_tracks.cpp), in
+// track order with every value without overlays, writes their
 // overlays through 8d5acea8 (the later track's winning a parameter both
 // overlay), and restores what stock last set wherever no machine overlays.
 //
@@ -72,10 +73,12 @@ Wanted wanted[kAppliedCapacity];
 u32 wanted_count;
 control::Input input;
 control::Overlay overlay;
+// Every track, aux tracks included, can host a machine; kNoTrack is none.
+const u32 kNoTrack = control::all_tracks;
 // The machine each track ran last tick, to reset a copy that arrives, and
 // whether that copy's next tick is timed.
-const ControlMachine* hosts[control::tracks];
-bool timed[control::tracks];
+const ControlMachine* hosts[control::all_tracks];
+bool timed[control::all_tracks];
 // The core clock, 400 MHz, as cycles per microsecond, and the cycle count at
 // the last tick, for each tick's elapsed time.
 const u32 kCyclesPerMicrosecond = 400;
@@ -83,24 +86,25 @@ u32 last_cycles;
 // GUI ticks so far, and the last encoder edit's parameter and tick. For
 // kTurnTicks after it the edited parameter shows its base value.
 const u32 kTurnTicks = 40;
-u32 gui_ticks, turned_track = control::tracks, turned_index, turned_tick;
+u32 gui_ticks, turned_track = kNoTrack, turned_index, turned_tick;
 
-// Capture: the track whose copy captures (tracks when none), edits since the
+// Capture: the track whose copy captures (kNoTrack when none), edits since the
 // last tick, and each edited parameter's base value from before the capture.
 // A parameter with no room to restore is not captured.
 const u32 kOriginals = 2 * control::overlay_capacity;
-u32 capture_track = control::tracks;
+u32 capture_track = kNoTrack;
 // The tracks whose machine asked to mark the pages of the tracks it overlays.
-bool marking[control::tracks];
+bool marking[control::all_tracks];
 control::Entry pending[control::edit_capacity];
 u32 pending_count;
 control::Entry originals[kOriginals];
 u32 original_count;
 // What each track's machine passed to its display last tick.
-i32 shown_words[control::tracks][control::display_words];
+i32 shown_words[control::all_tracks][control::display_words];
 
 const ControlMachine* owner(u32 track) {
-    const u32 engine = track_engine(track);
+    const u32 engine = control_engine(track);
+    if (!engine) return nullptr;
     for (u32 i = 0; i < sdk_control_machine_count; ++i) {
         const ControlMachine& m = sdk_control_machines[i];
         if (m.engine() == engine) return m.ready() == 1 ? &m : nullptr;
@@ -124,7 +128,7 @@ void end_capture() {
     }
     original_count = 0;
     pending_count = 0;
-    capture_track = control::tracks;
+    capture_track = kNoTrack;
 }
 
 // Adds the overlay of the machine on `host`: entries in range and not on its
@@ -149,7 +153,7 @@ void merge(u32 host) {
 }
 
 Marks opxy::platform::control_marks() {
-    if (capture_track < control::tracks && hosts[capture_track])
+    if (capture_track < kNoTrack && hosts[capture_track])
         return Marks{kMarkCapture, machine_index(hosts[capture_track])};
     const u32 track = selected_track();
     for (u32 i = 0; i < applied_count; ++i) {
@@ -162,14 +166,15 @@ Marks opxy::platform::control_marks() {
 
 extern "C" i32 sdk_control_display(u32 index) {
     const u32 track = selected_track();
-    return track < control::tracks && index < control::display_words ? shown_words[track][index] : 0;
+    return track < control::all_tracks && index < control::display_words ? shown_words[track][index] : 0;
 }
 
 extern "C" u32 sdk_control_copies(u32 track) {
-    if (track >= 16) return 0;
-    const u32 engine = track_engine(track);
+    if (track >= control::all_tracks) return 0;
+    const u32 engine = control_engine(track);
+    if (!engine) return 0;
     u32 count = 0;
-    for (u32 t = 0; t < control::tracks; ++t) count += track_engine(t) == engine;
+    for (u32 t = 0; t < control::all_tracks; ++t) count += control_engine(t) == engine;
     return count;
 }
 
@@ -185,7 +190,7 @@ extern "C" void sdk_param_edit_set(u32 project, u32 track, u32 index, i32 value)
     turned_track = track;
     turned_index = index;
     turned_tick = gui_ticks;
-    if (capture_track < control::tracks && track < control::tracks && track != capture_track &&
+    if (capture_track < kNoTrack && track < control::tracks && track != capture_track &&
         index < control::track_parameters) {
         bool known = false;
         for (u32 i = 0; i < original_count && !known; ++i)
@@ -213,6 +218,7 @@ extern "C" void sdk_gui_tick() {
     stock<void()>(0x8d580074)();
     ++gui_ticks;
     if (!sdk_control_machine_count && !applied_count) return;
+    sdk_aux_tick();
 
     // A value that differs from the one written is stock's: an edit, a lock or a step.
     for (u32 i = 0; i < applied_count; ++i) {
@@ -221,15 +227,15 @@ extern "C" void sdk_gui_tick() {
         applied[i].wanted = 0;
     }
 
-    // Every instrument track's ready control machine runs, in track order:
+    // Every track's ready control machine runs, in track order:
     // each copy of a machine with its own state, except a unique machine that
     // more than one track holds, which none runs.
     const u32 now = opxy::benchmark::cycles(), us = (now - last_cycles) / kCyclesPerMicrosecond;
     last_cycles = now;
     wanted_count = 0;
     bool loaded = false, kept = false;
-    u32 asking = control::tracks;
-    for (u32 t = 0; t < control::tracks; ++t) {
+    u32 asking = kNoTrack;
+    for (u32 t = 0; t < control::all_tracks; ++t) {
         const ControlMachine* m = owner(t);
         if (m && m->unique && sdk_control_copies(t) > 1) m = nullptr;
         const u32 copy = m && !m->unique ? t : 0;
@@ -243,7 +249,7 @@ extern "C" void sdk_gui_tick() {
         for (u32 i = 0; i < control::display_words; ++i) shown_words[t][i] = 0;
         if (!m) continue;
         if (!loaded) {
-            for (u32 u = 0; u < control::tracks; ++u)
+            for (u32 u = 0; u < control::all_tracks; ++u)
                 for (u32 p = 0; p < control::track_parameters; ++p) input.values[u][p] = live(u, p);
             for (u32 i = 0; i < applied_count; ++i)
                 input.values[applied[i].track][applied[i].index] = applied[i].underlying;
@@ -272,7 +278,7 @@ extern "C" void sdk_gui_tick() {
         if (overlay.count > control::overlay_capacity) overlay.count = control::overlay_capacity;
         if (overlay.capture) {
             if (t == capture_track) kept = true;
-            else if (asking == control::tracks) asking = t;
+            else if (asking == kNoTrack) asking = t;
         }
         marking[t] = overlay.mark != 0;
         for (u32 i = 0; i < control::display_words; ++i) shown_words[t][i] = overlay.display[i];
@@ -282,7 +288,7 @@ extern "C" void sdk_gui_tick() {
     // The copy capturing keeps on while it asks; otherwise the first asking
     // starts. Ending a capture sets its base values back before this tick's overlays.
     if (!kept) {
-        if (capture_track < control::tracks) end_capture();
+        if (capture_track < kNoTrack) end_capture();
         capture_track = asking;
     }
 

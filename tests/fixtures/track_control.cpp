@@ -11,11 +11,13 @@ using opxy::i32;
 using opxy::u32;
 namespace control = opxy::control;
 
-i32 table[control::tracks * control::track_parameters];
+i32 table[control::all_tracks * control::track_parameters];
 // Stock's base values, in each track's data block at +0x3864.
 const u32 kBlocks = 0x90000000, kBlockBytes = 0x10000;
 u32 bases[control::tracks][control::track_parameters];
 u32 engines[16], ticks, writes, resets, runs, sets, edits_seen;
+// The machine holding each aux track (aux_tracks.cpp), and its ticks.
+u32 aux_engines[16], aux_ticks;
 control::Entry last_edit;
 u32 capture, mark;
 i32 seen;  // the value of track 0, parameter 1 the machine was given
@@ -27,7 +29,7 @@ u32 ticks96;
 unsigned char playing[2];
 i32 seen_own;  // and of its own engine control 1
 // Each track's LFO amount, which stock's displayed value adds.
-i32 lfo[control::tracks][control::track_parameters];
+i32 lfo[control::all_tracks][control::track_parameters];
 // The scripted overlay for the next tick.
 control::Entry script[8];
 u32 script_count;
@@ -55,7 +57,7 @@ void stock_live_set(u32 project, u32 track, u32 index, i32 v) {
 }
 // 8d5ac9dc: the live value plus the LFO amount, as a page shows it.
 i32 stock_shown(u32 project, u32 track, u32 index, u32 flag) {
-    require(project == kProject && track < control::tracks && index < control::track_parameters && flag == 1,
+    require(project == kProject && track < control::all_tracks && index < control::track_parameters && flag == 1,
             "Invalid displayed value");
     return value(track, index) + lfo[track][index];
 }
@@ -118,13 +120,17 @@ void tick(u32 expected_writes, const char* message) {
 }
 
 opxy::u32 sdk_benchmark_cycles() { return cycles; }
+opxy::u32 opxy::platform::control_engine(opxy::u32 track) {
+    return track < control::tracks ? engines[track] : track < control::all_tracks ? aux_engines[track] : 0;
+}
+void sdk_aux_tick() { ++aux_ticks; }
 const volatile unsigned short* stock_project_tempo() { return &tempo; }
 
 extern "C" {
 const opxy::platform::ControlMachine sdk_control_machines[] = {
-    {reinterpret_cast<const char*>(40), ready, reset, run, nullptr, 0, nullptr, nullptr, true},
-    {reinterpret_cast<const char*>(41), ready, reset_other, run_other, nullptr, 0, nullptr, nullptr, false},
-    {nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false}};
+    {reinterpret_cast<const char*>(40), ready, reset, run, nullptr, 0, nullptr, nullptr, true, 1u << 11, nullptr, {}},
+    {reinterpret_cast<const char*>(41), ready, reset_other, run_other, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}},
+    {nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}}};
 const opxy::u32 sdk_control_machine_count = 2;
 }
 
@@ -367,5 +373,30 @@ int main() {
     tick(1, "Departed copy's overlay not released");
     require(value(0, 2) == before && value(0, 1) == 500, "Departed copy not released alone");
     engines[6] = 0;
+
+    // A machine holding an aux track runs there after the instrument tracks,
+    // reads its own controls from that track, and counts as a copy as it would
+    // on an instrument track.
+    engines[2] = 0;
+    tick(1, "Overlay not released when the machine left");
+    const i32 stock_value = value(0, 1);
+    aux_engines[11] = 40;
+    value(11, 1) = 33;
+    lfo[11][1] = 0;
+    plan({{0, 1, 0, 400}, {11, 2, 0, 9}});
+    const u32 aux_resets = resets, aux_before = aux_ticks;
+    tick(1, "Aux host's overlay not written");
+    require(resets == aux_resets + 1 && seen_own == 33 && value(0, 1) == 400 && value(11, 2) == 0 &&
+            sdk_control_copies(11) == 1 && aux_ticks == aux_before + 1, "Aux host not run");
+    selected = 11;
+    require(sdk_control_display(1) == 77, "Aux host's display words not kept");
+    engines[2] = 40;
+    require(sdk_control_copies(11) == 2 && sdk_control_copies(2) == 2, "Aux and instrument copies not counted");
+    tick(1, "Overlay not released with two copies");
+    require(value(0, 1) == stock_value, "Two copies ran");
+    engines[2] = 0;
+    aux_engines[11] = 0;
+    tick(0, "Nothing to release");
+    require(sdk_control_copies(11) == 0, "Released aux track still counted");
     return 0;
 }

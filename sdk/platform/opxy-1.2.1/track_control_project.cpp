@@ -1,5 +1,7 @@
 // Track control's data kept with each project (docs/projects.md, open-xy.control):
-// part of the control service, so only builds with a track control machine link it.
+// what each machine keeps, and which machine holds each aux track it took over
+// with the stock role's controls kept aside (aux_tracks.cpp). Part of the
+// control service, so only builds with a track control machine link it.
 // The companion writer calls sdk_control_kept_write, through startup.cpp, with the
 // companion open, at the start of its sections.
 //
@@ -17,6 +19,13 @@ extern "C" opxy::u32 sdk_control_kept_write(void* file) __asm__("sdk_control_kep
 extern "C" opxy::u32 sdk_project_read(void* project, const char* path) __asm__("sdk_project_read");
 extern "C" opxy::u32 sdk_project_clear(opxy::u32, opxy::u32, opxy::u32) __asm__("sdk_project_clear");
 extern "C" opxy::u32 sdk_project_clear_random(opxy::u32, opxy::u32, opxy::u32) __asm__("sdk_project_clear_random");
+extern "C" {
+const char* sdk_aux_holder_id(opxy::u32 track) __asm__("sdk_aux_holder_id");
+const opxy::i32* sdk_aux_kept_controls(opxy::u32 track) __asm__("sdk_aux_kept_controls");
+void sdk_aux_restore(opxy::u32 track, const char* id, opxy::u32 id_length, const opxy::i32* controls)
+    __asm__("sdk_aux_restore");
+void sdk_aux_forget() __asm__("sdk_aux_forget");
+}
 
 namespace {
 u32 read(void* project, const char* path) { return stock<u32(void*, const char*)>(0x8d599b10)(project, path); }
@@ -166,9 +175,9 @@ struct Reader {
     }
 };
 
-// The companion's "open-xy.control" machines object, when the companion
-// matches the project's bytes.
-bool kept_machines(const Reader& r, u32 bytes, u32 crc, u32& at, u32& to) {
+// The companion's "open-xy.control" object, when the companion matches the
+// project's bytes.
+bool kept_section(const Reader& r, u32 bytes, u32 crc, u32& at, u32& to) {
     const u32 root = r.space(0), root_end = r.end(root);
     u32 a, b, c, d, v;
     if (!root_end || !r.member(root, root_end, "format", a, b) || !r.is(a, b, "open-xy-project")) return false;
@@ -178,12 +187,21 @@ bool kept_machines(const Reader& r, u32 bytes, u32 crc, u32& at, u32& to) {
     if (!r.member(a, b, "crc32", c, d) || !r.hex(c, d, v) || v != crc) return false;
     if (!r.member(root, root_end, "sections", a, b) || !r.member(a, b, "open-xy.control", c, d)) return false;
     if (!r.member(c, d, "version", a, b) || !r.number(a, b, v) || v != 1) return false;
-    return r.member(c, d, "machines", at, to);
+    at = c;
+    to = d;
+    return true;
 }
+
+// The aux tracks the machines may take over, as track indices; their keys in
+// the "aux" object are the indices in decimal.
+const char* const kAuxKeys[opxy::control::all_tracks] = {
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"};
+const u32 kAuxControls = 8;
 
 void load_kept(const char* path) {
     bool keeping = false;
-    for (u32 i = 0; i < sdk_control_machine_count; ++i) keeping = keeping || sdk_control_machines[i].load;
+    for (u32 i = 0; i < sdk_control_machine_count; ++i)
+        keeping = keeping || sdk_control_machines[i].load || sdk_control_machines[i].aux;
     if (!keeping) return;  // nothing to give back: no project I/O
     u32 bytes, crc, length = 0, at = 0, to = 0;
     bool found = false;
@@ -193,44 +211,85 @@ void load_kept(const char* path) {
             file_close(file);
         }
         const Reader r = {length < kReadBytes ? length : 0};
-        found = r.length && kept_machines(r, bytes, crc, at, to);
+        found = r.length && kept_section(r, bytes, crc, at, to);
     }
     const Reader r = {found ? length : 0};
+    u32 machines_at, machines_to, aux_at, aux_to;
+    const bool machines = found && r.member(at, to, "machines", machines_at, machines_to);
     for (u32 i = 0; i < sdk_control_machine_count; ++i) {
         const opxy::platform::ControlMachine& m = sdk_control_machines[i];
         if (!m.load || m.ready() != 1) continue;
         u32 a, b, count = 0;
-        if (found && r.member(at, to, m.name, a, b)) count = r.base64(a, b, m.saved_bytes);
+        if (machines && r.member(machines_at, machines_to, m.name, a, b)) count = r.base64(a, b, m.saved_bytes);
         m.load(kept, count);
+    }
+    // Each aux track a machine held: {"machine": id, "controls": base64 of the
+    // role's eight controls}. Tracks without one keep their stock role.
+    sdk_aux_forget();
+    if (!found || !r.member(at, to, "aux", aux_at, aux_to)) return;
+    for (u32 t = 0; t < opxy::control::all_tracks; ++t) {
+        u32 a, b, c, d, e, f;
+        if (!r.member(aux_at, aux_to, kAuxKeys[t], a, b) || !r.member(a, b, "machine", c, d) ||
+            !r.member(a, b, "controls", e, f) || d - c < 3 || project_text[c] != '"' ||
+            r.base64(e, f, kAuxControls * 4) != kAuxControls * 4)
+            continue;
+        opxy::i32 controls[kAuxControls];
+        for (u32 i = 0; i < kAuxControls; ++i)
+            controls[i] = static_cast<opxy::i32>(kept[4 * i] | kept[4 * i + 1] << 8 | kept[4 * i + 2] << 16 |
+                                                 static_cast<u32>(kept[4 * i + 3]) << 24);
+        sdk_aux_restore(t, project_text + c + 1, d - c - 2, controls);
     }
 }
 
-// After a new project: every machine that keeps data gets nothing back.
+// After a new project: every machine that keeps data gets nothing back, and
+// every aux track has its stock role.
 void forget_kept() {
     for (u32 i = 0; i < sdk_control_machine_count; ++i) {
         const opxy::platform::ControlMachine& m = sdk_control_machines[i];
         if (m.load && m.ready() == 1) m.load(kept, 0);
     }
+    sdk_aux_forget();
 }
 }
 
-// "open-xy.control": what each track control machine keeps, by machine ID.
+// "open-xy.control": the machine holding each aux track it took over, by track
+// index, and what each track control machine keeps, by machine ID, in the
+// canonical form (docs/projects.md): keys sorted, two-space indentation.
 extern "C" u32 sdk_control_kept_write(void* file) {
     Stream out(static_cast<File*>(file));
-    u32 listed = 0;
+    // Aux track keys sort as strings: 10..15, then 8 and 9.
+    static const u32 kAuxOrder[] = {10, 11, 12, 13, 14, 15, 8, 9};
+    u32 held = 0, listed = 0;
+    for (u32 t : kAuxOrder) {
+        const char* id = sdk_aux_holder_id(t);
+        if (!id) continue;
+        out.put(held++ ? "\n        },\n        \"" : "    \"open-xy.control\": {\n      \"aux\": {\n        \"");
+        out.put(kAuxKeys[t]);
+        out.put("\": {\n          \"controls\": \"");
+        const opxy::i32* controls = sdk_aux_kept_controls(t);
+        for (u32 i = 0; i < kAuxControls; ++i)
+            for (u32 b = 0; b < 4; ++b) kept[4 * i + b] = static_cast<unsigned char>(static_cast<u32>(controls[i]) >> (8 * b));
+        out.base64(kept, kAuxControls * 4);
+        out.put("\",\n          \"machine\": \"");
+        out.put(id);
+        out.byte('"');
+    }
+    if (held) out.put("\n        }\n      },\n");
     for (u32 i = 0; i < sdk_control_machine_count; ++i) {
         const opxy::platform::ControlMachine& m = sdk_control_machines[i];
         if (!m.save || m.ready() != 1) continue;
         const u32 count = m.save(kept);
         if (!count || count > m.saved_bytes) continue;
-        out.put(listed++ ? ",\n        \"" : "    \"open-xy.control\": {\n      \"machines\": {\n        \"");
+        out.put(listed++ ? ",\n        \"" : held ? "      \"machines\": {\n        \""
+                                                 : "    \"open-xy.control\": {\n      \"machines\": {\n        \"");
         out.put(m.name);
         out.put("\": \"");
         out.base64(kept, count);
         out.byte('"');
     }
-    if (listed) out.put("\n      },\n      \"version\": 1\n    },\n");
-    return listed;
+    if (listed) out.put("\n      },\n");
+    if (held || listed) out.put("      \"version\": 1\n    },\n");
+    return held + listed;
 }
 
 u32 sdk_project_read(void* project, const char* path) {

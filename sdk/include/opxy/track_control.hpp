@@ -1,13 +1,15 @@
 // Track control (SDK 1.5): a synth that declares resources.trackControl runs
 // control() on the GUI side once per stock GUI tick while it is on an
-// instrument track. It reads every instrument track's live parameters and may
-// overlay other tracks' values for that tick, or capture their encoder edits.
+// instrument track, or on an aux track it took over (resources.trackControl.aux).
+// It reads every track's live parameters and may overlay other instrument
+// tracks' values for that tick, or capture their encoder edits.
 // Overlays never reach the saved project: stock keeps its own values, and a
 // parameter the machine stops overlaying returns to them.
 //
-// Every track control machine on tracks 0..7 runs, in track order, each copy
-// with its own state. A machine that declares "unique": true runs only while
-// one track holds it; one that keeps data with projects must be unique.
+// Every track control machine on tracks 0..7, then on the aux tracks, runs in
+// track order, each copy with its own state. A machine that declares
+// "unique": true runs only while one track holds it; one that keeps data with
+// projects, or takes over an aux track, must be unique.
 #pragma once
 #include <opxy/transport.hpp>
 #include <opxy/types.hpp>
@@ -16,10 +18,12 @@ extern "C" opxy::u32 sdk_control_copies(opxy::u32 track);
 extern "C" opxy::i32 sdk_control_display(opxy::u32 index);
 
 namespace opxy { namespace control {
-// Instrument tracks 0..7, and stock's live parameter words for each: the
-// engine's eight controls (0..7), then stock's own track parameters in stock's
-// units. Every live value is non-negative.
+// Instrument tracks 0..7, which machines steer; all 16 tracks, aux tracks
+// 8..15 included, which they read; and stock's live parameter words for each:
+// the engine's eight controls (0..7), then stock's own track parameters in
+// stock's units. Every live value is non-negative.
 const u32 tracks = 8;
+const u32 all_tracks = 16;
 const u32 track_parameters = 58;
 const u32 overlay_capacity = 64;
 const u32 edit_capacity = 32;
@@ -39,10 +43,10 @@ const u32 saved_capacity = 8192;
 struct Entry { u8 track, index; u16 reserved; i32 value; };
 
 struct Input {
-    u32 track;  // the instrument track this copy is on
+    u32 track;  // the track this copy is on: an instrument track, or an aux track it took over
     // Each track's live values as stock sets them (sequenced, locked or
     // edited), without any machine's overlay.
-    i32 values[tracks][track_parameters];
+    i32 values[all_tracks][track_parameters];
     // 1 while this copy's capture is in effect: one copy captures at a time.
     u32 capturing;
     // While this copy captures: encoder edits of other instrument tracks'
@@ -81,8 +85,8 @@ struct Overlay {
     i32 display[display_words];
 };
 
-// GUI side, for a display: how many instrument tracks hold the same machine as
-// `track`, `track` included. A unique machine runs only while exactly one does.
+// GUI side, for a display: how many tracks hold the same machine as `track`,
+// `track` included. A unique machine runs only while exactly one does.
 // Browser previews answer 1.
 inline u32 copies(u32 track) { return sdk_control_copies(track); }
 // GUI side, for a display: word `index` of what the control on the selected

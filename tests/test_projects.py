@@ -12,8 +12,8 @@ from tooling import native
 from tooling.adapters import generate_project_companion_table
 from tooling.pipeline import ROOT, config
 from machine_fixtures import NAMES, fixture
-from tooling.projects import (LIMIT, MACHINES, canonical, companion, companion_path, kept_data, main, parse,
-                              saved_numbers, translation)
+from tooling.projects import (LIMIT, MACHINES, aux_holders, canonical, companion, companion_path, kept_data, main,
+                              parse, saved_numbers, translation)
 
 PROJECT = bytes(range(256)) * 4
 SAVED = {'karplus': {'engine': 36, 'page': 84}, 'pingpong': {'effect': 40, 'page': 21},
@@ -161,6 +161,27 @@ class FirmwareWriter(unittest.TestCase):
             project.write_bytes(project.read_bytes()[:-1])
             (folder / 'song.oxy').write_bytes(json.dumps(document).encode())
             self.assertEqual(run('1', 'read').stdout, '/0\n')
+
+    def test_an_aux_track_a_machine_holds_is_kept_with_the_project(self):
+        with tempfile.TemporaryDirectory(prefix='companion-') as directory:
+            folder = Path(directory)
+            writer, project = host_writer(folder), folder / 'song.xy'
+            held = dict(os.environ, HOLD='1')
+            run = lambda *args, env=None: subprocess.run([str(writer), str(project), *args], capture_output=True,
+                                                         text=True, timeout=30, env=env)
+            self.assertEqual(run('1', env=held).returncode, 0)
+            raw = (folder / 'song.oxy').read_bytes()
+            controls = [1, 2, 3, -4, 0x7fffffff, 6, 7, 8]
+            # The reference writer's bytes: the aux track's holder sorts before what machines keep.
+            self.assertEqual(raw, companion(project.read_bytes(), SAVED, kept={'morph': b'stat\xff'},
+                                            aux={11: ('morph', controls)}))
+            self.assertEqual(aux_holders(parse(raw), project.read_bytes()), {11: ('morph', controls)})
+            # Loading gives the track back to its machine with the role's controls, after
+            # what the machine kept; without a holder, nothing is restored.
+            self.assertEqual(run('1', 'read').stdout, 'aux 11 morph 1 2 3 -4 2147483647 6 7 8\n73746174ff/5\n')
+            self.assertEqual(run('1').returncode, 0)
+            self.assertEqual(run('1', 'read').stdout, '73746174ff/5\n')
+            self.assertEqual(aux_holders(parse((folder / 'song.oxy').read_bytes()), project.read_bytes()), {})
 
     def test_a_failed_save_or_other_name_writes_nothing(self):
         with tempfile.TemporaryDirectory(prefix='companion-') as directory:

@@ -478,8 +478,16 @@ def generate_track_controls(directory, machines):
                              f'void {p}_control_load(const opxy::u8*, opxy::u32) __asm__("{p}_control_load");']
         callbacks = f'{p}_control_save, {p}_control_load' if saved else 'nullptr, nullptr'
         unique = 'true' if track_control(m).get('unique') else 'false'
+        # The aux tracks it may take over, by index; there it shows its own page
+        # and starts from its defaults, as stock applies them on tracks 1-8.
+        aux = sum(1 << (t - 1) for t in track_control(m).get('aux', ()))
+        require(not aux or m.display != 'stock', 'A machine that takes over aux tracks needs its own display')
+        page = f'{p}_page_id' if m.display != 'stock' else 'nullptr'
+        if m.display != 'stock':
+            declarations.append(f'extern const char {p}_page_id[] __asm__("{p}_page_id");')
+        defaults = ', '.join(str(d << 16) for d in catalog_defaults(m.definition))
         rows.append(f'    {{{p}_engine_id, {p}_ready, {p}_control_reset, {p}_control, "{m.id}", {saved}, {callbacks}, '
-                    f'{unique}}},')
+                    f'{unique}, {aux:#x}u, {page}, {{{defaults}}}}},')
     return expand('track_control_table.cpp.in', dict(CONTROL_DECLS='\n'.join(declarations), MACHINES='\n'.join(rows)),
                   Path(directory) / 'track_control_table.cpp')
 

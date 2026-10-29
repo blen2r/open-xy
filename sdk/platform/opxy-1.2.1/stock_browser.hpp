@@ -65,5 +65,9 @@ template<u32 N> struct StockSelector {
     bool open(const char* title, const char* const (&labels)[N], u32 initial, Callbacks callbacks) {
         return detail::open(session, rows, N, title, labels, initial, callbacks);
     }
+    // The same with the first `count` rows, 1..N.
+    bool open(const char* title, const char* const* labels, u32 count, u32 initial, Callbacks callbacks) {
+        return count <= N && detail::open(session, rows, count, title, labels, initial, callbacks);
+    }
 };
 }}}

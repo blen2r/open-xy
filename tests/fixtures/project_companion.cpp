@@ -50,11 +50,30 @@ void load(const opxy::u8* data, opxy::u32 bytes) {
 
 extern "C" {
 const opxy::platform::ControlMachine sdk_control_machines[] = {
-    {nullptr, ready, nullptr, nullptr, "morph", 16, save, load, true},
-    {nullptr, ready, nullptr, nullptr, "plain", 0, nullptr, nullptr, false},
-    {nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false}};
+    {nullptr, ready, nullptr, nullptr, "morph", 16, save, load, true, 1u << 11, nullptr, {}},
+    {nullptr, ready, nullptr, nullptr, "plain", 0, nullptr, nullptr, false, 0, nullptr, {}},
+    {nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}}};
 const opxy::u32 sdk_control_machine_count = 2;
 }
+
+// Aux tracks (aux_tracks.cpp): "morph" may hold track 11, with the stock role's
+// eight controls kept aside; the fixture holds it when HOLD is set.
+namespace {
+const char* held_id;
+opxy::i32 held_controls[8] = {1, 2, 3, -4, 0x7fffffff, 6, 7, 8};
+opxy::u32 restored_track = 99, restored_length;
+char restored_id[16];
+opxy::i32 restored_controls[8];
+}
+const char* sdk_aux_holder_id(opxy::u32 track) { return track == 11 ? held_id : nullptr; }
+const opxy::i32* sdk_aux_kept_controls(opxy::u32) { return held_controls; }
+void sdk_aux_restore(opxy::u32 track, const char* id, opxy::u32 length, const opxy::i32* controls) {
+    restored_track = track;
+    restored_length = length;
+    for (opxy::u32 i = 0; i < length && i < 15; ++i) restored_id[i] = id[i];
+    for (opxy::u32 i = 0; i < 8; ++i) restored_controls[i] = controls[i];
+}
+void sdk_aux_forget() { restored_track = 99; }
 
 namespace {
 opxy::u32 stock_read(void*, const char*) { return save_result; }
@@ -93,6 +112,7 @@ int main(int argc, char** argv) {
     if (argc != 3 && argc != 4) return 2;
     saving = argv[1];
     save_result = static_cast<unsigned>(std::atoi(argv[2]));
+    if (std::getenv("HOLD")) held_id = "morph";
     if (argc == 3) return sdk_project_save(nullptr, saving) == save_result ? 0 : 1;
     const std::string mode = argv[3];
     loading = mode == "busy";
@@ -106,6 +126,11 @@ int main(int argc, char** argv) {
         if (clears != 1) return 1;
     } else {
         return 2;
+    }
+    if (restored_track != 99) {
+        std::printf("aux %u %.*s", restored_track, static_cast<int>(restored_length), restored_id);
+        for (opxy::u32 i = 0; i < 8; ++i) std::printf(" %d", restored_controls[i]);
+        std::printf("\n");
     }
     if (loaded == 99) std::printf("none\n");
     else {
