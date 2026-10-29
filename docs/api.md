@@ -34,9 +34,9 @@ The [firmware contract](abi-1.2.1.md) explains where each rule comes from.
 
 ## Memory and limits
 
-Every selected machine and the SDK share **one 2040 KiB module region**: code,
+Every selected machine and the SDK share **one 2032 KiB module region**: code,
 constant data and zero-initialized state together. It is the 2 MiB the
-firmware reserves from its heap, minus 8 KiB of relocated stock tables. There
+firmware reserves from its heap, minus 16 KiB of relocated stock tables. There
 is no per-machine allowance: a build that does not fit names each machine's
 share, and `sdk.py compile` and the builder's memory meter report the same
 figures. State usually dominates, since a synth's voice pool is
@@ -50,7 +50,7 @@ and requires each other machine to fit beside them, as the builder offers it.
 
 | Limit | Value | Why |
 | --- | --- | --- |
-| Module memory | 2040 KiB for the selected machines | Firmware heap reservation minus the relocated tables |
+| Module memory | 2032 KiB for the selected machines | Firmware heap reservation minus the relocated tables |
 | Voices | 1..256 per machine | Stock voice indices |
 | Effect state | 476 bytes | The 480-byte stock FX slot minus its object header |
 | Synth controls | 4 positions, at most 8 parameters | The stock four-knob page and eight-word parameter vector |
@@ -681,8 +681,8 @@ build gives every machine the stock numbers projects save, an engine number
 
 | Kind | Engine or effect number | Screen |
 | --- | --- | --- |
-| `synth` | Engine 34..62 | Its own, 82..127 |
-| `sample` | Engine 34..62 | Its base's: the stock sampler's or drum sampler's |
+| `synth` | Engine 34..255 | Its own, 82..255 |
+| `sample` | Engine 34..255 | Its base's: the stock sampler's or drum sampler's |
 | `effect` | Effect 1, 8, 11, 21, 23..28 or 34..62 | The stock FX screen |
 
 These numbers exist only in the relocated stock tables, so no machine shares
