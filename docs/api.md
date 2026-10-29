@@ -297,21 +297,22 @@ void control(ControlState& state, const opxy::control::Input& input, opxy::contr
 
 [track_control.hpp](../sdk/include/opxy/track_control.hpp) defines the types.
 `control` runs on the GUI side once per stock GUI tick while the machine is on
-an instrument track. Every track control machine on tracks 1-8 runs, in track
-order, so a project can hold several, and several copies of one: each copy has
+an instrument track, or holds an aux track ([aux tracks](#aux-tracks)). Every
+track control machine on tracks 1-8 runs, in track order, then one holding an
+aux track, so a project can hold several, and several copies of one: each copy has
 its own `ControlState`, which costs `stateBytes` for each of the eight tracks.
 A machine that must run alone adds `"unique": true` to `trackControl`: it has
-one state, and while two or more instrument tracks hold it, none runs and every
+one state, and while two or more tracks hold it, none runs and every
 overlay and capture ends as if it had left. A display can tell its user with
-`opxy::control::copies(track)`, the number of instrument tracks holding the
+`opxy::control::copies(track)`, the number of tracks holding the
 machine on `track` (browser previews answer 1). `control_reset` runs before a
 copy's first call and whenever a copy arrives on a track.
 
 | `Input` field | Contract |
 | --- | --- |
-| `track` | The instrument track this copy is on |
+| `track` | The track this copy is on: an instrument track, or the aux track it holds |
 | `capturing` | 1 while this copy's capture is in effect (below) |
-| `values[track][index]` | Every instrument track's 58 live parameter words, as stock sets them (edits, parameter locks, sequencing), without any machine's overlay. Indices 0..7 are the engine's controls; the rest are stock's own track parameters, in stock's units. The machine's own engine controls are the values its page shows, including its LFO |
+| `values[track][index]` | Every track's 58 live parameter words (`all_tracks`, 16; aux tracks are 8..15), as stock sets them (edits, parameter locks, sequencing), without any machine's overlay. Indices 0..7 are the engine's controls; the rest are stock's own track parameters, in stock's units. The machine's own engine controls are the values its page shows, including its LFO |
 | `edit_count`, `edits` | While capturing: up to 32 encoder edits of other instrument tracks' parameters since the last tick, oldest first, as track, index and edited value |
 | `elapsed_us` | Microseconds since the previous tick, from the core clock: 0 on the first tick after a reset, at most one second |
 | `transport` | The project's tempo in tenths of BPM (0 when unknown), the song position in 96ths of a quarter note, which advances only while playing, and whether the sequencer plays |
@@ -375,6 +376,37 @@ drawn over every stock page, so keep them to the screen's edges or small, and
 leave the page readable; the capture marks must make clear that edits are being
 recorded. [track_control_overlay.svg](../sdk/platform/opxy-1.2.1/track_control_overlay.svg)
 holds the SDK's, as a starting point.
+
+### Aux tracks
+
+A unique track control machine with its own display can take over aux track 12
+(CV) instead of an instrument track: it adds `"aux": [12]` to `trackControl`.
+That track is the only one listed for now, the one whose stock role the SDK
+keeps silent. Such a machine is not in tracks 1-8's engine list: it is chosen
+on its aux track only.
+
+- **Choosing:** Shift + M1 on track 12 opens a list, "engine", with the
+  track's stock role (`cv`) first, then each machine that may take it over.
+  While a machine holds the track, CV and gate stay silent. The choice is kept
+  with the project; a new project starts with `cv`.
+- **Its page:** M1 shows the machine's display, and its encoders, presses and
+  alternates work as on tracks 1-8. Its `hidePages` and `page_key` work there
+  too: on an aux track M2..M4 are the track's other pages and its LFO.
+- **Its controls:** words 0..7 of track 12, so they are sequenced, locked and
+  saved like any track parameter, and `values[11]` holds them. Taking the
+  track over sets the machine's defaults; giving it back restores the role's
+  values.
+- **Presets:** Shift + track key on track 12 lists presets in two columns, as
+  stock's preset browser does: folders, then the presets in them that can run
+  on the track. Choosing one gives the track to its machine (or role) and sets
+  its controls. The builders install a machine's definition presets as
+  `content/aux_presets/<id>/<name>.json` (names lowercased, at most 15
+  characters); users add their own as `aux_presets/<folder>/<name>.json` over
+  MTP. Each is `{"params": [eight values 0..32767], "platform": "OP-XY",
+  "type": "<machine id or cv>", "version": 1}`.
+
+It runs on the GUI side like any track control machine; nothing changes on the
+audio side but the silenced CV output.
 
 ## Sample engines
 

@@ -113,6 +113,12 @@ alone knows what the bytes mean. After loading a project, the firmware gives
 each machine its entry when the companion matches the project, and nothing
 otherwise.
 
+`aux` holds, by track index (`"11"` for track 12), each aux track a machine
+[took over](api.md#aux-tracks): `machine`, its ID, and `controls`, the stock
+role's eight controls kept aside, as base64 of eight little-endian 32-bit
+words. After a load the machine holds the track again when the firmware has it;
+otherwise the track keeps its stock role.
+
 ## Commands
 
 | Command | Does |

@@ -61,6 +61,21 @@ is the reference for each of them.
 - **Author text at its resting size.** Scaling a text slot is decoration for
   a moment of motion: a layout must read correctly at unit scale.
 
+## Aux tracks
+
+A machine that [takes over an aux track](api.md#aux-tracks) is chosen and
+played there as an engine is on tracks 1-8, so the same keys mean the same
+things everywhere.
+
+- **Shift + M1 chooses what runs on the track**, as it chooses the engine on
+  tracks 1-8; on the send tracks it opens their effect list.
+- **Shift + track key opens presets**, in two columns as on tracks 1-8:
+  folders, then presets. Ship a preset named `init` with the machine's
+  defaults.
+- **Hide the pages it has no use for.** M2 and M4 on an aux track are its other
+  page and its LFO; a machine with its own LFO, or no use for them, hides them
+  with `hidePages` and may take the key itself.
+
 ## Motion
 
 - **Motion answers the player.** Animate what a press, turn or note changed;

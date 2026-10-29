@@ -39,6 +39,7 @@ version is rejected. The output differs from stock in exactly these places:
 | Diagnostic benchmark | 1 | Extends explicit command 0xc8 with the selected machines; no normal-playback callbacks added |
 | Per-voice profiling | 10 optional | Bypasses diagnostic timing in both stock voice renderers when built with profiling off |
 | Track control | 3 | Runs a synth's track control once per GUI tick, after stock's own call at that site, lets it capture encoder edits, and shows its overlays as parameter values |
+| Aux tracks | 9 | Lets a track control machine take over aux track 12 (CV): its chooser on Shift + M1 (the effect list on the sends), its presets on Shift + track key, its page on M1, and CV and gate kept silent; four MTP allowlist edits show the user's aux presets |
 | Startup label | 1 | Shows `OPEN <version>-1.2.1` at boot, `<version>` from [`VERSION`](../VERSION), through the stock startup text renderer |
 | Module | 1 record | One loader block holding the linked module |
 
@@ -48,7 +49,9 @@ the SDK code behind them, only when it includes a sample engine. Otherwise
 their sites stay stock. The track control rows (and the project read of the
 project companion rows) form the `control` service in the same way: a build
 uses them only when it includes a machine with [track control](api.md#track-control)
-or [hidden pages](api.md#alternate-controls). Everything else must reconstruct byte for byte. Protected ranges in
+or [hidden pages](api.md#alternate-controls). The aux track rows form the `aux`
+service, used only by a machine that [takes over aux tracks](api.md#aux-tracks).
+Everything else must reconstruct byte for byte. Protected ranges in
 [`pipeline.py`](../tooling/pipeline.py) admit only hooks into the module and
 the reviewed startup label.
 The bootloader is never modified.
@@ -130,6 +133,15 @@ method receives highlights, +0x1c handles clicks (0 left, 3 white), +0x24 observ
 close, and +0x30 returns an empty options vector through a hidden result pointer.
 These details remain behind the adapter; clients must not recreate the ABI or
 install global input hooks to use it.
+
+Two further forms serve [aux tracks](#aux-tracks). `open(title, labels, count,
+initial, callbacks, track)` lists the first `count` (1..N) labels and shows
+`track` under the title, as stock's own selectors pass theirs to the heading
+(the effect list passes its send's track). `detail::open_rows` opens rows the
+caller filled, each holding items, as a second column: it shows that column's
+controls (`8d5501ec(screen, 1)`, as stock's preset browser does), where knobs
+2..4 scroll and confirm. An optional `highlight(context, mode, id)` callback
+receives every highlight stock reports.
 
 The shared host fixture exercises two clients, input rejection, both stock
 click paths, cancellation, modal ownership and callback reentry. Native build
@@ -383,9 +395,9 @@ before the sequencer tick. That call at `8c0baade` routes through
 which makes the original call first. Then it treats any live value that
 differs from the one it last wrote as stock's, and runs every instrument
 track's synth with [track control](api.md#track-control) in track order (track
-engines from `8d58781c`; a unique one only while no other instrument track
-holds the same engine), giving each every instrument track's values without
-overlays. It writes their overlays through `8d5acea8`, the later track's
+engines from `8d58781c`; a unique one only while no other track holds the same
+engine), then the machine holding each aux track ([aux tracks](#aux-tracks)),
+giving each every track's values without overlays. It writes their overlays through `8d5acea8`, the later track's
 winning a parameter two overlay, and writes stock's last value back wherever
 no machine overlays any more, unless stock has written there since. Values written this
 way are live values only: the saved project keeps stock's base values. With no
@@ -416,6 +428,69 @@ it (`sdk_param_edit_set`), when it shows the base value that edit changed;
 every other parameter shows as stock shows it. The host track's eight engine
 controls reach the synth through the same getter, so their LFO amounts are
 included.
+
+### Aux tracks
+
+One controller object serves the aux tracks (method table `0803fb6c`, object
+`08014db4`). The selected track is the byte at `840a0534`; its page tab, M1..M4
+as 0..3, is the word at `0801eae4`, which `8c08f74c(controller, tab)` sets. Its
+sites are in `8c0…`, out of relative-branch range of the module, so each hook
+there replaces eight bytes with an absolute call, and a stub
+([`aux_hooks.s`](../sdk/platform/opxy-1.2.1/aux_hooks.s)) either replays those
+bytes or leaves the stock method as its own epilogue would. No stock branch
+lands inside any of the eight bytes; the M1 handler's call at `8c08fd5a` is not
+usable for that reason (its branches share `8c08fd60`).
+
+| Site | Replaces | Does |
+| --- | --- | --- |
+| `8c08f6ec` | `UNLINK; R0 = 1; RTS`: Shift + M1 in the shifted-key method (+0x10, `8c08f6b0`), which ignores Shift + M1..M4 | Opens the chooser on track 12; on the sends, stock's effect list (`8c08f60c`) |
+| `8c08f610` | Just after the `LINK` of `8c08f60c(controller, track)`, Shift + track key, which acts on the sends only | Opens the preset list on track 12; otherwise replays the four instructions and returns into stock |
+| `8c08f540` | `P1 = 840a0534` in the page method (+0x2c, `8c08f53c`) | On tab 0, and on a tab the machine hides, returns the machine's page |
+| `8d512214` | The audio loop's call of the CV output `8d50f1cc` (voltage from word 0, mode from word 14) | Skipped while a machine holds track 12; once, clears stock's held CV notes (`8d5b59a0`) and lowers the gate (`8d5b5f78(0)`) |
+| `8d50e95c` | Note on's call of the CV gate `8d5b5fe0` | Skipped while a machine holds track 12 |
+
+Which machine holds a track is GUI state ([`aux_tracks.cpp`](../sdk/platform/opxy-1.2.1/aux_tracks.cpp)),
+kept with the project in its [companion](projects.md#open-xycontrol). GUI and
+audio share no memory: while a machine holds track 12, the GUI writes the mark
+`0x4f584155` to its last live word (57), which stock never locks, through
+`8d5acea8`, which publishes it; the audio hooks read it from the audio side's
+copy of the track's words (`84eab39c + track × 0xe8`). The mark is never a
+stored value: the base setter (`8d5acf28`, then `8d587a20`) bounds no index,
+and stock re-publishes live values now and then (when the sequencer starts),
+so the audio side stays silent until the mark has been missing for 512 of its
+blocks. Taking the track over keeps the role's eight controls aside and sets
+the machine's defaults through `8d5acf28`; giving it back restores them.
+
+A project load reaches the SDK from inside stock's read (`8d58913e`), before
+the loaded project is in use: touching a track there (`8d587708` and the
+setters above) fails stock's assertion `data.cpp:985` at boot. The restore only
+records the holder; the next GUI tick marks the track.
+
+Hidden pages and their keys work as on instrument tracks ([hidden
+pages](#hidden-pages)), with the aux tab word and setter; stock's M2 sets no tab
+on tracks with no second page, CV's among them. The stock LFO switch-off stays
+on instrument tracks, where its byte is measured.
+
+**Presets.** Stock's instrument preset browser is a folder browser: the
+factory's `content/presets/<category>/<name>.json` and the user's
+`/fat32/presets/<folder>/` (presets as `<name>.preset/patch.json`), each naming
+its engine in `type`. It lists any `.json` in the user's folders, so aux
+presets live apart: `content/aux_presets/<folder>/<name>.json` (installed) and
+`/fat32/aux_presets/<folder>/<name>.json` (the user's). The SDK lists them with
+stock's folder calls, as its preset scan (`8d56db50`) makes them:
+`8c0be54a(path)` opens a folder, `8c0be6a4(folder)` gives the next entry (its
+name inline at +0xb), `8c0be7b2(folder)` closes it. The list is the [stock
+browser](#stock-browser) with a second column: folders as rows, presets as
+their items. Stock's preset browser shows that column's controls with
+`8d5501ec(screen, 1)`; knobs 2..4 then scroll and press it. Moving onto a
+folder highlights its first preset.
+
+**MTP.** Stock's MTP allowlist is a table of 16 folder patterns, then file
+patterns (pointers at `os.ldr` offset `0x5c538`). Four text edits make room
+without losing a stock path: both sample folder depths share one folder
+pattern (`840ae32c`), freeing `840ae308` for `^/aux_presets/?[\w\- #-)]*$`; the
+`.aiff` and `.aifc` patterns of preset folders share one file pattern
+(`840aedfc`), freeing `840aee6c` for the user's aux preset files.
 
 ## Sample engines
 
