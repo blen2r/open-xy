@@ -107,23 +107,29 @@ class TrackControl(unittest.TestCase):
     def test_mtp_shows_the_users_aux_presets(self):
         import re
         from tooling.firmware import active_services, patch_active
-        edits = [p for p in config()['patches'] if p['kind'] == 'text' and p.get('service') == 'control']
-        self.assertEqual([p['address'] for p in edits], ['0x840aed90', '0x840aedfc', '0x840aee6c'])
-        before = [bytes.fromhex(p['before']).rstrip(b'\0').decode() for p in edits]
-        after = [bytes.fromhex(p['after']).rstrip(b'\0').decode() for p in edits]
-        matches = lambda patterns, path: any(re.fullmatch(p, path) for p in patterns)
-        # A preset folder's samples: .aif, .aiff and .aifc in one pattern now, as before in three.
-        for sample in ('/presets/a/b c.preset/x.aif', '/presets/a/b.preset/x.AIFF', '/presets/a/b.preset/x.aifc'):
-            self.assertTrue(matches(before, sample) and matches(after, sample), sample)
-        self.assertFalse(matches(after, '/presets/a/b.preset/x.aifx'))
-        # The user's aux presets, folders and .json files, and nothing else there.
-        for path in ('/aux_presets', '/aux_presets/', '/aux_presets/my kit', '/aux_presets/my kit/morph half.json'):
-            self.assertTrue(matches(after, path) and not matches(before, path), path)
-        for path in ('/aux_presets/a/b/c.json', '/aux_presets/a/b.txt', '/aux_presetsx/a/b.json', '/other/a/b.json'):
-            self.assertFalse(matches(after, path), path)
+        edits = {p['address']: p for p in config()['patches'] if p['kind'] == 'text' and p.get('service') == 'control'}
+        # Stock's MTP table lists folder patterns first (840ae308 and 840ae32c among them),
+        # then file patterns (840aedfc, 840aee6c).
+        self.assertEqual(sorted(edits), ['0x840ae308', '0x840ae32c', '0x840aedfc', '0x840aee6c'])
+        text = lambda p, side: bytes.fromhex(p[side]).rstrip(b'\0').decode()
+        matches = lambda side, keys, path: any(re.fullmatch(text(edits[k], side), path) for k in keys)
+        folders, files = ('0x840ae308', '0x840ae32c'), ('0x840aedfc', '0x840aee6c')
+        # Sample folders, one or two deep, and .aiff/.aifc in a preset folder match as before.
+        for path in ('/samples/a b', '/samples/a/b c'):
+            self.assertTrue(matches('before', folders, path) and matches('after', folders, path), path)
+        for path in ('/presets/a/b.preset/x.aiff', '/presets/a/b.preset/x.AIFC'):
+            self.assertTrue(matches('before', files, path) and matches('after', files, path), path)
+        for path in ('/samples/a/b/c', '/presets/a/b.preset/x.aif', '/presets/a/b.preset/x.aifx'):
+            self.assertFalse(matches('after', folders + files, path), path)
+        # The user's aux presets: the folder and its folders, and .json files in those.
+        for path in ('/aux_presets', '/aux_presets/my kit'):
+            self.assertTrue(matches('after', folders, path) and not matches('before', folders, path), path)
+        self.assertTrue(matches('after', files, '/aux_presets/my kit/morph half.json'))
+        for path in ('/aux_presets/a/b', '/aux_presets/a/b/c.json', '/aux_presets/a/b.txt', '/aux_presetsx/a/b.json'):
+            self.assertFalse(matches('after', folders + files, path), path)
         # Only builds with track control change stock's allowlist.
         plain = active_services(config(), native.machine_uses([fixture('probesynth')]))
-        self.assertFalse(any(patch_active(p, plain) for p in edits))
+        self.assertFalse(any(patch_active(p, plain) for p in edits.values()))
 
     def test_a_machine_on_aux_tracks_is_not_in_the_instrument_list(self):
         from tooling.adapters import catalog_entry
