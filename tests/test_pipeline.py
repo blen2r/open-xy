@@ -86,13 +86,19 @@ class Services(unittest.TestCase):
         profile = config()
         self.assertEqual(active_services(profile, ['synth', 'effect']), set())
         self.assertEqual(active_services(profile, ['sample']), {'samples'})
-        machines = [fixture(name) for name in NAMES]  # every kind, as a full collection holds
+        self.assertEqual(active_services(profile, ['synth', 'extension']), {'extensions'})
+        from tooling.extensions import extension_at
+        from tooling.pipeline import ROOT
+        probe = extension_at(ROOT / 'tests/fixtures/extension_probe')
+        # Every kind and an extension, as a full collection holds.
+        machines = native.Collection([fixture(name) for name in NAMES], [probe])
         self.assertTrue(any(m.kind == 'sample' for m in machines))
-        steps = lambda selection: [step for _name, m, step in native.plan(selection) if m is None]
+        steps = lambda selection: [step for _name, m, step in native.plan(selection)
+                                   if m is None and not step.startswith('extension:')]
         self.assertEqual(steps(machines), list(native.SDK_UNITS))  # full collections keep the link order
-        without = [m for m in machines if m.kind != 'sample']
+        without = [m for m in machines if m.kind != 'sample']  # nor any extension
         self.assertEqual(steps(without), [u for u in native.SDK_UNITS if u not in native.UNIT_SERVICES])
-        self.assertEqual(set(native.object_services(machines).values()), {'samples'})
+        self.assertEqual(set(native.object_services(machines).values()), {'samples', 'extensions'})
         self.assertEqual(native.object_services(without), {})
 
     def test_only_a_service_edit_may_stay_stock(self):

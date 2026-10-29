@@ -18,17 +18,18 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET
 
-from . import benchmark, screen, startup_label, stock_tables
+from . import benchmark, extensions, screen, startup_label, stock_tables
 from .adapters import (catalog_entry, generate_display, generate_fx_object, generate_registration,
                        generate_registration_stock, generate_sample_voice,
                        generate_sample_callbacks, generate_screen, generate_screen_order,
-                       generate_synth_controls, generate_project_companion_table, generate_voice)
+                       generate_synth_controls, generate_project_companion_table, generate_voice,
+                       sample_callbacks)
 from .contributors import validate_source_boundary
 from .firmware import active_services, assemble, hook_instruction, hook_target, patch_active
 from .formats import elf32, elf_sections, require, sha
 from .machines import FIXED_NUMBERS, by_kind, collection, layout_document, read_collection, read_layout, tree
 from .pipeline import (PROFILE, ROOT, check_patch_boundaries, child, config, document, execute, fresh_output, host_pins, host_platform,
-                       read, require_release_host, resolve_toolchain, save_json, tool_paths)
+                       hidden_process, read, require_release_host, resolve_toolchain, save_json, tool_paths)
 from .startup import generate as generate_startup
 
 LINKER = 'linker/opxy-1.2.1.ld'
@@ -57,13 +58,35 @@ NUMBER = r'[-+]?(?:\d+(?:\.\d*)?|\.\d+)'
 SVG_INHERITED = {'fill', 'stroke', 'stroke-width', 'font-family', 'font-size', 'style'}
 
 
+class Collection(list):
+    """A build's machines, in firmware order, and the extensions it links, in
+    callback order (`extensions`). A subset of its machines keeps its extensions."""
+
+    def __init__(self, machines=(), extensions_=()):
+        super().__init__(machines)
+        self.extensions = tuple(extensions_)
+
+
+def extensions_of(machines):
+    """The extensions a machine list carries: none for a plain list."""
+    return getattr(machines, 'extensions', ())
+
+
+def subset(machines, chosen):
+    """Some of a collection's machines, with all of its extensions."""
+    return Collection(chosen, extensions_of(machines))
+
+
 def configuration(entries=None, layout=None):
-    """The profile, the collection's machines numbered by the layout, and their link-time
-    IDs. Entries are machines.read_collection's."""
+    """The profile, the collection's machines numbered by the layout (a Collection,
+    carrying its extensions), and their link-time IDs. Entries are
+    machines.read_collection's."""
     profile = config()
     stock_tables.check_profile(profile)
+    extensions.check_profile(profile)
     require([p['kind'] for p in profile['patches']].count('startup') == 1, 'Expected one startup label edit')
-    machines = collection(entries, layout)
+    machines = Collection(collection(entries, layout), extensions.check_collection(
+        [extensions.extension_at(e['extension']) for e in entries or () if 'extension' in e]))
     definitions = dict(DEFINITIONS)
     for m in machines:
         if m.kind == 'effect':
@@ -78,14 +101,17 @@ def configuration(entries=None, layout=None):
 def provenance(machines):
     """Every authored, SDK and compiler-profile input; private artifacts never enter.
     The collection is its machines, in order: their IDs and sources below."""
-    paths = {PROFILE, LINKER}
+    paths = {PROFILE, LINKER, extensions.PROFILE}
     for folder in ('sdk/include', 'sdk/platform', 'tooling'):
         paths |= {p.relative_to(ROOT).as_posix() for p in (ROOT / folder).rglob('*')
                   if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.md'}
     hashes = {name: sha(read(child(ROOT, name))) for name in paths}
     for m in machines:
         hashes.update({name: sha(read(path)) for name, path in m.files().items()})
-    hashes['collection'] = sha(json.dumps([m.id for m in machines]).encode('utf-8'))
+    for e in extensions_of(machines):
+        hashes.update({f'extension:{e.id}/{name}': sha(read(path)) for name, path in e.sources().items()})
+    hashes['collection'] = sha(json.dumps([m.id for m in machines] +
+                                          ['extension:' + e.id for e in extensions_of(machines)]).encode('utf-8'))
     return dict(sorted(hashes.items()))
 
 
@@ -130,14 +156,14 @@ def compile_cxx(cxx, assembler, source, obj, includes=()):
     flags = [*CXX_FLAGS, *('-I' + str((ROOT / path).resolve()) for path in includes), '-fstack-usage']
     subprocess.run([str(cxx), *flags, '-S', Path(source).name if generated else source, '-o', str(assembly)],
                    cwd=Path(source).parent if generated else ROOT, check=True, capture_output=True, text=True,
-                   timeout=300)
+                   timeout=300, **hidden_process())
     execute([assembler, '-mcpu=bf707', '-o', obj, assembly])
     return obj
 
 
 def includes(m=None):
     """Include path for firmware-compiler units: SDK headers, then the machine's own folders."""
-    paths = ['.', 'sdk/include', 'sdk/platform/opxy-1.2.1']
+    paths = ['.', 'sdk/include', 'sdk/platform', 'sdk/platform/opxy-1.2.1']
     if m is not None:
         paths.append(m.source())
     paths.append('sdk/platform/blackfin/freestanding')
@@ -162,9 +188,10 @@ def plan(machines, profile=None):
         else:
             steps = ('registration', 'sample_voice')
         units += [(f'{m.id}/{Path(step.removeprefix("source:")).stem}.o', m, step) for step in steps]
-    services = active_services(profile or config(), (m.kind for m in machines))
+    services = active_services(profile or config(), service_users(machines))
     units += [(f'sdk/{step}.o', None, step) for step in SDK_UNITS
               if UNIT_SERVICES.get(step) is None or UNIT_SERVICES[step] in services]
+    units += [(f'sdk/extension_{e.id}.o', None, 'extension:' + e.id) for e in extensions_of(machines)]
     names = [name for name, _m, _step in units]
     require(len(names) == len(set(names)), 'Duplicate object name')
     return units
@@ -177,12 +204,20 @@ SDK_UNITS = ('divide', 'memory', 'registration', 'registration_stock', 'startup'
              'sample_cache_hooks', 'sample_progress', 'sample_progress_stock', 'pad_assignment',
              'pad_assignment_stock', 'drum_page', 'drum_controls_stock', 'drum_display_stock', 'screen_order',
              'screen_hooks', 'synth_controls', 'synth_control_table', 'note_activity', 'project_companion',
-             'project_companion_table', 'profiling', 'lfo', 'lfo_stock', 'lfo_hooks', 'stock_browser')
+             'project_companion_table', 'profiling', 'lfo', 'lfo_stock', 'lfo_hooks', 'stock_browser',
+             'extension_runtime', 'extension_collection', 'extension_stock')
 # SDK units that exist only for a profile service, linked when a machine needs it.
 UNIT_SERVICES = dict.fromkeys(('sample_machines', 'sample_hooks', 'sample_callbacks', 'sample_cache',
                                'sample_cache_stock', 'sample_cache_hooks', 'sample_progress',
                                'sample_progress_stock', 'pad_assignment', 'pad_assignment_stock', 'drum_page',
                                'drum_controls_stock', 'drum_display_stock'), 'samples')
+UNIT_SERVICES.update(dict.fromkeys(('extension_runtime', 'extension_collection', 'extension_stock'), 'extensions'))
+
+
+def service_users(machines):
+    """What a native build's services are chosen by: its machines' kinds, and
+    'extension' when it links extensions (native builds link all of the collection's)."""
+    return [m.kind for m in machines] + (['extension'] if extensions_of(machines) else [])
 
 
 def module_bytes(profile):
@@ -233,9 +268,74 @@ def object_services(machines, profile=None):
             if m is None and step in UNIT_SERVICES}
 
 
+def absent_symbols(m):
+    """The callbacks of an unselected machine, each resolving to kit_absent, which declines:
+    startup skips it and its menu name is left to stock."""
+    if m.kind == 'effect':
+        absent = {m.prefix + suffix: 'kit_absent' for suffix in ('_fx_register', '_ready')}
+    else:
+        absent = {m.prefix + suffix: 'kit_absent' for suffix in ('_register', '_name_matches', '_ready', '_record_ready')}
+        if m.display == 'stock':
+            # The shared sample table names these; unselected, its ready check declines first.
+            absent.update({symbol: 'kit_absent' for symbol in sample_callbacks(m)})
+        else:
+            absent[m.prefix + '_screen_register'] = 'kit_absent'
+    if m.kind in ('effect', 'sample'):
+        absent[m.prefix + '_benchmark'] = 'kit_absent'
+    return absent
+
+
+def link(directory, tools, profile, definitions, machines, selected, name='module'):
+    """Link the selected machines' objects, compiled in `directory` for the whole collection,
+    as the builder does; None, or how they overflow the shared module memory."""
+    absent = [m for m in machines if m not in selected]
+    aliases = {symbol: target for m in absent for symbol, target in absent_symbols(m).items()}
+    # Unselected machines have no numbers (builder/core.mjs numberSymbols).
+    definitions = {**definitions, **{m.prefix + suffix: 0 for m in absent for suffix in (
+        ('_fx_id', '_fx_page_id') if m.kind == 'effect' else ('_engine_id', '_page_id'))}}
+    # GNU ld synthesizes FILE symbols from object arguments; relative names keep
+    # independent rebuilds byte-identical.
+    command = [tools['ld'], '-T', ROOT / LINKER, f'-Map={name}.map', '-o', f'{name}.elf',
+               *(f'--defsym={key}={value:#x}' for key, value in definitions.items()),
+               *(f'--defsym={key}={value}' for key, value in aliases.items()),
+               *(object_name for object_name, _m, _step in plan(subset(machines, selected), profile))]
+    try:
+        subprocess.check_output([str(arg) for arg in command], cwd=directory, stderr=subprocess.STDOUT, text=True, timeout=120)
+    except subprocess.CalledProcessError as error:
+        overflow = re.search(r"region `MODULE' overflowed by (\d+) bytes", error.output or '')
+        if not overflow and 'Module overlaps the relocated tables' not in (error.output or ''):
+            raise
+        usage, limit = memory_by_owner(directory, subset(machines, selected), profile), module_bytes(profile)
+        total = limit + int(overflow.group(1)) if overflow else sum(sum(share.values()) for share in usage.values())
+        return memory_summary(usage, total, limit)
+    return None
+
+
+def linked_machines(directory, tools, profile, machines, definitions):
+    """The machines the module links: all of them when they fit. Otherwise, a collection
+    holding Open-XY's own machines links those, and each other machine must fit beside
+    them, as the builder offers each one; people choose which they install."""
+    from .catalog import OFFICIAL
+    overflow = link(directory, tools, profile, definitions, machines, machines)
+    if overflow is None:
+        return machines
+    core = [m for m in machines if m.id in OFFICIAL]
+    require(core and len(core) < len(machines), 'Machines exceed the shared module memory, ' + overflow)
+    for m in machines:
+        if m not in core:
+            beside = link(directory, tools, profile, definitions, machines,
+                          [x for x in machines if x in core or x is m], 'fit')
+            require(beside is None, f'{m.id} does not fit beside the official machines, ' + str(beside))
+    for leftover in ('fit.elf', 'fit.map'):
+        (directory / leftover).unlink(missing_ok=True)
+    overflow = link(directory, tools, profile, definitions, machines, core)
+    require(overflow is None, 'The official machines exceed the shared module memory, ' + str(overflow))
+    return subset(machines, core)
+
+
 def compile_collection(directory, toolchain, compiler, profile, machines, definitions, version, profiling=True):
-    """Compile and link every machine, labelled with the release version; return the
-    module bytes, report and patched profile."""
+    """Compile every machine and link those that fit (linked_machines), labelled with the
+    release version; return the module bytes, report and patched profile."""
     require(type(profiling) is bool, 'Profiling must be a boolean')
     directory = Path(directory)
     for m in machines:
@@ -264,6 +364,14 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
         if m is None:
             if step == 'benchmark':
                 return cxx(str(benchmark.generate(folder, machines)), obj)
+            if step.startswith('extension:'):
+                chosen = step.removeprefix('extension:')
+                extension = next(e for e in extensions_of(machines) if e.id == chosen)
+                return cxx(str(extensions.generate_extension(folder, extension)), obj)
+            if step == 'extension_runtime':
+                return cxx('sdk/platform/extension_runtime.cpp', obj)
+            if step == 'extension_collection':
+                return cxx(str(extensions.generate_collection(folder, extensions_of(machines))), obj)
             if step == 'screen_order':
                 return cxx(str(generate_screen_order(folder)), obj)
             if step == 'sample_callbacks':
@@ -295,38 +403,25 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
                   'sample_voice': lambda: generate_sample_voice(folder, m, benchmark=True)}[step]
         return cxx(str(source()), obj, m)
 
-    names = []
     for name, m, step in plan(machines, profile):
         obj = directory / name
         build_unit(obj, m, step)
         # Disable string pooling so the browser linker places sections exactly as GNU ld does.
         obj.write_bytes(normalize_object(read(obj)))
         require('R_BFIN_RIMM16' not in execute([tools['objdump'], '-r', obj]), 'Truncated address relocation in ' + name)
-        names.append(name)
     stack_usage(directory)
-    # GNU ld synthesizes FILE symbols from object arguments; relative names keep
-    # independent rebuilds byte-identical.
-    link = [tools['ld'], '-T', ROOT / LINKER, '-Map=module.map', '-o', 'module.elf',
-            *(f'--defsym={key}={value:#x}' for key, value in definitions.items()), *names]
-    try:
-        subprocess.check_output([str(arg) for arg in link], cwd=directory, stderr=subprocess.STDOUT, text=True, timeout=120)
-    except subprocess.CalledProcessError as error:
-        overflow = re.search(r"region `MODULE' overflowed by (\d+) bytes", error.output or '')
-        if not overflow and 'Module overlaps the relocated tables' not in (error.output or ''):
-            raise
-        usage, limit = memory_by_owner(directory, machines, profile), module_bytes(profile)
-        total = limit + int(overflow.group(1)) if overflow else sum(sum(share.values()) for share in usage.values())
-        raise ValueError('Machines exceed the shared module memory, ' + memory_summary(usage, total, limit)) from None
-    module, sizes, patch_profile, hooks, stack, usage = check_module(directory, tools, profile, machines, profiling)
+    linked = linked_machines(directory, tools, profile, machines, definitions)
+    module, sizes, patch_profile, hooks, stack, usage = check_module(directory, tools, profile, linked, profiling)
     require(provenance(machines) == before, 'Sources changed during compilation')
     report = dict(schema=1, target=TARGET, status='experimental-unqualified', sources=before,
                   host=host_platform(), tools=host_pins('tools')[0], compiler=host_pins('compiler')[0],
-                  cxx_flags=CXX_FLAGS, profiling=profiling, benchmark_cases=benchmark.cases(machines),
+                  cxx_flags=CXX_FLAGS, profiling=profiling, benchmark_cases=benchmark.cases(linked),
                   sizes=sizes, memory=usage, module_bytes=module_bytes(profile), audio_stack_bytes=stack,
                   reserved_bytes=profile['reserved_bytes'],
                   module_sha256=sha(module), elf_sha256=sha(read(directory / 'module.elf')), hooks=hooks,
-                  objects=object_owners(machines, profile), patches=patch_profile['patches'],
-                  services=sorted(active_services(profile, (m.kind for m in machines))), device_operations=False,
+                  objects=object_owners(linked, profile), patches=patch_profile['patches'],
+                  linked=[m.id for m in linked],
+                  services=sorted(active_services(profile, service_users(linked))), device_operations=False,
                   hardware_tested=False, cpu_timing_measured=False)
     save_json(directory / 'compile-report.json', report)
     return bytes(module), report, patch_profile
@@ -504,7 +599,7 @@ def check_module(directory, tools, profile, machines, profiling=True):
     patch_profile = copy.deepcopy(profile)
     hooks = {}
     text = allocated['.text']
-    services = active_services(profile, (m.kind for m in machines))
+    services = active_services(profile, service_users(machines))
     for patch in patch_profile['patches']:
         if not patch_active(patch, services, profiling):
             patch['after'] = patch['before']  # inactive hooks retain stock code
@@ -646,6 +741,11 @@ def prepare_assets(catalog, profile, machines):
     return outputs
 
 
+def linked_in(machines, report):
+    """The machines a compile report's module links, in collection order."""
+    return subset(machines, [m for m in machines if m.id in report['linked']])
+
+
 def package_collection(package):
     """The collection a package was built from, as its manifest records it."""
     entries = document(Path(package) / 'manifest.json').get('collection')
@@ -685,7 +785,7 @@ def verification(stock, catalog, package, toolchain, compiler, *, require_record
         module, report, patch_profile = compile_collection(temporary, toolchain, compiler, profile, machines,
                                                            definitions, package_version(package), profiling)
         require(report['profiling'] is profiling, 'Compile profiling differs from manifest')
-        expected_assets = prepare_assets(catalog, profile, machines)
+        expected_assets = prepare_assets(catalog, profile, linked_in(machines, report))
         expected_assets['os.ldr'] = assemble(stock, module, patch_profile, profile, len(profile['patches']),
                                                set(report['services']), profiling)
         expected = {'candidate/' + name: data for name, data in expected_assets.items()}
@@ -701,6 +801,7 @@ def verification(stock, catalog, package, toolchain, compiler, *, require_record
         require(actual == {p for p in expected if p.startswith('candidate/')}, 'Unexpected deployment file')
     result = dict(target=TARGET, status='experimental-unqualified', os_sha256=sha(expected_assets['os.ldr']),
                   machines=[m.source() for m in machines],
+                  linked=report['linked'],
                   fresh_source_rebuild_matches=True, original_entry_preserved=True,
                   profiling=profiling,
                   exact_edits=sum(patch_active(p, set(report['services']), profiling) for p in profile['patches']),
@@ -722,13 +823,14 @@ def build(out, toolchain, compiler, stock_os, stock_content, entries=None, layou
     stock = read(stock_os)
     require(sha(stock) == profile['stock_sha256'], 'Stock OS hash mismatch')
     catalog = read(Path(stock_content) / 'op1_factory.json')
-    prepared = prepare_assets(catalog, profile, machines)
+    require(sha(catalog) == profile['stock_catalog_sha256'], 'Stock catalog hash mismatch')
     output = fresh_output(out)
     analysis = output / 'analysis'
     analysis.mkdir()
     version = startup_label.release_version()
     module, report, patch_profile = compile_collection(analysis, toolchain, compiler, profile, machines,
                                                        definitions, version, profiling)
+    prepared = prepare_assets(catalog, profile, linked_in(machines, report))
     prepared['os.ldr'] = assemble(stock, module, patch_profile, profile, len(profile['patches']),
                                   set(report['services']), profiling)
     for name, data in prepared.items():
@@ -747,14 +849,16 @@ def build(out, toolchain, compiler, stock_os, stock_content, entries=None, layou
 
 def add_collection_arguments(parser):
     parser.add_argument('--collection', type=Path,
-                        help='collection file of {"path": ...} machine folders, such as local/catalog/collection.json '
-                             'from python sdk.py catalog fetch')
+                        help='collection file of {"path": ...} machine and extension folders, such as '
+                             'local/catalog/collection.json from python sdk.py catalog fetch')
     parser.add_argument('--machine', type=Path, action='append', default=[],
                         help='a machine folder to add to the collection; repeatable')
+    parser.add_argument('--extension', type=Path, action='append', default=[],
+                        help='an extension folder to add to the collection; repeatable')
 
 
 def selected_collection(args):
-    return read_collection(args.collection, args.machine)
+    return read_collection(args.collection, args.machine, args.extension)
 
 
 COMMANDS = {
@@ -808,6 +912,9 @@ def main(argv=None, command=None):
             print(json.dumps(report['sizes'], indent=2))
             print('Memory ' + memory_summary(report['memory'], report['sizes']['allocated_span_bytes'],
                                             report['module_bytes']))
+            if len(report['linked']) < len(machines):
+                print('Not every machine fits at once: linked the official machines; '
+                      'each other machine fits beside them.')
             print('Non-bootable development module; not an OS image.')
         elif command == 'verify':
             stock, catalog = read(args.stock_os), read(args.stock_content / 'op1_factory.json')

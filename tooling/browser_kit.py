@@ -12,13 +12,13 @@ from pathlib import Path
 import subprocess
 import sys
 
-from .adapters import catalog_entry, sample_callbacks
+from .adapters import catalog_entry
 from .catalog import official
 from .definitions import control_positions, paged
 from .formats import require, sha
-from .machines import FIXED_NUMBERS
-from .pipeline import ROOT, child, fresh_output, read, require_release_host, resolve_toolchain, tool_paths
-from . import native, preview, screen
+from .machines import FIXED_NUMBERS, check_request
+from .pipeline import ROOT, child, document, fresh_output, read, require_release_host, resolve_toolchain, tool_paths
+from . import extensions, native, preview, screen
 
 
 def notices(machines):
@@ -30,17 +30,26 @@ def notices(machines):
     return '\n\n'.join(texts)
 
 
-def catalog_sources(machines, personal):
-    """The release of each catalog machine at its pinned commit, by ID. A published kit
-    holds reviewed machines only: those. A personal kit may hold any folder."""
+def catalog_sources(machines, personal, entries=None):
+    """The release of each catalog machine (or extension) at its pinned commit, by ID. A
+    published kit holds reviewed ones only: those. A personal kit may hold any folder."""
     from .catalog import load, pinned
-    entries = load()
+    entries = load() if entries is None else entries
     sources = {m.id: next(e for e in entries if e['id'] == m.id) for m in machines
                if pinned(m, entries)}
     require(personal or all(m.id in sources for m in machines),
-            'A published kit holds catalog machines at their pinned commits '
+            'A published kit holds catalog machines and extensions at their pinned commits '
             '(sdk.py catalog fetch); build other folders into a --personal kit')
     return sources
+
+
+def extension_origins(extensions_, personal):
+    """Each extension's origin, as for machines: official (Open-XY's own, catalog.
+    OFFICIAL_EXTENSIONS), catalog (a community release) or personal (any other folder)."""
+    from .catalog import load_extensions
+    sources = catalog_sources(extensions_, personal, load_extensions())
+    return {e.id: 'personal' if e.id not in sources else 'official' if official(sources[e.id]) else 'catalog'
+            for e in extensions_}
 
 
 def export(package, output, tools, preview_cxx='clang++', *, stock_catalog, personal=False):
@@ -50,9 +59,11 @@ def export(package, output, tools, preview_cxx='clang++', *, stock_catalog, pers
     owners, services = native.object_owners(machines, profile), native.object_services(machines, profile)
     kit_machines = []
     for m in machines:
-        # The numbers it asks for; the builder numbers each selection (core.mjs assignNumbers).
+        # The numbers it asks for, null where it leaves them to the layout; the builder
+        # numbers each selection (core.mjs assignNumbers).
+        requested = check_request(profile['identities'], m.kind, m.requested or m.identity)
         entry = dict(id=m.id, name=m.name, kind=m.kind, prefix=m.prefix, description=m.description,
-                     identity=m.requested or m.identity, controls=[p['label'] for p in m.definition['parameters']],
+                     identity=requested, controls=[p['label'] for p in m.definition['parameters']],
                      positions=control_positions(m.definition), pages=paged(m.definition))
         entry['catalog'] = catalog_entry(m)
         # Where the machine comes from, for the builder to show (core.mjs validOrigin): a
@@ -69,17 +80,7 @@ def export(package, output, tools, preview_cxx='clang++', *, stock_catalog, pers
         if m.icon:
             entry['icon'] = m.icon
         # An unselected machine's startup and catalog callbacks decline.
-        if m.kind == 'effect':
-            entry['absent'] = {m.prefix + suffix: 'kit_absent' for suffix in ('_fx_register', '_ready')}
-        else:
-            entry['absent'] = {m.prefix + suffix: 'kit_absent' for suffix in ('_register', '_name_matches', '_ready', '_record_ready')}
-            if m.display == 'stock':
-                # The shared sample table names these; unselected, its ready check declines first.
-                entry['absent'].update({symbol: 'kit_absent' for symbol in sample_callbacks(m)})
-            else:
-                entry['absent'][m.prefix + '_screen_register'] = 'kit_absent'
-        if m.kind in ('effect', 'sample'):
-            entry['absent'][m.prefix + '_benchmark'] = 'kit_absent'
+        entry['absent'] = native.absent_symbols(m)
         if m.display != 'stock':
             entry['artwork'] = read(m.root / 'panel.svg.fragment').decode('utf-8')
             entry['asset'] = m.native_name + '.svg'
@@ -95,6 +96,7 @@ def export(package, output, tools, preview_cxx='clang++', *, stock_catalog, pers
     object_dir = output / 'objects'
     object_dir.mkdir()
     objects = []
+    extension_objects = {'sdk/extension_' + e.id + '.o': e.id for e in native.extensions_of(machines)}
     for name, owner in owners.items():
         data = read(child(package / 'analysis', name))
         destination = child(object_dir, name)
@@ -103,14 +105,20 @@ def export(package, output, tools, preview_cxx='clang++', *, stock_catalog, pers
         entry = dict(name=name, owner=owner, bytes=base64.b64encode(data).decode('ascii'), sha256=sha(data))
         if name in services:
             entry['service'] = services[name]
+        if name in extension_objects:
+            entry['extension'] = extension_objects[name]
         objects.append(entry)
     # Stock addresses only: each selection's machine numbers are the builder's.
     stock = {key: value for key, value in definitions.items() if key in native.DEFINITIONS}
+    # The machines the native package links, whose selection reproduces it.
+    linked = document(package / 'analysis/compile-report.json')['linked']
     # The release version, as the firmware's boot label shows it.
     kit = dict(format='opxy-browser-kit/1', version=native.package_version(package), profile=profile,
                profileSource=base64.b64encode(read(ROOT / ('profiles/' + profile['id'] + '.json'))).decode('ascii'),
-               definitions=stock, fixed=FIXED_NUMBERS,
+               definitions=stock, fixed=FIXED_NUMBERS, linked=linked,
                machines=kit_machines, objects=objects, notices=notices(machines),
+               extensions=extensions.metadata(native.extensions_of(machines),
+                                              extension_origins(native.extensions_of(machines), personal)),
                stockCatalog=base64.b64encode(stock_catalog).decode('ascii'),
                screenTemplate=screen.template().decode('utf-8'))
     kit_path = output / 'kit.json'
@@ -141,7 +149,7 @@ def write_builder(kit, output):
     require(app.startswith(imports), 'Unexpected browser imports')
     # Keep the public source as ES modules; inline a closed namespace for file://.
     exports = ('requireThat decode64 sha256 equal readObject readLayout assignNumbers chosenByDefault moduleBytes openKit linkKit readLdr '
-               'patchFirmware recoverFirmware presetFiles buildAssets zipFiles sourceUrl sourceName').split()
+               'patchFirmware recoverFirmware extensionSelection sharedClaim claimLabel presetFiles buildAssets zipFiles sourceUrl sourceName').split()
     bundled = 'const Core = (() => {\n' + script + '\nreturn {' + ','.join(exports) + '};\n})();\n'
     bundled += 'const {editedShown, shownControls, inputWords} = (() => {\n' + read(ROOT / 'sdk/browser/controls.mjs').decode(
         'utf-8').replace('export ', '') + '\nreturn {editedShown, shownControls, inputWords};\n})();\n'
