@@ -405,9 +405,12 @@ on its aux track only.
   on the track. Choosing one gives the track to its machine (or role) and sets
   its controls. The builders install a machine's definition presets as
   `content/aux_presets/<id>/<name>.json` (names lowercased, at most 15
-  characters); users add their own as `aux_presets/<folder>/<name>.json` over
-  MTP. Each is `{"params": [eight values 0..32767], "platform": "OP-XY",
-  "type": "<machine id or cv>", "version": 1}`.
+  characters), and `content/aux_presets/cv/init.json` so CV is listed too;
+  users add their own as `aux_presets/<folder>/<name>.json` over MTP. Each is
+  `{"params": [eight values 0..32767], "platform": "OP-XY", "type": "<machine
+  id or cv>", "version": 1}`. Without `params`, a preset only gives the track
+  to its machine or role, leaving the controls as they were, as CV's `init`
+  does.
 
 It runs on the GUI side like any track control machine; nothing changes on the
 audio side but the silenced CV output.

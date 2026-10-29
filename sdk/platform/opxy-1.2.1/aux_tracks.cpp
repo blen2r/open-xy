@@ -156,10 +156,12 @@ bool open_chooser(u32 track) {
 // profile) and stock's instrument browser never reads: it lists any .json in
 // /fat32/presets' folders. Each names what it is for in "type"
 // (a machine's ID, or a stock role such as "cv") and its eight controls in
-// "params" (0..32767, as instrument presets store them). Shift + track key on a
-// track a machine can take over lists, as stock's preset browser does, the
-// folders and in each the presets that can run on the track; choosing one gives
-// the track to its machine (or role) and sets the controls.
+// "params" (0..32767, as instrument presets store them); without "params" it
+// only gives the track to that machine or role, as the role's installed "init"
+// does. Shift + track key on a track a machine can take over lists, as stock's
+// preset browser does, the folders and in each the presets that can run on the
+// track; choosing one gives the track to its machine (or role) and sets the
+// controls it holds.
 //
 // Stock's folder calls, as its preset scan (8d56db50) makes them: 8c0be54a(path)
 // opens a folder (0 when it can't), 8c0be6a4(folder) gives the next entry (its
@@ -179,7 +181,7 @@ void file_close(void* file) { stock<int(void*)>(0x8fed00ae)(file); }
 
 const u32 kFolders = 16, kPresets = 64, kNameBytes = 16, kPathBytes = 128, kPresetBytes = 2048;
 const char* const kPresetRoots[] = {"content/aux_presets", "/fat32/aux_presets"};
-struct Preset { u32 choice; i32 values[kControls]; };
+struct Preset { u32 choice; bool values_given; i32 values[kControls]; };
 browser::detail::Row folders[kFolders];
 browser::detail::Item items[kPresets];
 Preset presets[kPresets];
@@ -238,8 +240,11 @@ bool read_preset(const char* path, u32 track, Preset& preset) {
     if (!field(length, "type", at) || text[at] != '"') return false;
     for (end = at + 1; end < length && text[end] != '"'; ++end) {}
     const i32 choice = choice_for(text + at + 1, end - at - 1, track);
-    if (choice < 0 || !field(length, "params", at) || text[at] != '[') return false;
+    if (choice < 0) return false;
     preset.choice = static_cast<u32>(choice);
+    preset.values_given = field(length, "params", at);
+    if (!preset.values_given) return true;
+    if (text[at] != '[') return false;
     u32 n = 0, i = at + 1;
     while (n < kControls) {
         while (i < length && (text[i] == ' ' || text[i] == ',' || text[i] == '\n' || text[i] == '\t' || text[i] == '\r')) ++i;
@@ -324,7 +329,8 @@ void apply_preset(void*, u32) {
     if (picked >= preset_count) return;
     const Preset& preset = presets[picked];
     take(preset_track, preset.choice);
-    for (u32 i = 0; i < kControls; ++i) param_set(preset_track, i, preset.values[i]);
+    if (preset.values_given)
+        for (u32 i = 0; i < kControls; ++i) param_set(preset_track, i, preset.values[i]);
 }
 
 bool open_presets(u32 track) {

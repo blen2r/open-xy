@@ -723,8 +723,10 @@ export function presetFiles(machine) {
   if (machine.catalog === '') {
     const files = {};
     for (const [path, text] of Object.entries(machine.auxPresets ?? {})) {
-      check(new RegExp(`^content/aux_presets/${machine.id}/[a-z0-9][a-z0-9 _-]{0,14}\\.json$`).test(path) &&
-        JSON.parse(text).type === machine.id, 'Invalid aux preset: ' + path);
+      // The machine's own presets, and the init of a stock role it can replace (tooling.adapters.AUX_ROLES).
+      const type = JSON.parse(text).type, folder = type === machine.id ? machine.id : ['cv'].includes(type) ? type : null;
+      check(folder !== null && new RegExp(`^content/aux_presets/${folder}/[a-z0-9][a-z0-9 _-]{0,14}\\.json$`).test(path),
+        'Invalid aux preset: ' + path);
       files[path] = JSON.parse(text);
     }
     return files;
