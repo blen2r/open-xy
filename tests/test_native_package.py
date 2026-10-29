@@ -12,6 +12,8 @@ import shutil
 import struct
 import tempfile
 import unittest
+
+from tooling.adapters import catalog_entry
 from unittest.mock import patch
 
 from tooling import native
@@ -125,7 +127,8 @@ class PackageVerification(unittest.TestCase):
                                      for m in self.machines})
         original = json.loads(self.catalog)
         current = json.loads((self.package / 'candidate/content/op1_factory.json').read_bytes())
-        names = [m.native_name for m in self.machines if m.kind != 'effect']
+        # Machines that take over aux tracks are chosen there, not in this list.
+        names = [m.native_name for m in self.machines if m.kind != 'effect' and catalog_entry(m)]
         self.assertEqual(current['engine_types'][:-len(names)], original['engine_types'])
         self.assertEqual([e['type'] for e in current['engine_types'][-len(names):]], names)
         displays = [m.native_name for m in self.machines if m.display != 'stock']
