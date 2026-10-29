@@ -22,9 +22,12 @@
 // starts with every track stock.
 //
 // Silencing, audio side. GUI and audio share no memory: a held track carries
-// kMark in its last live word, which stock never locks, and the GUI sets it
-// through stock's live set (8d5acea8), which publishes it. The audio hooks read
-// it from the audio side's copy of the track's words (84eab39c + track * 0xe8).
+// kMark in its last word, which stock never locks, set through stock's set
+// (8d5acf28) as its stored value too, so stock's own resets of live values
+// (as when the sequencer starts) keep it; stock publishes it, and the audio
+// hooks read it from the audio side's copy of the track's words (84eab39c +
+// track * 0xe8). The project saves the mark, so a track whose holder is gone
+// after a load (a project from a build with the machine) gets its word back.
 // - CV (track 12, index 11): the audio loop's CV output (8d50f1cc, from
 //   8d512214) sets the voltage from word 0 and its mode from word 14, and a
 //   note on raises the gate (8d5b5fe0, from 8d50e95c). Both are skipped while
@@ -73,8 +76,8 @@ const i32 kMark = 0x4f584155;
 // the stock role; and the role's controls while a machine holds it.
 u32 holders[control::all_tracks];
 i32 kept[control::all_tracks][kControls];
-// Whether this GUI set a track's mark (so it clears only its own).
-bool marked[control::all_tracks];
+// The last word's stored value before the track was marked, to give back.
+i32 unmarked[control::all_tracks];
 
 bool takeable(u32 track) { return track < control::all_tracks && (kTakeable >> track & 1); }
 const ControlMachine* holder(u32 track) {
@@ -96,11 +99,26 @@ void live_set(u32 track, u32 index, i32 value) {
     stock<void(u32, u32, u32, i32)>(0x8d5acea8)(kProject, track, index, value);
 }
 
-// Publishes a held track's mark before anything else reaches the audio side,
-// so the role stays silent from the first word the machine sets.
+// Stores and publishes a held track's mark before anything else reaches the
+// audio side, so the role stays silent from the first word the machine sets;
+// and sets it live again over any stock reset that missed the stored value.
 void mark(u32 track) {
-    if (live(track, kMarkWord) != kMark) live_set(track, kMarkWord, kMark);
-    marked[track] = true;
+    const i32 stored = base(track, kMarkWord);
+    if (stored != kMark) {
+        unmarked[track] = stored;
+        param_set(track, kMarkWord, kMark);
+    } else if (live(track, kMarkWord) != kMark) {
+        live_set(track, kMarkWord, kMark);
+    }
+}
+// A track nothing holds keeps no mark, stored or live.
+void unmark(u32 track) {
+    if (base(track, kMarkWord) == kMark) {
+        param_set(track, kMarkWord, unmarked[track]);
+        unmarked[track] = 0;
+    } else if (live(track, kMarkWord) == kMark) {
+        live_set(track, kMarkWord, base(track, kMarkWord));
+    }
 }
 
 // Gives the track to machine `choice` (1 + its index) or back to its role (0);
@@ -156,12 +174,9 @@ static u32 aux_engine(u32 track) { return track >= kFirstAux ? control_engine(tr
 extern "C" void sdk_aux_tick() {
     sdk_aux_engine = aux_engine;
     for (u32 t = kFirstAux; t < control::all_tracks; ++t) {
-        if (holder(t)) {
-            mark(t);
-        } else if (marked[t]) {
-            if (live(t, kMarkWord) == kMark) live_set(t, kMarkWord, base(t, kMarkWord));
-            marked[t] = false;
-        }
+        if (!takeable(t)) continue;
+        if (holder(t)) mark(t);
+        else unmark(t);
     }
 }
 
