@@ -401,7 +401,8 @@ on its aux track only.
 - **Its controls:** words 0..7 of track 12, so they are sequenced, locked and
   saved like any track parameter, and `values[11]` holds them. Taking the
   track over sets the machine's defaults; giving it back restores the role's
-  values.
+  values. A project opened with a build that lacks the machine gets the role's
+  values back too. Opened on stock firmware, CV plays the machine's values.
 - **Presets:** Shift + track key on track 12 lists presets in two columns, as
   stock's preset browser does: folders, then the presets in them that can run
   on the track. Choosing one gives the track to its machine (or role) and sets

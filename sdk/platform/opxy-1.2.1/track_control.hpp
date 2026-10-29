@@ -31,6 +31,10 @@ struct ControlMachine {
 // The engine whose machine runs on a track: stock's engine on an instrument
 // track, the machine holding an aux track, else 0. GUI only (track_control.cpp).
 u32 control_engine(u32 track);
+// What the aux service publishes in a held aux track's last live word (aux_tracks.cpp):
+// the mark while a machine holds it, then for a few ticks the release. Never
+// stored; machines see the stored value instead.
+const i32 kAuxMark = 0x4f584155, kAuxRelease = 0x4f58524c;  // "OXAU", "OXRL"
 // The aux service (aux_tracks.cpp), linked only for a machine that takes over aux
 // tracks: its entry points, which its startup fills in; null without it.
 struct AuxService {

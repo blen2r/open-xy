@@ -508,7 +508,9 @@ copy of the track's words (`84eab39c + track × 0xe8`). The mark is never a
 stored value: the base setter (`8d5acf28`, then `8d587a20`) bounds no index,
 and stock re-publishes live values now and then (when the sequencer starts),
 so the audio side stays silent until the mark has been missing for 512 of its
-blocks. Taking the track over keeps the role's eight controls aside and sets
+blocks. Giving the track back publishes `0x4f58524c` there instead for a few GUI
+ticks, which ends that hold at once; machines see the stored value of word 57,
+never either mark. Taking the track over keeps the role's eight controls aside and sets
 the machine's defaults through `8d5acf28`; giving it back restores them.
 
 A project load reaches the SDK from inside stock's read (`8d58913e`), before

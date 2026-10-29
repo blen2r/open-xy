@@ -33,13 +33,15 @@
 // starts with every track stock.
 //
 // Silencing, audio side. GUI and audio share no memory: a held track carries
-// kMark in its last live word, which stock never locks, and the GUI sets it
+// kAuxMark in its last live word, which stock never locks, and the GUI sets it
 // each tick through stock's live set (8d5acea8), which publishes it. It is
 // never a stored value: stock's base setter does not bound the index, and the
 // project must not keep it. The audio hooks read it from the audio side's copy
 // of the track's words (84eab39c + track * 0xe8). Stock resets live values now
 // and then (when the sequencer starts, for one), so the audio side stays
-// silent until the mark has been missing for kHeldCalls of its calls.
+// silent until the mark has been missing for kHeldCalls of its calls, or until
+// it sees kAuxRelease, which the GUI publishes for a few ticks when the track
+// is given back.
 // - CV (track 12, index 11): the audio loop's CV output (8d50f1cc, from
 //   8d512214) sets the voltage from word 0 and its mode from word 14, and a
 //   note on raises the gate (8d5b5fe0, from 8d50e95c). Both are skipped while
@@ -77,16 +79,23 @@ const u32 kCv = 11;
 const u32 kTakeable = 1u << kCv;
 const char* role_name(u32 track) { return track == kCv ? "cv" : nullptr; }
 
-// The last live word, which carries the mark, and the mark: "OXAU".
+// The last live word, which carries the mark (kAuxMark) while a machine holds
+// the track, then the release (kAuxRelease) for kReleaseTicks GUI ticks, which
+// lets the audio side end the hold at once.
 const u32 kMarkWord = control::track_parameters - 1;
-const i32 kMark = 0x4f584155;
+const u32 kReleaseTicks = 8;
 
 // Each aux track's holder, as 1 + its index in sdk_control_machines, or 0 for
 // the stock role; and the role's controls while a machine holds it.
 u32 holders[control::all_tracks];
 i32 kept[control::all_tracks][kControls];
-// Whether this GUI set a track's mark (so it clears only its own).
+// Whether this GUI set a track's mark (so it clears only its own), and the
+// ticks left showing its release.
 bool marked[control::all_tracks];
+u32 releasing[control::all_tracks];
+// A track whose project named a machine this build lacks: the role's controls
+// it kept, which the next GUI tick sets back.
+bool lost[control::all_tracks];
 
 bool takeable(u32 track) { return track < control::all_tracks && (kTakeable >> track & 1); }
 const ControlMachine* holder(u32 track) {
@@ -111,13 +120,18 @@ void live_set(u32 track, u32 index, i32 value) {
 // Publishes a held track's mark before anything else reaches the audio side,
 // so the role stays silent from the first word the machine sets.
 void mark(u32 track) {
-    if (live(track, kMarkWord) != kMark) live_set(track, kMarkWord, kMark);
+    if (live(track, kMarkWord) != kAuxMark) live_set(track, kMarkWord, kAuxMark);
     marked[track] = true;
+    releasing[track] = 0;
 }
 void unmark(u32 track) {
-    if (!marked[track]) return;
-    if (live(track, kMarkWord) == kMark) live_set(track, kMarkWord, base(track, kMarkWord));
-    marked[track] = false;
+    if (marked[track]) {
+        live_set(track, kMarkWord, kAuxRelease);
+        marked[track] = false;
+        releasing[track] = kReleaseTicks;
+    } else if (releasing[track] && --releasing[track] == 0 && live(track, kMarkWord) == kAuxRelease) {
+        live_set(track, kMarkWord, base(track, kMarkWord));
+    }
 }
 
 // Gives the track to machine `choice` (1 + its index) or back to its role (0);
@@ -357,11 +371,14 @@ bool open_presets(u32 track) {
 const volatile i32* audio_words(u32 track) { return at<const volatile i32>(0x84eab39c + track * 0xe8); }
 // Audio side: CV output calls (one per audio block) since the CV track's mark
 // was last seen, capped; it counts as held for kHeldCalls of them, far longer
-// than the GUI takes to publish the mark again after a stock reset.
+// than the GUI takes to publish the mark again after a stock reset, unless the
+// release ends the hold first.
 const u32 kHeldCalls = 512;
 u32 cv_missing = kHeldCalls;
 bool cv_held() {
-    if (audio_words(kCv)[kMarkWord] == kMark) cv_missing = 0;
+    const i32 last = audio_words(kCv)[kMarkWord];
+    if (last == kAuxMark) cv_missing = 0;
+    else if (last == kAuxRelease) cv_missing = kHeldCalls;
     else if (cv_missing < kHeldCalls) ++cv_missing;
     return cv_missing < kHeldCalls;
 }
@@ -378,6 +395,11 @@ u32 aux_engine(u32 track) {
 void aux_tick() {
     for (u32 t = kFirstAux; t < control::all_tracks; ++t) {
         if (!takeable(t)) continue;
+        if (lost[t]) {
+            lost[t] = false;
+            if (!holders[t])
+                for (u32 i = 0; i < kControls; ++i) param_set(t, i, kept[t][i]);
+        }
         if (holder(t)) mark(t);
         else unmark(t);
     }
@@ -441,7 +463,7 @@ void sdk_cv_output(u32 argument) {
 
 // 8d50e95c, audio side: a note on the CV track raises the gate, unless held.
 void sdk_cv_gate_on(u32 a, u32 b, u32 c) {
-    if (cv_missing >= kHeldCalls && audio_words(kCv)[kMarkWord] != kMark)
+    if (cv_missing >= kHeldCalls && audio_words(kCv)[kMarkWord] != kAuxMark)
         stock<void(u32, u32, u32)>(0x8d5b5fe0)(a, b, c);
 }
 
@@ -453,7 +475,8 @@ const char* aux_holder(u32 track) {
 const i32* aux_kept(u32 track) { return kept[track]; }
 
 // After a project loads: the machine named `id` holds `track` again, with the
-// role's controls as kept; a machine this build lacks leaves the role in place.
+// role's controls as kept; for a machine this build lacks, the role gets those
+// controls back, so it does not play the machine's.
 // Called from inside stock's project load, while the project is not yet in
 // use (stock asserts if its track data is touched then, data.cpp:985): it only
 // records the holder; the next GUI tick marks the track.
@@ -468,12 +491,14 @@ void aux_restore(u32 track, const char* id, u32 id_length, const i32* controls) 
         for (u32 c = 0; c < kControls; ++c) kept[track][c] = controls[c];
         return;
     }
+    for (u32 c = 0; c < kControls; ++c) kept[track][c] = controls[c];
+    lost[track] = true;
 }
 
 // Before a project loads, and for a new one: every aux track has its stock role.
 // Records only, as aux_restore does.
 void aux_forget() {
-    for (u32 t = 0; t < control::all_tracks; ++t) holders[t] = 0;
+    for (u32 t = 0; t < control::all_tracks; ++t) holders[t] = 0, lost[t] = false;
 }
 }
 
