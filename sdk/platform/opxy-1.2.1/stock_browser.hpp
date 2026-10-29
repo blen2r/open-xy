@@ -63,8 +63,6 @@ bool name(String&, const char*);
 // as stock's preset browser has them: knobs 2-4 scroll and press it.
 bool open_rows(Session&, Row*, u32 count, const char* title, u32 initial, Callbacks, i32 track = -1,
                bool columns = false);
-// Sets the open browser's heading, as open does (for a GUI readout).
-void heading(i32 track, const char* title);
 }
 // Declare as a zero-initialized static aggregate. Storage and callback context
 // must outlive the modal. Titles and labels are copied, printable ASCII 1..15.

@@ -310,28 +310,12 @@ u32 scan_presets(u32 track) {
     return count;
 }
 
-// DIAGNOSTIC (to remove once the modes are known): each highlight's mode and
-// id in the heading, as "m<mode> i<id>"; the last preset id highlighted is
-// what a click applies.
-void show(i32 value, char*& out) {
-    u32 v = value < 0 ? static_cast<u32>(-value) : static_cast<u32>(value);
-    if (value < 0) *out++ = '-';
-    char digits[10];
-    u32 n = 0;
-    do { digits[n++] = static_cast<char>('0' + v % 10); v /= 10; } while (v && n < 10);
-    while (n) *out++ = digits[--n];
-}
-void preset_highlight(void*, u32 mode, i32 id) {
+// Stock reports highlights in both columns; moving onto a folder highlights its
+// first preset. Whatever the mode, the last preset highlighted is the one a press
+// of knobs 2-4 applies.
+void preset_highlight(void*, u32, i32 id) {
     if (id >= static_cast<i32>(kFolders) && id < static_cast<i32>(kFolders + preset_count))
         picked = static_cast<u32>(id) - kFolders;
-    char readout[16], *out = readout;
-    *out++ = 'm';
-    show(static_cast<i32>(mode > 99 ? 99 : mode), out);
-    *out++ = ' ';
-    *out++ = 'i';
-    show(id > 9999 ? 9999 : id < -999 ? -999 : id, out);
-    *out = 0;
-    browser::detail::heading(static_cast<i32>(preset_track), readout);
 }
 void apply_preset(void*, u32) {
     if (picked >= preset_count) return;

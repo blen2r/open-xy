@@ -66,11 +66,6 @@ bool name(String& target, const char* text) {
     return size != 0;
 }
 
-void heading(i32 track, const char* title) {
-    if (void* screen = stock<void*()>(0x8d550e70)())
-        stock<void(void*, i32, const char*)>(0x8d551c48)(screen, track < 16 ? track : -1, title);
-}
-
 bool open(Session& session, Row* rows, u32 count, const char* title,
           const char* const* labels, u32 initial, Callbacks callbacks, i32 track) {
     // Validate everything first: rows an open browser may show, or invalid input,
