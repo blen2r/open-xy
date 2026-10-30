@@ -138,7 +138,9 @@ otherwise.
 a machine [took over](api.md#aux-tracks), as base64 of eight little-endian
 32-bit words. The project itself holds which machine each pattern runs, in its
 engine number. After a load, a pattern whose machine the firmware lacks is the
-stock role again and gets those controls back.
+stock role again and gets those controls back. Early test builds of aux tracks wrote one entry per
+track instead (`"machine"` and `"controls"`); the reader skips it, so such a
+project opens with CV on track 12, playing the machine's values as its controls.
 
 ## Commands
 
