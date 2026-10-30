@@ -176,7 +176,7 @@ emphasis and motion. `sdk.py new` supplies it by default. Macro Osc is the
 
 A synth for which a stock instrument page means nothing (one that makes no
 sound of its own, say) may declare `"hidePages"` at the top of
-`definition.json`, listing `"envelope"` (M2), `"filter"` (M3) or both. On its
+`definition.json` (SDK 1.7), listing `"envelope"` (M2), `"filter"` (M3) or both. On its
 track, those keys then leave the page shown as it was, and selecting the track
 while another track shows a hidden page shows the engine page. The SDK
 corrects the page once per GUI tick, so the hidden page may flash for a frame.
@@ -298,12 +298,12 @@ serialized access.
 
 ## Track control
 
-A synth can steer other tracks (SDK 1.8). A build without such a machine (or
+A synth can steer other tracks (SDK 1.7). A build without such a machine (or
 one with [hidden pages](#alternate-controls)) applies none of track control's
 firmware edits and links none of its code. Such a synth runs on an
 [aux track](#aux-tracks), never in an instrument track's place. It declares
 `"trackControl": {"stateBytes": n, "stateAlignment": a, "unique": true, "aux": [12]}`
-in `resources`, with `"sdk": "1.8"` in `machine.json`, and supplies
+in `resources`, with `"sdk": "1.7"` in `machine.json`, and supplies
 `control.cpp` with:
 
 ```cpp
@@ -398,7 +398,7 @@ holds the SDK's, as a starting point.
 ### Aux tracks
 
 A track control machine, unique and with its own display, runs on an aux
-track: it lists it in `"aux"` (`[12]`, CV) in `trackControl`. That track is the
+track (SDK 1.7): it lists it in `"aux"` (`[12]`, CV) in `trackControl`. That track is the
 only one for now, the one whose stock role the SDK keeps silent. Such a machine
 is not in tracks 1-8's engine list: it is chosen on its aux track only.
 
@@ -655,7 +655,7 @@ preset entries, its screen file, its symbol prefix and its C++ namespace. It is 
 | Field | Contract |
 | --- | --- |
 | `schema` | 1 |
-| `sdk` | The SDK version the machine targets, `"<major>.<minor>"`. This SDK is 1.8 and builds 1.0 to 1.8 machines |
+| `sdk` | The SDK version the machine targets, `"<major>.<minor>"`. This SDK is 1.7 and builds 1.0 to 1.7 machines |
 | `kind` | `synth`, `sample` or `effect` |
 | `description` | Plain text of at most 160 characters, shown by the builder and preview |
 | `base` | Sample engines only, and required for them: the stock sampler it forks, `"sampler"` or `"drumSampler"` ([sample engines](#sample-engines)) |

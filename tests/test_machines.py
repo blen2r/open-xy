@@ -192,10 +192,10 @@ class OutsideMachines(unittest.TestCase):
         for version in ('1.1', '1.2', '1.3', '1.4'):
             self.rename('fmcopy', self.free, version)
             self.assertEqual(machines.machine_at(self.folder).id, 'fmcopy')
-        for version in ('1.5', '1.6', '1.7', '1.8'):
+        for version in ('1.5', '1.6', '1.7'):
             self.numberless(self.folder, sdk=version)
             self.assertEqual(machines.machine_at(self.folder).id, 'fmcopy')
-        for version in ('0.9', '2.0', '1.9', '1', 'latest', None):
+        for version in ('0.9', '2.0', '1.8', '1', 'latest', None):
             with self.subTest(version=version):
                 self.rename('fmcopy', self.free, version)
                 with self.assertRaises(ValueError):
@@ -207,6 +207,27 @@ class OutsideMachines(unittest.TestCase):
         self.rename('fm2op', machines.FIXED_NUMBERS['fm2op'])
         self.assertEqual(machines.collection(machines.read_collection(None, [self.folder]))[0].identity,
                          machines.FIXED_NUMBERS['fm2op'])
+
+    def test_track_control_needs_the_sdk_that_adds_it(self):
+        (self.folder / 'control.cpp').write_text('', encoding='utf-8')
+        definition = json.loads((self.folder / 'definition.json').read_text(encoding='utf-8'))
+        definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4}
+        (self.folder / 'definition.json').write_text(json.dumps(definition), encoding='utf-8')
+        self.numberless(self.folder, sdk='1.6')
+        with self.assertRaisesRegex(ValueError, 'Track control'):
+            machines.machine_at(self.folder)
+        self.numberless(self.folder, sdk='1.7')
+        self.assertEqual(machines.machine_at(self.folder).id, 'fmcopy')
+
+    def test_hidden_pages_need_the_sdk_that_adds_them(self):
+        definition = json.loads((self.folder / 'definition.json').read_text(encoding='utf-8'))
+        definition['hidePages'] = ['envelope']
+        (self.folder / 'definition.json').write_text(json.dumps(definition), encoding='utf-8')
+        self.numberless(self.folder, sdk='1.6')
+        with self.assertRaisesRegex(ValueError, 'Hidden stock pages'):
+            machines.machine_at(self.folder)
+        self.numberless(self.folder, sdk='1.7')
+        self.assertEqual(machines.machine_at(self.folder).id, 'fmcopy')
 
     def numberless(self, folder, **changes):
         """A machine.json in SDK 1.5 form: no identity; `changes` adds or (None) removes fields."""
