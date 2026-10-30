@@ -39,6 +39,7 @@ version is rejected. The output differs from stock in exactly these places:
 | Diagnostic benchmark | 1 | Extends explicit command 0xc8 with the selected machines; no normal-playback callbacks added |
 | Per-voice profiling | 10 optional | Bypasses diagnostic timing in both stock voice renderers when built with profiling off |
 | Track control | 3 | Runs a synth's track control once per GUI tick, after stock's own call at that site, lets it capture encoder edits, and shows its overlays as parameter values |
+| Preset scan | 1 | Hides factory presets whose engine the build does not install ([presets](#presets)) |
 | Startup label | 1 | Shows `OPEN <version>-1.2.1` at boot, `<version>` from [`VERSION`](../VERSION), through the stock startup text renderer |
 | Extension events | 7 | Observes live input, stock transport and queued controls for extensions, and lets a Record double-tap owner edit notes through stock editing and undo; linked only when an extension is selected |
 | Module | 1 record | One loader block holding the linked module |
@@ -631,6 +632,20 @@ Stock's MTP view lists only paths matching a table of regular expressions
 the workspace and project patterns in place to `\.o?xy$`. Dropping a redundant
 `\d` (already in `\w`) from one character class keeps each string's length;
 the workspace pattern uses its padding.
+
+## Presets
+
+At boot, stock scans `content/presets` (factory presets, which the device
+never deletes or moves) and then `/presets` (the user's). For each preset it
+reads the top-level `"type"` at `8d4eed56`, and lists only presets with one.
+The SDK hook ([`presets.cpp`](../sdk/platform/opxy-1.2.1/presets.cpp)) calls
+the stock reader unchanged and then, on the factory pass, empties the type
+when no engine of that name is installed: neither stock's resolver knows it
+nor is it one of the build's machines. Such a preset, for example the default
+preset of a machine a later build left out, is then not listed; its file stays
+on the device. Until stock's engine name map exists, every name counts as
+installed. User presets stay listed: stock deletes a user folder that lists no
+presets, so hiding them could delete them.
 
 ## Send effects
 

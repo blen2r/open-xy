@@ -4,10 +4,9 @@ import re
 
 from .definitions import ROOT
 from .formats import require
-from .stock_tables import ENGINE_SENTINEL
+from .stock_tables import EFFECT_COUNT, ENGINE_COUNT, ENGINE_SENTINEL
 
 TEMPLATE = 'sdk/platform/opxy-1.2.1/startup.cpp.in'
-MAX_ENGINES = 32
 
 
 def _declare(name, signature='()'):
@@ -19,9 +18,9 @@ def render(prefixes, effects=(), stock_page=(), control=False):
     sampler page); they register on the GUI role without an own-page guard.
     control: the build links the control service; its marks screen registers
     last. Without it, the companion's calls into the service do nothing."""
-    require(1 <= len(prefixes) <= MAX_ENGINES and len(set(prefixes)) == len(prefixes),
+    require(1 <= len(prefixes) <= ENGINE_COUNT and len(set(prefixes)) == len(prefixes),
             'Startup needs distinct engine prefixes')
-    require(len(set(effects)) == len(effects) <= MAX_ENGINES and not set(effects) & set(prefixes),
+    require(len(set(effects)) == len(effects) <= EFFECT_COUNT and not set(effects) & set(prefixes),
             'Startup needs distinct effect prefixes')
     require(set(stock_page) <= set(prefixes), 'Stock-page engines must be listed engines')
     for prefix in (*prefixes, *effects):
@@ -54,7 +53,8 @@ def render(prefixes, effects=(), stock_page=(), control=False):
                   EFFECTS='\n'.join(f'    {prefix}_fx_register();' for prefix in effects),
                   ENGINES='\n'.join(f'    {prefix}_register();' for prefix in prefixes),
                   SCREENS='\n'.join(screens), CATALOG='\n'.join(catalog), ENGINE_SENTINEL=str(ENGINE_SENTINEL),
-                  PROJECT_KEPT=kept)
+                  PROJECT_KEPT=kept,
+                  INSTALLED='\n'.join(f'    if ({prefix}_name_matches(name)) return 1;' for prefix in prefixes))
     source = (ROOT / TEMPLATE).read_text(encoding='utf-8')
     for key, text in values.items():
         require(source.count('@' + key + '@') == 1, 'Startup template placeholder missing')
