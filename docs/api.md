@@ -176,14 +176,11 @@ emphasis and motion. `sdk.py new` supplies it by default. Macro Osc is the
 
 A synth for which a stock instrument page means nothing (one that makes no
 sound of its own, say) may declare `"hidePages"` at the top of
-`definition.json` (SDK 1.5), listing any of `"envelope"` (M2), `"filter"` (M3)
-and `"lfo"` (M4). On its track, those keys then leave the page shown as it
-was, and selecting the track while another track shows a hidden page shows the
-engine page. The SDK
+`definition.json`, listing `"envelope"` (M2), `"filter"` (M3) or both. On its
+track, those keys then leave the page shown as it was, and selecting the track
+while another track shows a hidden page shows the engine page. The SDK
 corrects the page once per GUI tick, so the hidden page may flash for a frame.
-A synth that hides the LFO page also has the track's stock LFO switched off,
-since its page can no longer reach it: one the previous engine left on would
-otherwise keep moving the synth's controls.
+The LFO page (M4) always stays, as on every stock track.
 
 A synth may leave a slot empty yet keep later parameters at their indices
 (projects save by index): declare it
@@ -331,7 +328,7 @@ copy's first call and whenever a copy arrives on a track.
 | `edit_count`, `edits` | While capturing: up to 32 encoder edits of other instrument tracks' parameters since the last tick, oldest first, as track, index and edited value |
 | `elapsed_us` | Microseconds since the previous tick, from the core clock: 0 on the first tick after a reset, at most one second |
 | `transport` | The project's tempo in tenths of BPM (0 when unknown), the song position in 96ths of a quarter note, which advances only while playing, and whether the sequencer plays |
-| `page_key` | A stock page key the synth hides (`"hidePages"`), pressed on its track since the last tick: 2, 3 or 4 for M2, M3 or M4, else 0. The page stays as it was, so the key is free for the machine |
+| `page_key` | A stock page key the synth hides (`"hidePages"`), pressed on its track since the last tick: 2 or 3 for M2 or M3, else 0. The page stays as it was, so the key is free for the machine |
 | `muted` | 1 while the machine's track is muted in the current scene (aux + track key, or the mixer). As with stock's brain, a muted machine has no effect: none of its overlays, capture or marks apply. It still runs, so its page can say so |
 
 `overlay` arrives empty; `opxy::control::add` appends up to 64 entries, each a
@@ -409,7 +406,8 @@ on its aux track only.
   playing pattern, CV and gate stay silent. A new project starts with `cv`.
 - **Its page:** M1 shows the machine's display, and its encoders, presses and
   alternates work as on tracks 1-8. Its `hidePages` and `page_key` work there
-  too: on an aux track M2..M4 are the track's other pages and its LFO. The
+  too: on an aux track M2 and M3 are the track's other pages, and M4, its
+  LFO, always stays. The
   LFO's four engine destinations, the track's words 0..3, are named after the
   machine's first four parameters, and move them as on tracks 1-8.
 - **Its controls:** words 0..7 of track 12, so they are sequenced, locked and

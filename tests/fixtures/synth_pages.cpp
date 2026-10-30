@@ -24,24 +24,16 @@ void stock_set_aux_tab(u32 controller, u32 value) {
 }
 u32 stock_selected() { return selected; }
 u32 stock_engine(u32 track) { return track < 16 ? engines[track] : 0; }
-// Each track's stock LFO on/off byte, and how many times stock's setter ran.
-u32 lfo[16], lfo_sets;
-u32 stock_lfo_on(u32 track) { require(track < 8, "LFO read off an instrument track"); return lfo[track]; }
-void stock_lfo_set(u32 track, u32 value) {
-    require(track < 8 && value == 0, "LFO set other than off");
-    lfo[track] = value;
-    ++lfo_sets;
-}
 int ready() { return 1; }
 }
 
 extern "C" {
 // Engine 40 hides the envelope and filter pages; engine 41 hides nothing; 42
-// hides every page but the engine page.
+// hides the filter page only.
 const opxy::platform::SynthControls sdk_synth_controls[] = {
     {reinterpret_cast<const char*>(40), ready, {0, 1, 2, 3, 4, 5, 6, 7}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, nullptr, false, false, 6},
     {reinterpret_cast<const char*>(41), ready, {0, 1, 2, 3, 4, 5, 6, 7}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, nullptr, false, false, 0},
-    {reinterpret_cast<const char*>(42), ready, {0, 1, 2, 3, 4, 5, 6, 7}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, nullptr, false, false, 14},
+    {reinterpret_cast<const char*>(42), ready, {0, 1, 2, 3, 4, 5, 6, 7}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, nullptr, false, false, 4},
     {nullptr, nullptr, {0, 1, 2, 3, 4, 5, 6, 7}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, nullptr, false, false, 0}};
 const u32 sdk_synth_control_count = 3;
 }
@@ -57,8 +49,6 @@ Address opxy::platform::host_stock_address(Address address) {
     if (address == 0x8c0b19c4) return reinterpret_cast<Address>(&stock_set_page);
     if (address == 0x8d4d6f14) return reinterpret_cast<Address>(&stock_selected);
     if (address == 0x8d58781c) return reinterpret_cast<Address>(&stock_engine);
-    if (address == 0x8d5879c0) return reinterpret_cast<Address>(&stock_lfo_on);
-    if (address == 0x8d587984) return reinterpret_cast<Address>(&stock_lfo_set);
     std::abort();
 }
 
@@ -73,12 +63,17 @@ int main() {
             sdk_synth_pages();
             require(page == p && sets == 0, "Page changed for a synth hiding nothing");
         }
-    // A synth hiding every page but the engine page stays there.
+    // The LFO page (M4) always stays; a synth hiding only the filter keeps the envelope.
     engines[4] = 42;
     selected = 4;
-    page = 3;
+    for (u32 p : {3u, 1u}) {
+        page = p;
+        sdk_synth_pages();
+        require(page == p && sets == 0, "LFO or envelope page hidden");
+    }
+    page = 2;
     sdk_synth_pages();
-    require(page == 0 && sets == 1, "LFO page not hidden");
+    require(page == 1 && sets == 1, "Filter page not hidden");
     sets = 0;
     // On the hiding synth, M4 then M2: back to M4; M3 from M1: back to M1.
     selected = 2;
@@ -128,21 +123,5 @@ int main() {
     aux_engines[11] = 0;
     sdk_synth_pages();
 
-    // A stock LFO left on is switched off, once, on tracks whose synth hides
-    // the LFO page (engine 42, track 4), whether or not they are selected;
-    // other synths and stock engines keep theirs.
-    lfo[0] = lfo[2] = lfo[3] = lfo[4] = 1;
-    selected = 0;
-    page = 0;
-    lfo_sets = 0;
-    sdk_synth_pages();
-    require(lfo[4] == 0 && lfo[0] == 1 && lfo[2] == 1 && lfo[3] == 1 && lfo_sets == 1, "LFO not switched off alone");
-    sdk_synth_pages();
-    require(lfo_sets == 1, "LFO switched off again while off");
-    // Moving the synth to a track whose LFO is on switches that one off too.
-    lfo[5] = 1;
-    engines[5] = 42;
-    sdk_synth_pages();
-    require(lfo[5] == 0 && lfo_sets == 2, "LFO kept on the track the synth moved to");
     return 0;
 }

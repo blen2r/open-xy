@@ -424,11 +424,8 @@ GUI tick from track control's tick. The instrument controller's page word
 (`080238bc`: 0 for the engine page, 1..3 for M2..M4) is set by `8c0b19c4`,
 which M1..M4, track changes and menus all reach. When the selected track's synth
 hides the page shown, the SDK calls `8c0b19c4` with the page shown before, or
-the engine page. A track's stock LFO runs while the byte at track data
-(`8d587708`) + `0x24` is set (`8d5879c0`, read by stock's LFO update
-`8d58a9b4`); the M4 page's on/off writes it through `8d587984(track, value)`,
-which also marks the project changed. On every instrument track whose synth
-hides the LFO page, the SDK calls `8d587984(track, 0)` while that byte is set.
+the engine page. Only the envelope (M2) and filter (M3) pages can be hidden;
+the LFO page (M4) always stays.
 
 ### Track control
 
