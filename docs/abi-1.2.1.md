@@ -39,7 +39,7 @@ version is rejected. The output differs from stock in exactly these places:
 | Diagnostic benchmark | 1 | Extends explicit command 0xc8 with the selected machines; no normal-playback callbacks added |
 | Per-voice profiling | 10 optional | Bypasses diagnostic timing in both stock voice renderers when built with profiling off |
 | Track control | 3 | Runs a synth's track control once per GUI tick, after stock's own call at that site, lets it capture encoder edits, and shows its overlays as parameter values |
-| Aux tracks | 10 | Lets a track control machine take over aux track 12 (CV): its chooser on Shift + M1 (the effect list on the sends), its presets on Shift + track key, its page on M1, its parameter names on the LFO's destinations, and CV and gate kept silent; four MTP allowlist edits show the user's aux presets |
+| Aux tracks | 11 | Lets a track control machine take over aux track 12 (CV): its chooser on Shift + M1 (the effect list on the sends), its presets on Shift + track key, its page on M1, its parameter names on the LFO's destinations, its own LFO whichever track is selected, and CV and gate kept silent; four MTP allowlist edits show the user's aux presets |
 | Preset scan | 1 | Hides factory presets whose engine the build does not install ([presets](#presets)) |
 | Startup label | 1 | Shows `OPEN <version>-1.2.1` at boot, `<version>` from [`VERSION`](../VERSION), through the stock startup text renderer |
 | Extension events | 7 | Observes live input, stock transport and queued controls for extensions, and lets a Record double-tap owner edit notes through stock editing and undo; linked only when an extension is selected |
@@ -478,6 +478,25 @@ it (`sdk_param_edit_set`), when it shows the base value that edit changed;
 every other parameter shows as stock shows it. The host track's eight engine
 controls reach the synth through the same getter, so their LFO amounts are
 included.
+
+That LFO amount comes from stock's telemetry, a table of 31 words at `080376e4`,
+one table on each board. `8d4d666a(id, value)` sets a word and marks it changed,
+and the audio board sends changed words to the GUI's table (message `0xb4`,
+received at `8d5b1ad2`). Ids 0x16 and 0x17 are the LFO amount: one pair with no
+track in it, published only for the selected track (`11a045d2`, and again in
+`8d4d68b8`). The getter adds it to whichever track's parameter matches its slot,
+so a machine's LFO stops when another track is selected.
+
+For a machine on track 12, the aux evaluator's publish call at `8d50f422`
+(`sdk_lfo_aux_publish`) makes stock's call, then puts the track's own amount in
+id 25: `0xa` in the top four bits, the track in the next four, the slot in the
+next eight, and the amount's top 16 bits. `8d5aca48`'s stub then asks
+`sdk_lfo_held_amount`, which uses that amount for this track in place of the pair
+while the track's LFO is on (track data `+0x24`). No stock code writes or reads
+id 25. Ids 4..11 are the instrument tracks' meters, and 12..19 have no writer but
+are read as `selected + 4`, so they would show on aux pages. One word carries one
+track. Silent machines on instrument tracks are not covered: their LFO is
+evaluated only for the selected track (fallback pass, `8d5123e4`).
 
 Stock keeps mute per scene, in the scene records at the project's data (the
 word at `840a0524`) `+ 0x98`, 33 bytes a scene: each track's pattern, then each

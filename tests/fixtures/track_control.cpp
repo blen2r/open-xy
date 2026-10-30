@@ -48,6 +48,14 @@ i32& value(u32 track, u32 index) { return table[track * control::track_parameter
 
 void stock_tick() { ++ticks; }
 u32 stock_engine(u32 track) { return track < 16 ? engines[track] : 0; }
+u32 telemetry25, lfo_publishes;
+unsigned char cv_lfo_on;
+void stock_lfo_publish(u32, u32, i32, i32) { ++lfo_publishes; }
+u32 stock_telemetry(u32 id, u32 value) {
+    require(id == 25, "Own LFO amount published in the wrong telemetry id");
+    telemetry25 = value;
+    return 1;
+}
 u32 stock_track_data(u32 track) { return kBlocks + track * kBlockBytes; }
 void stock_param_set(u32 project, u32 track, u32 index, i32 v) {
     require(project == kProject && track < 16 && index < control::track_parameters, "Invalid set");
@@ -151,6 +159,10 @@ opxy::platform::Address opxy::platform::host_stock_address(opxy::platform::Addre
     if (address >= kLive && address < kLive + sizeof(table))
         return reinterpret_cast<Address>(table) + (address - kLive);
     if (address == 0x8d580074) return reinterpret_cast<Address>(&stock_tick);
+    if (address == 0x8d4d68b8) return reinterpret_cast<Address>(&stock_lfo_publish);
+    if (address == 0x8d4d666a) return reinterpret_cast<Address>(&stock_telemetry);
+    if (address == 0x080376e4 + 25 * 4) return reinterpret_cast<Address>(&telemetry25);
+    if (address == kBlocks + 11 * kBlockBytes + 0x24) return reinterpret_cast<Address>(&cv_lfo_on);
     if (address == 0x8d58781c) return reinterpret_cast<Address>(&stock_engine);
     if (address == 0x8d5acea8) return reinterpret_cast<Address>(&stock_live_set);
     if (address == 0x8d5acf28) return reinterpret_cast<Address>(&stock_param_set);
@@ -437,6 +449,22 @@ int main() {
             sdk_control_copies(11) == 1 && aux_ticks == aux_before + 1, "Aux host not run");
     selected = 11;
     require(sdk_control_display(1) == 77, "Aux host's display words not kept");
+
+    // The CV track's own LFO: published in id 25, and shown in place of the shared
+    // pair while its LFO is on, for the slot it targets.
+    require(sdk_lfo_held_amount(11, 1, 5) == 5, "Nothing published yet, but stock's amount replaced");
+    require(sdk_lfo_held_amount(3, 1, 5) == 5, "Another track's amount replaced");
+    sdk_lfo_aux_publish(3, 1, 0x40000000, 0x40000000);
+    require(lfo_publishes == 1 && telemetry25 == 0, "Another track published or stock's publish skipped");
+    sdk_lfo_aux_publish(11, 1, 0x40000000, 0x40000000);
+    require(lfo_publishes == 2 && (telemetry25 >> 16) == 0xab01, "Own amount not tagged with track and slot");
+    require(sdk_lfo_held_amount(11, 1, 5) == 0, "LFO off, but an amount shown");
+    cv_lfo_on = 1;
+    require(sdk_lfo_held_amount(11, 1, 5) == 0x20000000, "Own amount not shown");
+    require(sdk_lfo_held_amount(11, 2, 5) == 0, "Own amount shown on another slot");
+    sdk_lfo_aux_publish(11, 2, -0x40000000, 0x40000000);
+    require(sdk_lfo_held_amount(11, 2, 5) == -0x20000000, "Negative amount not kept");
+    cv_lfo_on = 0;
     engines[2] = 40;
     require(sdk_control_copies(11) == 2 && sdk_control_copies(2) == 2, "Aux and instrument copies not counted");
     tick(1, "Overlay not released with two copies");

@@ -66,6 +66,8 @@ void sdk_param_edit_set(opxy::u32 project, opxy::u32 track, opxy::u32 index, opx
     __asm__("sdk_param_edit_set");
 // The value stock's displayed-value getter shows before its LFO amount, through
 // the jump hook sdk_param_shown_hook (track_control_hooks.s).
+opxy::i32 sdk_lfo_held_amount(opxy::u32 track, opxy::u32 index, opxy::i32 stock_amount) __asm__("sdk_lfo_held_amount");
+void sdk_lfo_aux_publish(opxy::u32 track, opxy::u32 slot, opxy::i32 wave, opxy::i32 depth) __asm__("sdk_lfo_aux_publish");
 opxy::i32 sdk_param_shown(opxy::u32 project, opxy::u32 track, opxy::u32 index, opxy::u32 playing)
     __asm__("sdk_param_shown");
 }

@@ -219,7 +219,7 @@ class TrackControl(unittest.TestCase):
         self.assertEqual(sorted(p.get('symbol', p['address']) for p in aux_edits),
                          ['0x840ae308', '0x840ae32c', '0x840aedfc', '0x840aee6c', 'sdk_aux_lfo_label_hook',
                           'sdk_aux_page_hook', 'sdk_aux_shift_m1_hook', 'sdk_aux_shift_track_hook', 'sdk_cv_gate_on',
-                          'sdk_cv_output'])
+                          'sdk_cv_output', 'sdk_lfo_aux_publish'])
         for machines, used, aux_used in ((plain, False, False), ([hiding], True, False), ([steering], True, False),
                                          ([aux], True, True)):
             services = active_services(config(), native.service_users(machines))

@@ -210,6 +210,32 @@ extern "C" i32 sdk_param_shown(u32 project, u32 track, u32 index, u32 playing) {
     return stock<i32(u32, u32, u32)>(0x8d5ac910)(project, track, index);
 }
 
+// A machine on the CV track keeps its own LFO whatever track is selected. Stock's
+// LFO telemetry (ids 0x16/0x17) is one pair with no track in it, published only
+// for the selected track. So the aux evaluator's publish (8d50f422) also puts this
+// track's amount in id 25, which stock neither writes nor reads: a tag, the track,
+// the slot and the amount's top 16 bits. The telemetry table (080376e4, one on each
+// board) carries it to the GUI, where the displayed-value getter uses it for this
+// track in place of the pair. One word carries one track.
+namespace {
+const u32 kTelemetry = 0x080376e4, kHeldId = 25, kHeldTrack = 11, kHeldTag = 0xa0000000u | kHeldTrack << 24;
+}
+
+extern "C" void sdk_lfo_aux_publish(u32 track, u32 slot, i32 wave, i32 depth) {
+    stock<void(u32, u32, i32, i32)>(0x8d4d68b8)(track, slot, wave, depth);
+    if (track != kHeldTrack) return;
+    const i32 amount = (depth >> 16) * (wave >> 16) * 2;
+    stock<u32(u32, u32)>(0x8d4d666a)(kHeldId, kHeldTag | (slot & 0xff) << 16 | static_cast<u32>(amount) >> 16);
+}
+
+extern "C" i32 sdk_lfo_held_amount(u32 track, u32 index, i32 stock_amount) {
+    if (track != kHeldTrack || !hosts[track]) return stock_amount;
+    const u32 held = word(kTelemetry + kHeldId * 4);
+    if ((held & 0xff000000u) != kHeldTag) return stock_amount;
+    if (!byte(stock<u32(u32)>(0x8d587708)(track) + 0x24) || ((held >> 16) & 0xff) != index) return 0;
+    return static_cast<i32>(held << 16);
+}
+
 extern "C" void sdk_param_edit_set(u32 project, u32 track, u32 index, i32 value) {
     turned_track = track;
     turned_index = index;
