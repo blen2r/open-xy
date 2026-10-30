@@ -214,13 +214,13 @@ class TrackControl(unittest.TestCase):
 
     def test_a_synth_can_hide_the_envelope_and_filter_pages(self):
         synth = copy.deepcopy(fixture('probesynth').definition)
-        for pages in (['envelope'], ['filter', 'envelope'], ['lfo', 'envelope', 'filter']):
+        for pages in (['envelope'], ['filter', 'envelope']):
             validate_definition(dict(synth, hidePages=pages), 'synth')
-        for pages in ([], ['engine'], ['filter', 'filter'], 'filter'):
+        # The LFO page always stays.
+        for pages in ([], ['engine'], ['filter', 'filter'], 'filter', ['lfo'], ['lfo', 'envelope', 'filter']):
             with self.subTest(pages=pages), self.assertRaises(ValueError):
                 validate_definition(dict(synth, hidePages=pages), 'synth')
         self.assertEqual(hidden_pages(dict(synth, hidePages=['envelope', 'filter'])), 6)
-        self.assertEqual(hidden_pages(dict(synth, hidePages=['lfo', 'envelope', 'filter'])), 14)
 
     @unittest.skipUnless(os.environ.get('OPXY_TEST_STOCK_OS'), 'Private stock input not supplied')
     def test_hooked_calls_reach_the_original_functions(self):

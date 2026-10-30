@@ -21,7 +21,7 @@ struct SynthControls {
     bool (*format)(u32 slot, i32 value, char* text);
     bool effect;
     bool page;
-    u8 hidden_pages;  // stock instrument pages the synth hides, by page index (bit 1 envelope, 2 filter, 3 lfo)
+    u8 hidden_pages;  // stock instrument pages the synth hides, by page index (bit 1 envelope, 2 filter)
     u8 absent;  // bit s: slot s is an empty placeholder, shown blank and never edited
     u32 engine() const { return static_cast<u32>(reinterpret_cast<__UINTPTR_TYPE__>(id)); }
 };
