@@ -146,6 +146,13 @@ def main():
                 art = screen.compose(machine['artwork'].encode())
                 require((prefix / name).read_bytes() == art, 'Browser artwork differs')
                 expected_files[name] = art
+        # Track control's marks over every page: the SDK's, then each selected machine's own.
+        if any('trackControl' in m.get('features', []) for m in selected):
+            own = ''.join(m['marks'] for m in selected if isinstance(m.get('marks'), str))
+            name = 'content/display/openxy_overlay.svg'
+            marks = kit['controlArtwork'].replace('</svg>', own + '</svg>').encode()
+            require((prefix / name).read_bytes() == marks, 'Browser marks differ')
+            expected_files[name] = marks
         with zipfile.ZipFile(prefix.with_suffix('.zip')) as archive:
             require(set(archive.namelist()) == set(expected_files) and archive.testzip() is None, 'Invalid ZIP file')
             for name, data in expected_files.items():
