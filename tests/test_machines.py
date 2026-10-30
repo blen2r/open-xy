@@ -211,7 +211,7 @@ class OutsideMachines(unittest.TestCase):
     def test_track_control_needs_the_sdk_that_adds_it(self):
         (self.folder / 'control.cpp').write_text('', encoding='utf-8')
         definition = json.loads((self.folder / 'definition.json').read_text(encoding='utf-8'))
-        definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4}
+        definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4, 'unique': True, 'aux': [12]}
         (self.folder / 'definition.json').write_text(json.dumps(definition), encoding='utf-8')
         self.numberless(self.folder, sdk='1.6')
         with self.assertRaisesRegex(ValueError, 'Track control'):
