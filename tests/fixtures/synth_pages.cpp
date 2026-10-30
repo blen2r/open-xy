@@ -118,8 +118,13 @@ int main() {
     sdk_synth_pages();
     aux_tab = 3;
     sdk_synth_pages();
+    require(aux_tab == 3 && aux_sets == 0, "Held aux track's LFO tab hidden");
+    aux_tab = 0;
+    sdk_synth_pages();
+    aux_tab = 2;
+    sdk_synth_pages();
     require(aux_tab == 0 && aux_sets == 1 && sets == sets_before, "Held aux track's hidden tab kept");
-    require(sdk_synth_page_key(11) == 4 && sdk_synth_page_key(11) == 0, "M4 press on a held aux track not kept once");
+    require(sdk_synth_page_key(11) == 3 && sdk_synth_page_key(11) == 0, "M3 press on a held aux track not kept once");
     aux_engines[11] = 0;
     sdk_synth_pages();
 
