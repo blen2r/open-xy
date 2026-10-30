@@ -201,7 +201,7 @@ function group(m) { return (m.features ?? []).includes('auxTrack') ? 'aux' : m.k
 function describeMachine(target, m) {
   const field = name => target.querySelector('.' + name);
   field('detail-kind').textContent = {synth: 'Synthesizer', effect: 'Send effect', sample: 'Sample engine',
-    aux: 'Aux machine (track 12)'}[group(m)];
+    aux: 'Aux machine (CV track)'}[group(m)];
   field('detail-name').textContent = m.name; field('detail-description').textContent = m.description;
   field('community-notice').hidden = m.origin !== 'catalog';
   // Credit the catalog's maintainer and repository, with the exact release source;
