@@ -3,7 +3,7 @@
 // Every firmware rule (edits, hooks, identity ranges, catalog offsets, table
 // bytes) comes from the reviewed profile, authenticated by this digest. The
 // Python SDK reads the same constant.
-export const PROFILE_SHA256 = '50029570ef1b3c2b87e5f974e07e006fca401989f4320443ad3fff3f93921ddd';
+export const PROFILE_SHA256 = '30c4206de7e817b4150624c43203df4e08f6bab6d71017d0f8f6731759367a1d';
 export function requireThat(ok, message) { if (!ok) throw new Error(message); }
 const check = requireThat;
 const utf8 = new TextEncoder();
@@ -341,14 +341,15 @@ export const moduleBytes = profile => profile.reserved_bytes - profile.table_byt
 const screenTemplateOk = async kit => typeof kit.screenTemplate === 'string' &&
   await sha256(utf8.encode(kit.screenTemplate)) === kit.profile.screen_template_sha256;
 export async function openKit(kit) {
-  check(kit.format === 'opxy-browser-kit/1' && kit.machines.length > 0 && kit.machines.length <= 256,
-    'Unsupported curated kit');
+  check(kit.format === 'opxy-browser-kit/1', 'Unsupported curated kit');
   // The release version, which every build's boot label shows (tooling.startup_label).
   check(typeof kit.version === 'string' && /^\d+\.\d+\.\d+$/.test(kit.version), 'Unsupported curated kit version');
   const profileBytes = decode64(kit.profileSource);
   check(await sha256(profileBytes) === PROFILE_SHA256 &&
     JSON.stringify(JSON.parse(decoder.decode(profileBytes))) === JSON.stringify(kit.profile),
     'Firmware edit profile is not the reviewed profile');
+  // No more machines than the relocated engine table holds (tooling/stock_tables.py).
+  check(kit.machines.length > 0 && kit.machines.length <= kit.profile.identities.engines, 'Unsupported curated kit');
   checkNumbers(kit);
   check(kit.machines.every(validOrigin), 'Invalid machine origin or source');
   const extensions = kit.extensions ?? [];
