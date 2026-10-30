@@ -781,7 +781,18 @@
       "id": "grainfield",
       "kind": "effect",
       "maintainer": "colorsinspace1",
-      "status": "reserved"
+      "status": "published",
+      "repository": "https://github.com/colorsinspace1/grainfield",
+      "tag": "1.2",
+      "commit": "9f5c8fbefd6452ea685b3665a5d37e8e26058329",
+      "path": ".",
+      "cpu": {
+        "benchmark": "opxy-effect-callback-v1",
+        "commit": "9f5c8fbefd6452ea685b3665a5d37e8e26058329",
+        "firmware_sha256": "1768956831002dd837f5a55be1f047fff0544d8aad3243f5a141f552f5e4413e",
+        "runs": 3,
+        "block_percent": 9.3019
+      }
     },
     {
       "id": "ohmonk",
