@@ -287,11 +287,11 @@ serialized access.
 
 ## Track control
 
-A synth can steer other tracks (SDK 1.8). A build without such a machine
+A synth can steer other tracks (SDK 1.7). A build without such a machine
 applies none of track control's
 firmware edits and links none of its code. It declares
 `"trackControl": {"stateBytes": n, "stateAlignment": a}` in `resources`, with
-`"sdk": "1.8"` in `machine.json`, and supplies `control.cpp` with:
+`"sdk": "1.7"` in `machine.json`, and supplies `control.cpp` with:
 
 ```cpp
 struct ControlState { ... };  // trivial, standard-layout; starts zeroed
@@ -600,7 +600,7 @@ preset entries, its screen file, its symbol prefix and its C++ namespace. It is 
 | Field | Contract |
 | --- | --- |
 | `schema` | 1 |
-| `sdk` | The SDK version the machine targets, `"<major>.<minor>"`. This SDK is 1.8 and builds 1.0 to 1.8 machines |
+| `sdk` | The SDK version the machine targets, `"<major>.<minor>"`. This SDK is 1.7 and builds 1.0 to 1.7 machines |
 | `kind` | `synth`, `sample` or `effect` |
 | `description` | Plain text of at most 160 characters, shown by the builder and preview |
 | `base` | Sample engines only, and required for them: the stock sampler it forks, `"sampler"` or `"drumSampler"` ([sample engines](#sample-engines)) |
