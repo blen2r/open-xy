@@ -25,23 +25,28 @@ def with_control(definition, control):
 class TrackControl(unittest.TestCase):
     def test_definition_declares_aligned_state(self):
         synth = fixture('probesynth').definition
-        validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4}), 'synth')
-        validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4, 'unique': True,
+        # Track control runs on an aux track, so every such machine lists one and is unique.
+        aux = {'unique': True, 'aux': [12]}
+        validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4, **aux}), 'synth')
+        validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4, **aux,
                                                  'savedBytes': 8192}), 'synth')
-        validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4, 'unique': False,
+        validate_definition(with_control(synth, {'stateBytes': 8, 'stateAlignment': 4, **aux,
                                                  'marks': {'capture': 1, 'line': 0}}), 'synth')
-        for control in ({'stateBytes': 6, 'stateAlignment': 4}, {'stateBytes': 0, 'stateAlignment': 4},
-                        {'stateBytes': 8}, {'stateBytes': 8, 'stateAlignment': 4, 'tracks': 1}, 1,
-                        {'stateBytes': 8, 'stateAlignment': 4, 'unique': True, 'savedBytes': 0},
-                        {'stateBytes': 8, 'stateAlignment': 4, 'unique': True, 'savedBytes': 8193},
-                        # Data kept with projects is a unique machine's.
-                        {'stateBytes': 8, 'stateAlignment': 4, 'savedBytes': 8},
-                        {'stateBytes': 8, 'stateAlignment': 4, 'unique': False, 'savedBytes': 8},
-                        {'stateBytes': 8, 'stateAlignment': 4, 'unique': 1},
-                        {'stateBytes': 8, 'stateAlignment': 4, 'marks': {'capture': 0, 'line': 1}},
-                        {'stateBytes': 8, 'stateAlignment': 4, 'marks': {'capture': 17, 'line': 1}},
-                        {'stateBytes': 8, 'stateAlignment': 4, 'marks': {'capture': 1, 'line': 17}},
-                        {'stateBytes': 8, 'stateAlignment': 4, 'marks': {'capture': 1}}):
+        for control in ({'stateBytes': 6, 'stateAlignment': 4, **aux}, {'stateBytes': 0, 'stateAlignment': 4, **aux},
+                        {'stateBytes': 8, **aux}, {'stateBytes': 8, 'stateAlignment': 4, 'tracks': 1, **aux}, 1,
+                        {'stateBytes': 8, 'stateAlignment': 4, **aux, 'savedBytes': 0},
+                        {'stateBytes': 8, 'stateAlignment': 4, **aux, 'savedBytes': 8193},
+                        # An instrument track never hosts one: no aux track, no track control.
+                        {'stateBytes': 8, 'stateAlignment': 4},
+                        {'stateBytes': 8, 'stateAlignment': 4, 'unique': True},
+                        # Data kept with projects, and aux tracks, are a unique machine's.
+                        {'stateBytes': 8, 'stateAlignment': 4, 'savedBytes': 8, 'aux': [12]},
+                        {'stateBytes': 8, 'stateAlignment': 4, 'unique': False, 'aux': [12]},
+                        {'stateBytes': 8, 'stateAlignment': 4, 'unique': 1, 'aux': [12]},
+                        {'stateBytes': 8, 'stateAlignment': 4, **aux, 'marks': {'capture': 0, 'line': 1}},
+                        {'stateBytes': 8, 'stateAlignment': 4, **aux, 'marks': {'capture': 17, 'line': 1}},
+                        {'stateBytes': 8, 'stateAlignment': 4, **aux, 'marks': {'capture': 1, 'line': 17}},
+                        {'stateBytes': 8, 'stateAlignment': 4, **aux, 'marks': {'capture': 1}}):
             with self.subTest(control=control), self.assertRaises(ValueError):
                 validate_definition(with_control(synth, control), 'synth')
         effect = fixture('probefx').definition

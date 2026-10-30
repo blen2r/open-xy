@@ -222,6 +222,10 @@ def validate_synth_resources(resources):
         require(type(control.get('unique', False)) is bool, 'Track control unique must be true or false')
         require('savedBytes' not in control or control.get('unique') is True,
                 'A track control machine that keeps data with projects must be unique')
+        # Track control runs on aux tracks only, so a machine that steers other
+        # tracks never takes an instrument track's place.
+        require('aux' in control, 'Track control runs on an aux track: list it in trackControl.aux (' +
+                ', '.join(map(str, AUX_TRACKS)) + ')')
         if 'aux' in control:
             aux = control['aux']
             require(type(aux) is list and aux and all(type(t) is int for t in aux) and len(set(aux)) == len(aux) and

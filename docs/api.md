@@ -297,9 +297,11 @@ serialized access.
 
 A synth can steer other tracks (SDK 1.8). A build without such a machine (or
 one with [hidden pages](#alternate-controls)) applies none of track control's
-firmware edits and links none of its code. It declares
-`"trackControl": {"stateBytes": n, "stateAlignment": a}` in `resources`, with
-`"sdk": "1.8"` in `machine.json`, and supplies `control.cpp` with:
+firmware edits and links none of its code. Such a synth runs on an
+[aux track](#aux-tracks), never in an instrument track's place. It declares
+`"trackControl": {"stateBytes": n, "stateAlignment": a, "unique": true, "aux": [12]}`
+in `resources`, with `"sdk": "1.8"` in `machine.json`, and supplies
+`control.cpp` with:
 
 ```cpp
 struct ControlState { ... };  // trivial, standard-layout; starts zeroed
@@ -392,11 +394,10 @@ holds the SDK's, as a starting point.
 
 ### Aux tracks
 
-A unique track control machine with its own display can take over aux track 12
-(CV) instead of an instrument track: it adds `"aux": [12]` to `trackControl`.
-That track is the only one listed for now, the one whose stock role the SDK
-keeps silent. Such a machine is not in tracks 1-8's engine list: it is chosen
-on its aux track only.
+A track control machine, unique and with its own display, runs on an aux
+track: it lists it in `"aux"` (`[12]`, CV) in `trackControl`. That track is the
+only one for now, the one whose stock role the SDK keeps silent. Such a machine
+is not in tracks 1-8's engine list: it is chosen on its aux track only.
 
 - **Choosing:** Shift + M1 on track 12 opens a list, "engine", with the
   track's stock role (`cv`) first, then each machine that may take it over.
