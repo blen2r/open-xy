@@ -78,6 +78,21 @@ class TrackControl(unittest.TestCase):
         self.assertIn('control_save(states[0], data, 100)', binding)
         self.assertIn('return bytes <= 100 ? bytes : 0;', binding)
 
+    def test_many_machines_may_take_over_an_aux_track_up_to_the_list(self):
+        from tooling.adapters import AUX_CHOICES
+        def aux_machine(n):
+            import dataclasses
+            m = fixture('probesynth')
+            definition = copy.deepcopy(m.definition)
+            definition['resources']['trackControl'] = {'stateBytes': 8, 'stateAlignment': 4, 'unique': True,
+                                                       'aux': [12]}
+            return dataclasses.replace(m, id=f'aux{n}', definition=definition)
+        with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
+            table = generate_track_controls(folder, [aux_machine(n) for n in range(AUX_CHOICES - 1)])
+            self.assertEqual(table.read_text(encoding='utf-8').count('_engine_id, '), AUX_CHOICES - 1)
+            with self.assertRaisesRegex(ValueError, 'At most 31 machines may take over aux track 12'):
+                generate_track_controls(folder, [aux_machine(n) for n in range(AUX_CHOICES)])
+
     def test_a_machine_on_aux_tracks_installs_its_presets_as_files(self):
         import json
         from tooling.adapters import aux_preset_files

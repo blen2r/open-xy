@@ -480,6 +480,12 @@ def control_callbacks(m):
 
 def generate_track_controls(directory, machines):
     """The collection's synths with track control, as one table (track_control.hpp)."""
+    # Shift + M1 on an aux track lists its stock role and every machine that may take
+    # it over (aux_tracks.cpp, kChoices): refuse a build whose list would not fit.
+    for track in AUX_ROLES:
+        holders = [m.id for m in machines if track_control(m) and track in track_control(m).get('aux', ())]
+        require(len(holders) <= AUX_CHOICES - 1,
+                f'At most {AUX_CHOICES - 1} machines may take over aux track {track} in one build, not {len(holders)}')
     declarations, rows = [], []
     for m in machines:
         if not track_control(m):
@@ -546,6 +552,8 @@ def stock_labels(m):
 
 # The stock role of each aux track a machine can take over (1-based), as presets name it.
 AUX_ROLES = {12: 'cv'}
+# The entries of an aux track's Shift + M1 list: its stock role, then machines (aux_tracks.cpp kChoices).
+AUX_CHOICES = 32
 
 
 def aux_preset_files(m):

@@ -180,7 +180,10 @@ sound of its own, say) may declare `"hidePages"` at the top of
 track, those keys then leave the page shown as it was, and selecting the track
 while another track shows a hidden page shows the engine page. The SDK
 corrects the page once per GUI tick, so the hidden page may flash for a frame.
-The LFO page (M4) always stays, as on every stock track.
+The LFO page (M4) always stays, as on every stock track. A hidden page's key is
+free: a [track control](#track-control) machine (one that steers other tracks,
+which always runs on an aux track) receives it as `page_key`; for other synths
+the key simply does nothing.
 
 A synth may leave a slot empty yet keep later parameters at their indices
 (projects save by index): declare it

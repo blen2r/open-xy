@@ -206,7 +206,7 @@ void take(u32 track, u32 choice) {
 }
 
 // The chooser: the stock role, then each machine that may take the track over.
-const u32 kChoices = 8;
+const u32 kChoices = 32;  // tooling.adapters.AUX_CHOICES: the build refuses more machines
 browser::StockSelector<kChoices> chooser = {};
 u32 chooser_track, chooser_machines[kChoices];
 void choose(void*, u32 index) { take(chooser_track, chooser_machines[index]); }
