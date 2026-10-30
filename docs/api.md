@@ -321,6 +321,7 @@ copy's first call and whenever a copy arrives on a track.
 | `elapsed_us` | Microseconds since the previous tick, from the core clock: 0 on the first tick after a reset, at most one second |
 | `transport` | The project's tempo in tenths of BPM (0 when unknown), the song position in 96ths of a quarter note, which advances only while playing, and whether the sequencer plays |
 | `page_key` | A stock page key the synth hides (`"hidePages"`), pressed on its track since the last tick: 2, 3 or 4 for M2, M3 or M4, else 0. The page stays as it was, so the key is free for the machine |
+| `muted` | 1 while the machine's track is muted in the current scene (aux + track key, or the mixer). As with stock's brain, a muted machine has no effect: none of its overlays, capture or marks apply. It still runs, so its page can say so |
 
 `overlay` arrives empty; `opxy::control::add` appends up to 64 entries, each a
 track, parameter index and value for this tick. Entries for the machine's own

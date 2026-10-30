@@ -28,6 +28,14 @@
 // value the edit changed. Every other parameter shows as stock shows it. The
 // host track's own engine controls reach the machine as that getter shows
 // them, so an LFO on one of them moves the machine like a turn.
+//
+// Mute: stock keeps it per scene, in the scene records at g_project (the word
+// at 840a0524) + 0x98, 33 bytes each: each track's pattern, then each track's
+// flags, in which 0x02 is muted, then one more byte; the current scene is the
+// byte at g_project + 6. Aux + track key and the mixer both set it; a new
+// scene copies the current one's (measured on the device with a memory probe).
+// While a machine's track is muted, as with stock's brain, none of its
+// overlays, capture or marks apply; it still runs and is told (Input.muted).
 #include "track_control.hpp"
 #include "stock.hpp"
 #include "synth_controls.hpp"
@@ -54,6 +62,11 @@ void param_set(u32 project, u32 track, u32 index, i32 value) {
 }
 // Stock's displayed value: 8d5ac9dc(project, track, index, 1), as the pages ask.
 const u32 kEngineControls = 8;
+// Whether `track` is muted in the current scene.
+bool muted(u32 track) {
+    const u32 project = word(0x840a0524);
+    return byte(project + 0x98 + byte(project + 6) * 33 + 16 + track) & 0x02;
+}
 i32 shown(u32 track, u32 index) {
     return stock<i32(u32, u32, u32, u32)>(0x8d5ac9dc)(kProject, track, index, 1);
 }
@@ -280,6 +293,7 @@ extern "C" void sdk_gui_tick() {
         }
         input.track = t;
         input.page_key = sdk_synth_page_key(t);
+        input.muted = muted(t);
         input.capturing = capture_track == t;
         input.edit_count = input.capturing ? pending_count : 0;
         for (u32 i = 0; i < input.edit_count; ++i) input.edits[i] = pending[i];
@@ -293,6 +307,7 @@ extern "C" void sdk_gui_tick() {
         m->control(copy, &input, &overlay);
         for (u32 p = 0; p < kEngineControls; ++p) input.values[t][p] = own[p];
         if (overlay.count > control::overlay_capacity) overlay.count = control::overlay_capacity;
+        if (input.muted) overlay.count = overlay.capture = overlay.mark = 0;
         if (overlay.capture) {
             if (t == capture_track) kept = true;
             else if (asking == kNoTrack) asking = t;

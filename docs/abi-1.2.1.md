@@ -478,6 +478,14 @@ every other parameter shows as stock shows it. The host track's eight engine
 controls reach the synth through the same getter, so their LFO amounts are
 included.
 
+Stock keeps mute per scene, in the scene records at the project's data (the
+word at `840a0524`) `+ 0x98`, 33 bytes a scene: each track's pattern, then each
+track's flags, in which `0x02` is muted, then one more byte. The current scene
+is the byte at `+ 6`. Aux + track key and the mixer both set it, and a new scene
+copies the current one's flags (measured on the device with a read-only memory
+probe). While a synth's track is muted in the current scene, the tick hook
+applies none of its overlays, capture or marks, and tells it (`Input.muted`).
+
 ### Aux tracks
 
 One controller object serves the aux tracks (method table `0803fb6c`, object

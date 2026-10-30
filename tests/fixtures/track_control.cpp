@@ -21,7 +21,14 @@ u32 aux_engines[16], aux_ticks;
 control::Entry last_edit;
 u32 capture, mark;
 i32 seen;  // the value of track 0, parameter 1 the machine was given
-u32 seen_elapsed, seen_bpm, seen_ticks, seen_playing, seen_key;
+u32 seen_elapsed, seen_bpm, seen_ticks, seen_playing, seen_key, seen_muted;
+// The project's scene records (g_project + 0x98, 33 bytes a scene: patterns, then
+// each track's flags, 0x02 muted) and the current scene (g_project + 6), at a
+// stand-in address the word at 840a0524 names.
+const u32 kProjectAt = 0xa0000000;
+u32 project_word = kProjectAt;
+unsigned char project_bytes[0x98 + 33 * 3];
+unsigned char& mute_flags(u32 scene, u32 track) { return project_bytes[0x98 + scene * 33 + 16 + track]; }
 // The core clock, the project tempo and the song position.
 u32 cycles;
 unsigned short tempo = 1200;
@@ -82,6 +89,7 @@ void run(u32 copy, const control::Input* input, control::Overlay* overlay) {
     seen_ticks = input->transport.ticks96;
     seen_playing = input->transport.playing;
     seen_key = input->page_key;
+    seen_muted = input->muted;
     seen_own = input->values[input->track][1];
     require(input->capturing == (capture_track == input->track), "Capturing not given");
     edits_seen = input->edit_count;
@@ -154,6 +162,9 @@ opxy::platform::Address opxy::platform::host_stock_address(opxy::platform::Addre
     if (address == 0x86bd0080) return reinterpret_cast<Address>(&ticks96);
     if (address == 0x860c9b39) return reinterpret_cast<Address>(&playing[0]);
     if (address == 0x860c9b3a) return reinterpret_cast<Address>(&playing[1]);
+    if (address == 0x840a0524) return reinterpret_cast<Address>(&project_word);
+    if (address >= kProjectAt && address < kProjectAt + sizeof(project_bytes))
+        return reinterpret_cast<Address>(project_bytes) + (address - kProjectAt);
     if (address >= kBlocks + 0x3864 && address < kBlocks + control::tracks * kBlockBytes) {
         const u32 track = (address - kBlocks) / kBlockBytes, at = address - kBlocks - track * kBlockBytes - 0x3864;
         if (track < control::tracks && at < sizeof(bases[0]))
@@ -176,6 +187,25 @@ int main() {
     require(runs == 1 && resets == 1 && seen == 100 && value(0, 1) == 500 && value(2, 0) == 0, "Overlay not applied");
     tick(0, "Unchanged overlay rewritten");
     require(seen == 100 && resets == 1, "Machine given the overlay instead of stock's value");
+
+    // Muting the machine's track in the current scene releases its overlays; it
+    // still runs and is told. Another scene's mute, or another flag, changes nothing.
+    mute_flags(1, 2) = 0x02;
+    mute_flags(0, 2) = 0x01;
+    tick(0, "Another scene's mute or flag applied");
+    require(seen_muted == 0 && value(0, 1) == 500, "Unmuted machine's overlay lost");
+    mute_flags(0, 2) = 0x03;
+    const u32 muted_runs = runs;
+    tick(1, "Muted machine's overlay not released");
+    require(seen_muted == 1 && runs == muted_runs + 1 && value(0, 1) == 100, "Muted machine not run or not released");
+    project_bytes[6] = 1;
+    tick(0, "Overlay written in another scene that mutes the track");
+    require(seen_muted == 1 && value(0, 1) == 100, "Scene 2's mute not applied");
+    project_bytes[6] = 0;
+    mute_flags(0, 2) = 0x01;
+    mute_flags(1, 2) = 0;
+    tick(1, "Unmuted machine's overlay not written again");
+    require(seen_muted == 0 && value(0, 1) == 500, "Unmuted machine's overlay not back");
 
     // A stock edit under the overlay becomes the value beneath it.
     value(0, 1) = 120;
@@ -202,7 +232,7 @@ int main() {
     require(resets == 2, "Moved machine not reset");
     engines[5] = 0;
     tick(1, "Overlay not restored when the machine left");
-    require(value(0, 1) == 120 && ticks == 9, "Removal not restored");
+    require(value(0, 1) == 120 && ticks == 13, "Removal not restored");
 
     // Edits pass through untouched while nothing captures.
     bases[0][5] = 50;

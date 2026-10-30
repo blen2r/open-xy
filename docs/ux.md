@@ -75,6 +75,9 @@ things everywhere.
 - **Hide the pages it has no use for.** M2 and M4 on an aux track are its other
   page and its LFO; a machine with its own LFO, or no use for them, hides them
   with `hidePages` and may take the key itself.
+- **Mute is the bypass.** Muting the machine's track (aux + track key, or the
+  mixer) switches its effect off, as it does stock's brain; show it on the
+  page (`Input.muted`) rather than adding a bypass of your own.
 
 ## Motion
 

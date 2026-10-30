@@ -62,6 +62,11 @@ struct Input {
     // A stock page key the machine hides ("hidePages"), pressed on its track
     // since the last tick: 2..4 for M2..M4, or 0. The page does not change.
     u32 page_key;
+    // 1 while the machine's track is muted in the current scene (aux + track
+    // key, or the mixer). As stock's brain does nothing while muted, none of
+    // its overlays, capture or marks apply then; it still runs, so its page
+    // can say so.
+    u32 muted;
 };
 
 // What the machine returns each tick. An overlay entry for the machine's own
