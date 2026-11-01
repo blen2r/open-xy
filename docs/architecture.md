@@ -9,14 +9,17 @@ the [machine API](api.md).
 ## From sources to firmware
 
 A build combines the user's own stock OS with a collection of machines and
-extensions, each from a repository of its own. It never ships firmware: every
+extensions. They live outside the SDK, in their authors' repositories; one
+repository can hold several machines and extensions, as
+[open-xy-core-machines](https://github.com/etcetc000/open-xy-core-machines) holds
+the core machines and Capture. It never ships firmware: every
 image starts from the `os.ldr` on the user's OP-XY.
 
 ```mermaid
 flowchart LR
     subgraph sources["Sources"]
-        machines["Machines<br/>(their own repositories)"]
-        extensions["Extensions<br/>(their own repositories)"]
+        machines["Machines<br/>(authors' repositories)"]
+        extensions["Extensions<br/>(authors' repositories)"]
         catalog["Catalog<br/>catalog/*.json"]
     end
     stock["Stock os.ldr 1.2.1<br/>(the user's device)"]
@@ -199,7 +202,7 @@ The details, including the startup label and the catalog, are in the
 
 ## Changing the SDK
 
-- **A new machine** never changes the SDK; it lives in its own repository
+- **A new machine or extension** never changes the SDK; it lives in its author's repository
   ([your first machine](first-machine.md)).
 - **A new capability for machines** adds to the public interface, an adapter in
   the platform layer, and, if it needs stock to call new code, sites in the
@@ -218,8 +221,8 @@ here.
 
 | Term | Meaning |
 | --- | --- |
-| Machine | A synth, sample engine, drum kit, send effect or note player, built from its own repository |
-| Extension | Firmware-wide behavior built from its own repository, driven by events |
+| Machine | A synth, sample engine, drum kit, send effect or note player, built from its author's repository |
+| Extension | Firmware-wide behavior built from its author's repository, driven by events |
 | Module | The selected machines, extensions and SDK code, linked together into the reservation |
 | Profile | [`profiles/opxy-1.2.1.json`](../profiles/opxy-1.2.1.json): stock hashes, the reservation, identity ranges and every reviewed edit |
 | Site, hook | A place in stock code that calls into the module; a hook replaces a reviewed call or jump |
