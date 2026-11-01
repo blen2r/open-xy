@@ -80,6 +80,7 @@ sound (`engine.cpp`) and display (`display.cpp` and artwork), a sample engine's
 `sample.cpp` or an effect's `fx.cpp`. The SDK supplies adapters, storage,
 previews, firmware builds and packaging.
 
+- [Architecture](docs/architecture.md): how a build is put together: layers, profile services, runtime sides, machines and extensions.
 - [Machine API](docs/api.md): platform rules, schemas, callbacks for each kind, buffers and ownership.
 - [Firmware extensions](docs/extensions.md): shared controller events, callback order and exclusive commands.
 - [Display API](docs/display.md): retained drawing frames and asset constraints.
