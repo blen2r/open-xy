@@ -1,8 +1,9 @@
 // Track control (SDK 1.8): a synth that declares resources.trackControl, with
 // the aux track it takes over (resources.trackControl.aux), runs control() on
 // the GUI side once per stock GUI tick while it holds that track. It reads
-// every track's live parameters and may overlay instrument tracks' values for
-// that tick, or capture their encoder edits. Overlays never reach the saved
+// every track's live parameters and may overlay other tracks' values for that
+// tick, or capture their encoder edits: instrument tracks, and aux tracks no
+// machine holds (the sends' effects, say). Overlays never reach the saved
 // project: stock keeps its own values, and a parameter the machine stops
 // overlaying returns to them.
 //
@@ -18,8 +19,9 @@ extern "C" opxy::u32 sdk_control_copies(opxy::u32 track);
 extern "C" opxy::i32 sdk_control_display(opxy::u32 index);
 
 namespace opxy { namespace control {
-// Instrument tracks 0..7, which machines steer; all 16 tracks, aux tracks
-// 8..15 included, which they read; and stock's live parameter words for each:
+// Instrument tracks 0..7; all 16 tracks, aux tracks 8..15 included, which
+// machines read and steer (except aux tracks a machine holds, its own
+// included); and stock's live parameter words for each:
 // the engine's eight controls (0..7), then stock's own track parameters in
 // stock's units. Every live value is non-negative.
 const u32 tracks = 8;
@@ -43,7 +45,7 @@ const u32 popup_bytes = 32;
 // after it loads a project without them.
 const u32 saved_capacity = 8192;
 
-// One parameter of an instrument track: an overlay entry or a captured edit.
+// One parameter of a track: an overlay entry, a captured edit or a shown value.
 struct Entry { u8 track, index; u16 reserved; i32 value; };
 // A key of a chord claim the machine declares (resources.trackControl.claims,
 // from profiles/extensions.json), as for extensions (extensions::Gesture):
@@ -60,7 +62,7 @@ struct Input {
     i32 values[all_tracks][track_parameters];
     // 1 while this copy's capture is in effect: one copy captures at a time.
     u32 capturing;
-    // While this copy captures: encoder edits of other instrument tracks'
+    // While this copy captures: encoder edits of other steerable tracks'
     // parameters since the last tick, oldest first, with the edited value.
     u32 edit_count;
     Entry edits[edit_capacity];

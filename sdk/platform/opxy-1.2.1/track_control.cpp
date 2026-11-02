@@ -100,7 +100,7 @@ bool timed[control::all_tracks];
 const u32 kCyclesPerMicrosecond = 400;
 u32 last_cycles;
 // Each instrument track's pattern block as the last tick saw it (0 before the first).
-u32 seen_blocks[control::tracks];
+u32 seen_blocks[control::all_tracks];
 // GUI ticks so far, and the last encoder edit's parameter and tick. For
 // kTurnTicks after it the edited parameter shows its base value.
 const u32 kTurnTicks = 40;
@@ -174,6 +174,12 @@ u32 opxy::platform::control_engine(u32 track) {
 }
 
 namespace {
+// Machines steer (overlay and capture) every track but the aux tracks a
+// machine holds: their own, and another aux machine's, so none steers itself
+// through another. Instrument tracks never hold one.
+bool steerable(u32 track) {
+    return track < control::tracks || (track < control::all_tracks && !control_engine(track));
+}
 const ControlMachine* owner(u32 track) {
     const u32 engine = control_engine(track);
     if (!engine) return nullptr;
@@ -204,7 +210,7 @@ bool silent() { return capturing() && capture_mode == kSilent; }
 
 // The captured parameter `index` of `track` in its current pattern, or null.
 Original* captured(u32 track, u32 index) {
-    if (!capturing() || track >= control::tracks) return nullptr;
+    if (!capturing() || track >= control::all_tracks) return nullptr;
     const u32 block = stock<u32(u32)>(0x8d587708)(track);
     for (u32 i = 0; i < original_count; ++i)
         if (originals[i].edit.track == track && originals[i].edit.index == index && originals[i].block == block)
@@ -266,7 +272,7 @@ void end_capture() {
 void merge(u32 host) {
     for (u32 i = 0; i < overlay.count; ++i) {
         const control::Entry& e = overlay.entries[i];
-        if (e.track >= control::tracks || e.index >= control::track_parameters || e.track == host) continue;
+        if (!steerable(e.track) || e.index >= control::track_parameters || e.track == host) continue;
         Wanted* w = nullptr;
         for (u32 j = 0; j < wanted_count && !w; ++j)
             if (wanted[j].track == e.track && wanted[j].index == e.index) w = &wanted[j];
@@ -311,7 +317,7 @@ extern "C" u32 sdk_control_copies(u32 track) {
 }
 
 extern "C" i32 sdk_param_shown(u32 project, u32 track, u32 index, u32 playing) {
-    const Applied* a = track < control::tracks && index < control::track_parameters ? find(track, index) : nullptr;
+    const Applied* a = track < control::all_tracks && index < control::track_parameters ? find(track, index) : nullptr;
     const bool turned = track == turned_track && index == turned_index && gui_ticks - turned_tick < kTurnTicks;
     // A silently captured parameter shows its edited value while it is turned, then what plays.
     const Original* o = silent() ? captured(track, index) : nullptr;
@@ -348,7 +354,7 @@ extern "C" void sdk_param_edit_set(u32 project, u32 track, u32 index, i32 value)
     turned_track = track;
     turned_index = index;
     turned_tick = gui_ticks;
-    if (capturing() && track < control::tracks && track != capture_track &&
+    if (capturing() && steerable(track) && track != capture_track &&
         index < control::track_parameters) {
         const u32 block = stock<u32(u32)>(0x8d587708)(track);
         Original* known = nullptr;
@@ -474,7 +480,7 @@ extern "C" void sdk_param_step_set(u32 project, u32 track, u32 index, i32 value)
         o->held = value == base(track, index) ? o->edit.value : (value < 0 ? 0 : value);
         value = o->held;
     }
-    if (track < control::tracks)
+    if (track < control::all_tracks)
         if (Applied* a = find(track, index))
             if (a->block == stock<u32(u32)>(0x8d587708)(track)) {
                 a->underlying = value < 0 ? 0 : value;
@@ -496,9 +502,9 @@ extern "C" void sdk_control_tick() {
     // stale values: give the track its new pattern's stored values, as starting
     // play does.
     const bool playing = byte(kPlaying) || byte(kPlaying + 1);
-    for (u32 t = 0; t < control::tracks; ++t) {
+    for (u32 t = 0; t < control::all_tracks; ++t) {
         const u32 block = stock<u32(u32)>(0x8d587708)(t);
-        if (!playing && seen_blocks[t] && block != seen_blocks[t])
+        if (!playing && seen_blocks[t] && block != seen_blocks[t] && steerable(t))
             for (u32 p = 0; p < control::track_parameters; ++p) {
                 // A silently captured parameter of that pattern keeps playing its held value.
                 const Original* o = silent() ? captured(t, p) : nullptr;
@@ -512,7 +518,8 @@ extern "C" void sdk_control_tick() {
     u32 retained = 0;
     for (u32 i = 0; i < applied_count; ++i) {
         Applied a = applied[i];
-        if (a.block != stock<u32(u32)>(0x8d587708)(a.track)) continue;
+        // A pattern change, or a machine taking the aux track over (its values are the machine's now).
+        if (a.block != stock<u32(u32)>(0x8d587708)(a.track) || !steerable(a.track)) continue;
         const i32 value = live(a.track, a.index);
         if (const Original* o = silent() ? captured(a.track, a.index) : nullptr) a.underlying = o->held;
         else if (value != a.written) a.underlying = value;

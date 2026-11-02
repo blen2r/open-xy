@@ -104,7 +104,7 @@ only for the callback. The SDK does not sandbox native code.
 | `queued_control` | A queued key after stock handled it, with a microsecond time; not the keys a chord claim keeps from stock. `accepted`: stock took it as input (for Record, stock registered the press or release); `unmodified`: no other key or Shift held. Key numbers are in [`opxy/keys.hpp`](../sdk/include/opxy/keys.hpp) | Key queue (the `keys` service) |
 | `gui_tick` | Once per GUI tick, playing or stopped, after stock's own call at that site and track control's. Its actions renew a capture the extension holds | GUI tick (the `tick` service) |
 | `gesture` | For the holder of a chord claim: a chord key (the keyboard's) pressed or released while the claim's held key is down, before stock would have seen it; while the extension takes the held key, the held key's own press and release too (`key == lead`). None reach stock. Its actions are the claim's | Key queue (the `keys` service) |
-| `captured_edits` | While the extension captures: the encoder edits of instrument tracks' parameters since the last GUI tick (at most 32, oldest first: track, parameter index, edited value), before its `gui_tick` | GUI tick (the `tick` service) |
+| `captured_edits` | While the extension captures: the encoder edits of tracks' parameters (instrument tracks, and aux tracks no machine holds) since the last GUI tick (at most 32, oldest first: track, parameter index, edited value), before its `gui_tick` | GUI tick (the `tick` service) |
 
 Project and pattern IDs are opaque equality tokens. Lengths use pattern ticks;
 scale 1 has 480 ticks per step. Stock's pickup gives negative positions near

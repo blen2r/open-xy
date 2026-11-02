@@ -321,7 +321,7 @@ hold its role (CV) play, and when it comes back.
 | `track` | The aux track the machine holds, zero-based |
 | `capturing` | 1 while this copy's capture is in effect (below) |
 | `values[track][index]` | Every track's 58 live parameter words (`all_tracks`, 16; aux tracks are 8..15), as stock sets them (edits, parameter locks, sequencing), without any machine's overlay. Indices 0..7 are the engine's controls; the rest are stock's own track parameters, in stock's units. The machine's own engine controls are the values its page shows, including its LFO |
-| `edit_count`, `edits` | While capturing: up to 32 encoder edits of other instrument tracks' parameters since the last tick, oldest first, as track, index and edited value |
+| `edit_count`, `edits` | While capturing: up to 32 encoder edits of other tracks' parameters since the last tick (below), oldest first, as track, index and edited value |
 | `elapsed_us` | Microseconds since the previous tick, from the core clock: 0 on the first tick after a reset, at most one second |
 | `transport` | The project's tempo in tenths of BPM (0 when unknown), the song position in 96ths of a quarter note, which advances only while playing, and whether the sequencer plays |
 | `page_key` | Last directly handled page key since the last tick: 1..4 for M1..M4, or 0. M1 returns to the machine page; M2/M3 leave the current page alone. With `sharedLfo: true`, M4 belongs to the shared LFO and is not delivered |
@@ -329,8 +329,11 @@ hold its role (CV) play, and when it comes back.
 | `gesture_count`, `gestures` | Its chord claims' keys since the last tick, up to 8, oldest first (below) |
 
 `overlay` arrives empty; `opxy::control::add` appends up to 64 entries, each a
-track, parameter index and value for this tick. Entries for the machine's own
-track or outside the table are ignored, the last entry for a parameter wins and
+track, parameter index and value for this tick. A machine steers instrument
+tracks and aux tracks no machine holds, such as the sends' effects (tracks 15
+and 16): it overlays and captures their parameters the same way. Entries for
+the machine's own track, for an aux track another machine holds (so no machine
+steers another through it) or outside the table are ignored, the last entry for a parameter wins and
 negative values count as 0. When two machines overlay one parameter, the one on
 the later track wins. A parameter no machine overlays any more returns to
 stock's value. Overlays are live values only: saved projects keep stock's
@@ -354,7 +357,8 @@ keeping them. Restoration is tied to the edited pattern, including when another
 pattern is now playing; it does not replace a subsequent external base write.
 Loading or creating a project discards outstanding edits and overlays without
 restoring them into the replacement project. Edits made while a step is held (parameter locks) and changes
-from MIDI or presets are not captured. Like the display, `control` is bounded
+from MIDI or presets are not captured. Neither is the MIDI track's (11) CC setup, which stock
+writes past the encoder edit. Like the display, `control` is bounded
 and allocation-free; it is not an audio callback. Browser previews do not run
 it.
 

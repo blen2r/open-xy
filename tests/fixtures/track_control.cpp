@@ -15,8 +15,8 @@ namespace control = opxy::control;
 i32 table[control::all_tracks * control::track_parameters];
 // Stock's base values, in each track's data block at +0x3864.
 const u32 kBlocks = 0x90000000, kBlockBytes = 0x10000;
-u32 bases[control::tracks][control::track_parameters];
-u32 second_bases[control::tracks][control::track_parameters], pattern[16];
+u32 bases[control::all_tracks][control::track_parameters];
+u32 second_bases[control::all_tracks][control::track_parameters], pattern[16];
 u32 engines[16], ticks, writes, resets, runs, sets, edits_seen;
 // The machine holding each aux track (aux_tracks.cpp), and its ticks.
 u32 aux_engines[16], aux_ticks;
@@ -69,12 +69,11 @@ u32 stock_track_data(u32 track) { return kBlocks + (track + pattern[track] * 16)
 void stock_param_set(u32 project, u32 track, u32 index, i32 v) {
     require(project == kProject && track < 16 && index < control::track_parameters, "Invalid set");
     ++sets;
-    if (track >= control::tracks) return;
     (pattern[track] ? second_bases : bases)[track][index] = static_cast<u32>(v < 0 ? 0 : v);
     value(track, index) = v < 0 ? 0 : v;
 }
 void stock_live_set(u32 project, u32 track, u32 index, i32 v) {
-    require(project == kProject && track < control::tracks && index < control::track_parameters && v >= 0,
+    require(project == kProject && track < control::all_tracks && index < control::track_parameters && v >= 0,
             "Invalid live write");
     ++writes;
     value(track, index) = v;
@@ -87,7 +86,7 @@ i32 stock_shown(u32 project, u32 track, u32 index, u32 flag) {
 }
 // 8d5ac910: the base value, which a stopped page shows.
 i32 stock_base(u32 project, u32 track, u32 index) {
-    require(project == kProject && track < control::tracks && index < control::track_parameters, "Invalid base");
+    require(project == kProject && track < control::all_tracks && index < control::track_parameters, "Invalid base");
     return static_cast<i32>((pattern[track] ? second_bases : bases)[track][index]);
 }
 // 8d4d6f14: the GUI's selected track.
@@ -205,7 +204,7 @@ opxy::platform::Address opxy::platform::host_stock_address(opxy::platform::Addre
         const u32 offset = (address - kBlocks) % kBlockBytes;
         if (offset == 0x18) return reinterpret_cast<Address>(&engines[track]);
         const u32 at = offset - 0x3864;
-        if (track < control::tracks && at < sizeof(bases[0]))
+        if (at < sizeof(bases[0]))
             return reinterpret_cast<Address>(&(block >= 16 ? second_bases : bases)[track][at / 4]);
     }
     std::abort();
@@ -220,7 +219,7 @@ int main() {
 
     engines[2] = 40;
     // Own track and out-of-range entries are ignored; the later duplicate wins.
-    plan({{0, 1, 0, 300}, {2, 0, 0, 9}, {9, 1, 0, 9}, {0, 58, 0, 9}, {0, 1, 0, 500}});
+    plan({{0, 1, 0, 300}, {2, 0, 0, 9}, {16, 1, 0, 9}, {0, 58, 0, 9}, {0, 1, 0, 500}});
     tick(1, "Overlay not written once per parameter");
     require(runs == 1 && resets == 1 && seen == 100 && value(0, 1) == 500 && value(2, 0) == 0, "Overlay not applied");
     tick(0, "Unchanged overlay rewritten");
@@ -297,8 +296,8 @@ int main() {
     require(sets == 1 && bases[0][5] == 70, "Edit not delegated");
     bases[0][5] = 50;
 
-    // Capture: edits of other tracks still reach stock and arrive next tick;
-    // the host's own and other tracks' edits are not captured.
+    // Capture: edits of other tracks, aux tracks no machine holds included, still
+    // reach stock and arrive next tick; the host's own edits are not captured.
     engines[2] = 40;
     capture = 1;
     plan({});
@@ -308,7 +307,7 @@ int main() {
     sdk_param_edit_set(kProject, 9, 0, 5);
     require(sets == 4 && bases[0][5] == 900, "Captured edit not delegated");
     tick(0, "Capture wrote an overlay");
-    require(edits_seen == 1 && last_edit.track == 0 && last_edit.index == 5 && last_edit.value == 900,
+    require(edits_seen == 2 && last_edit.track == 9 && last_edit.index == 0 && last_edit.value == 5,
             "Edit not captured");
     sdk_param_edit_set(kProject, 0, 5, -3);
     tick(0, "Capture wrote an overlay");
@@ -319,7 +318,7 @@ int main() {
     capture = 0;
     sets = 0;
     tick(0, "End of capture wrote an overlay");
-    require(sets == 1 && bases[0][5] == 50 && value(0, 5) == 50, "Capture not restored");
+    require(sets == 2 && bases[0][5] == 50 && value(0, 5) == 50 && bases[9][0] == 0, "Capture not restored");
     sdk_param_edit_set(kProject, 0, 5, 60);
     tick(0, "Uncaptured edit wrote an overlay");
     require(edits_seen == 0 && bases[0][5] == 60, "Edit captured after the capture ended");
@@ -701,5 +700,25 @@ int main() {
     want_shown_count = 0;
     sdk_gui_tick();
     require(sdk_param_shown(kProject, 4, 3, 1) == 50, "A shown value outlived its tick");
+
+    // Aux tracks: a machine overlays and captures one no machine holds (a send's
+    // effect, track 14), never one another aux machine holds (track 13 here).
+    aux_engines[12] = 99;
+    plan({{13, 2, 0, 640}, {12, 1, 0, 9}});
+    tick(1, "Aux track overlay not written once");
+    require(value(13, 2) == 640 && value(12, 1) == 0, "Aux overlays applied where they shouldn't, or not at all");
+    plan({});
+    tick(1, "Aux track overlay not given back");
+    require(value(13, 2) == 0, "Aux track's value not restored");
+    capture = 1;
+    tick(0, "Capture wrote an overlay");
+    sdk_param_edit_set(kProject, 12, 1, 70);
+    sdk_param_edit_set(kProject, 13, 2, 80);
+    tick(0, "Capture wrote an overlay");
+    require(edits_seen == 1 && last_edit.track == 13 && last_edit.value == 80, "Aux edit not captured, or a held one was");
+    capture = 0;
+    tick(0, "End of capture wrote an overlay");
+    require(bases[13][2] == 0 && bases[12][1] == 70, "Aux capture not restored, or a held track's edit undone");
+    aux_engines[12] = 0;
     return 0;
 }

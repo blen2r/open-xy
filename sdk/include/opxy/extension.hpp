@@ -27,9 +27,10 @@ struct LiveNote { u32 track, pitch, velocity; i32 position; u32 collision_radius
 struct NoteOff { u32 track, pitch; };
 struct Tick { u32 delta_q8; bool discontinuity; };
 using Time = __UINT64_TYPE__;
-// An encoder edit of an instrument track's parameter while an extension
-// captures (Actions::capture): the track (0..7), the parameter's index in the
-// track's 58 live words, and the edited value.
+// An encoder edit of a track's parameter while an extension captures
+// (Actions::capture): the track (0..15: instrument tracks, and aux tracks no
+// machine holds), the parameter's index in the track's 58 live words, and the
+// edited value.
 struct Edit { u32 track, index; i32 value; };
 // Key numbers as stock reports them in queued controls (opxy/keys.hpp).
 namespace keys = ::opxy::keys;

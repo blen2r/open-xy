@@ -204,7 +204,9 @@ flowchart BT
 - **Overlays** set what plays for one tick, never what is saved. Each machine
   adds every entry it still wants each tick; a parameter none overlays any more
   returns to the layer beneath. Machines read the value beneath their
-  overlays, never each other's.
+  overlays, never each other's. Machines steer instrument tracks and the aux tracks no
+  machine holds (the sends' effects, say), never an aux track a machine holds,
+  their own included, so none steers itself through another.
 - **Capture** records encoder turns for one owner, a machine or an extension
   (through the `capture` action, which turns the control service on for its
   build). Audibly (`capture` 1), the
