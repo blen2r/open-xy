@@ -714,6 +714,16 @@ int main() {
 
     // Aux tracks: a machine overlays and captures one no machine holds (a send's
     // effect, track 14), never one another aux machine holds (track 13 here).
+    {
+        // The machines' helper takes every track's parameters; the SDK decides which apply.
+        static control::Overlay o;
+        o.count = 0;
+        control::add(o, 14, 3, 99);
+        control::add(o, control::all_tracks, 0, 1);
+        control::add(o, 0, control::track_parameters, 1);
+        require(o.count == 1 && o.entries[0].track == 14 && o.entries[0].index == 3 && o.entries[0].value == 99,
+                "control::add refused an aux track, or took an invalid entry");
+    }
     aux_engines[12] = 99;
     plan({{13, 2, 0, 640}, {12, 1, 0, 9}});
     tick(1, "Aux track overlay not written once");

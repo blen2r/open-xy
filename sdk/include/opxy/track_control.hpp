@@ -156,7 +156,7 @@ inline u32 copies(u32 track) { return sdk_control_copies(track); }
 inline i32 from_control(u32 index) { return sdk_control_display(index); }
 
 inline void add(Overlay& overlay, u32 track, u32 index, i32 value) {
-    if (overlay.count >= overlay_capacity || track >= tracks || index >= track_parameters) return;
+    if (overlay.count >= overlay_capacity || track >= all_tracks || index >= track_parameters) return;
     Entry& entry = overlay.entries[overlay.count++];
     entry.track = static_cast<u8>(track);
     entry.index = static_cast<u8>(index);
