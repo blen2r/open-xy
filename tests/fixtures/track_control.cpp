@@ -564,5 +564,37 @@ int main() {
     sdk_gui_tick();
     require(value(0, 1) == 999, "Playing pattern change written by the SDK");
     playing[1] = 0;
+
+    // Silent capture (2): an edit moves only the stored value, which the next
+    // turn adds to; what plays stays held, until the capture ends.
+    bases[0][1] = 100; value(0, 1) = 100;
+    plan({}); capture = 2; sdk_gui_tick();
+    writes = 0;
+    sdk_param_edit_set(kProject, 0, 1, 150);
+    require(bases[0][1] == 150 && value(0, 1) == 100 && writes == 0, "A silent edit was heard");
+    sdk_param_edit_set(kProject, 0, 1, 170);
+    require(bases[0][1] == 170 && value(0, 1) == 100, "Silent edits not stored");
+    require(sdk_param_shown(kProject, 0, 1, 1) == 170, "The turned knob does not show its edit");
+    sdk_gui_tick();
+    require(edits_seen == 2 && last_edit.value == 170, "Silent edits not given to the capturing machine");
+    for (u32 i = 0; i < kTurnTicks; ++i) sdk_gui_tick();
+    require(sdk_param_shown(kProject, 0, 1, 1) == 100 && sdk_param_shown(kProject, 0, 1, 0) == 100,
+            "A silently edited knob does not show what plays");
+    // A step's lock plays and is held; the edited stored value written back plays the held one.
+    sdk_param_step_set(kProject, 0, 1, 400);
+    require(value(0, 1) == 400, "A step's lock was not heard while capturing silently");
+    sdk_param_step_set(kProject, 0, 1, 170);
+    require(value(0, 1) == 100, "The silent edit leaked through the step's stored value");
+    // The machines read the held value; their overlay plays over it.
+    plan({{0, 1, 0, 600}}); sdk_gui_tick();
+    require(seen == 100 && value(0, 1) == 600, "A machine read the silent edit");
+    // Audible again: the edit plays where no machine overlays it.
+    plan({}); capture = 1; sdk_gui_tick();
+    require(value(0, 1) == 170, "The edit not heard once the capture is audible");
+    // Silent again, then the end: the value from before the capture comes back.
+    capture = 2; sdk_gui_tick();
+    require(value(0, 1) == 100, "Silent again, but the edit still plays");
+    capture = 0; sdk_gui_tick();
+    require(bases[0][1] == 100 && value(0, 1) == 100 && original_count == 0, "Silent capture not restored");
     return 0;
 }

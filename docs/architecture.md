@@ -178,6 +178,49 @@ flowchart TB
   after locks and sequencing), and publishes live values to the audio side when
   they change.
 
+## A parameter's values
+
+Stock keeps two values for each track parameter: the **stored** one, which a
+project saves and an encoder turn changes, and the **live** one, which plays,
+after the sequencer's steps and parameter locks. The SDK's
+[track control](api.md#track-control) adds layers above stock's live value,
+in a fixed order, so one place decides what plays:
+
+```mermaid
+flowchart BT
+    stored["Stored value<br/>(saved; encoder turns)"]
+    live["Stock's live value<br/>(steps and parameter locks)"]
+    hold["Silent capture's hold<br/>(what plays without the capture's edits)"]
+    overlay["Machines' overlays<br/>(by track; the later track wins)"]
+    plays["What plays and the page shows"]
+    stored --> live --> hold --> overlay --> plays
+```
+
+- **Overlays** set what plays for one tick, never what is saved. Each machine
+  adds every entry it still wants each tick; a parameter none overlays any more
+  returns to the layer beneath. Machines read the value beneath their
+  overlays, never each other's.
+- **Capture** records encoder turns for one owner. Audibly (`capture` 1), the
+  turns play as usual. Silently (`capture` 2), a captured parameter is held at
+  what stock would play without the turns, so the turns only move the stored
+  value; machines read the held value, and their overlays play over it. When a
+  capture ends, every captured parameter returns to its value from before it.
+- **Stock's writes** pass through the layers too: a step's parameter lock
+  becomes the value beneath an overlay instead of sounding over it, and, while
+  capturing silently, plays and is held.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Capturing: a machine asks (capture 1 or 2)
+    Capturing --> Capturing: it asks again next tick (it may change 1 and 2)
+    Capturing --> Idle: it stops asking, leaves its track, or a project loads
+    note right of Idle
+        On ending, every captured parameter
+        returns to its value from before it.
+    end note
+```
+
 ## Machines and extensions
 
 | | Machine | Extension |

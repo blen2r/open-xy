@@ -107,13 +107,22 @@ u32 gui_ticks, turned_track = kNoTrack, turned_index, turned_tick;
 // Capture: the track whose copy captures (kNoTrack when none), edits since the
 // last tick, and each edited parameter's base value from before the capture.
 // A parameter with no room to restore is not captured.
+//
+// A capture is audible or silent (Overlay::capture 1 or 2). Silently, the
+// captured parameters form a layer between stock and the machines' overlays:
+// each is held at what stock would play without the capture's edits (`held`:
+// its value from before them, then what the sequencer's steps set), which the
+// machines read as stock's value and which plays where no machine overlays it.
+// An edit then writes only the stored value, which stock's encoder adds the
+// next turn to, so nothing of it is heard until the capture ends.
 const u32 kOriginals = 2 * control::overlay_capacity;
-u32 capture_track = kNoTrack;
+const u32 kAudible = 1, kSilent = 2;
+u32 capture_track = kNoTrack, capture_mode;
 // The tracks whose machine asked to mark the pages of the tracks it overlays.
 bool marking[control::all_tracks];
 control::Entry pending[control::edit_capacity];
 u32 pending_count;
-struct Original { control::Entry edit; u32 block, engine; i32 last; };
+struct Original { control::Entry edit; u32 block, engine; i32 last, held; };
 Original originals[kOriginals];
 u32 original_count;
 u32 capture_project;
@@ -155,6 +164,42 @@ Applied* find(u32 track, u32 index) {
     return nullptr;
 }
 
+bool silent() { return capture_track < kNoTrack && capture_mode == kSilent; }
+
+// The captured parameter `index` of `track` in its current pattern, or null.
+Original* captured(u32 track, u32 index) {
+    if (capture_track >= kNoTrack || track >= control::tracks) return nullptr;
+    const u32 block = stock<u32(u32)>(0x8d587708)(track);
+    for (u32 i = 0; i < original_count; ++i)
+        if (originals[i].edit.track == track && originals[i].edit.index == index && originals[i].block == block)
+            return &originals[i];
+    return nullptr;
+}
+
+// What a silently held parameter plays: a machine's overlay where one applies, else its held value.
+i32 silent_value(const Original& o) {
+    const Applied* a = find(o.edit.track, o.edit.index);
+    return a && a->block == o.block ? a->written : o.held;
+}
+
+// A capture changing mode: silently, the captured parameters play their held
+// values; audibly again, their edited ones.
+void set_capture_mode(u32 mode) {
+    if (mode == capture_mode) return;
+    capture_mode = mode;
+    for (u32 i = 0; i < original_count; ++i) {
+        Original& o = originals[i];
+        if (o.block != stock<u32(u32)>(0x8d587708)(o.edit.track)) continue;
+        if (mode == kSilent) o.held = o.edit.value;
+        const i32 value = mode == kSilent ? o.held : base(o.edit.track, o.edit.index);
+        // Beneath a machine's overlay, it becomes the value the overlay gives back.
+        if (Applied* a = find(o.edit.track, o.edit.index)) {
+            if (a->block == o.block) { a->underlying = value; continue; }
+        }
+        live_set(o.edit.track, o.edit.index, value);
+    }
+}
+
 // Restoring a base value also makes it stock's value beneath any overlay.
 void end_capture() {
     for (u32 i = 0; i < original_count; ++i) {
@@ -176,6 +221,7 @@ void end_capture() {
     original_count = 0;
     pending_count = 0;
     capture_track = kNoTrack;
+    capture_mode = 0;
 }
 
 // Adds the overlay of the machine on `host`: entries in range and not on its
@@ -228,6 +274,9 @@ extern "C" u32 sdk_control_copies(u32 track) {
 extern "C" i32 sdk_param_shown(u32 project, u32 track, u32 index, u32 playing) {
     const Applied* a = track < control::tracks && index < control::track_parameters ? find(track, index) : nullptr;
     const bool turned = track == turned_track && index == turned_index && gui_ticks - turned_tick < kTurnTicks;
+    // A silently captured parameter shows its edited value while it is turned, then what plays.
+    if (const Original* o = silent() ? captured(track, index) : nullptr)
+        return turned ? base(track, index) : silent_value(*o);
     if (a && !turned) return a->written;
     if (playing && !a) return live(track, index);
     return stock<i32(u32, u32, u32)>(0x8d5ac910)(project, track, index);
@@ -266,9 +315,11 @@ extern "C" void sdk_param_edit_set(u32 project, u32 track, u32 index, i32 value)
                 known = &originals[i];
         if (known && (known->engine != track_engine(track) || base(track, index) != known->last)) {
             // A new engine/preset or another writer replaced the captured base.
-            // Further edits now restore to that replacement, not the earlier one.
+            // Further edits now restore to that replacement, not the earlier one,
+            // and a silent capture holds it.
             known->engine = track_engine(track);
             known->edit.value = base(track, index);
+            known->held = known->edit.value;
         }
         if (!known && original_count < kOriginals) {
             known = &originals[original_count++];
@@ -279,6 +330,7 @@ extern "C" void sdk_param_edit_set(u32 project, u32 track, u32 index, i32 value)
             o.index = static_cast<u8>(index);
             o.reserved = 0;
             o.value = base(track, index);
+            known->held = silent() && !find(track, index) ? live(track, index) : o.value;
         }
         if (known) known->last = value < 0 ? 0 : value;
         if (known && pending_count < control::edit_capacity) {
@@ -287,6 +339,11 @@ extern "C" void sdk_param_edit_set(u32 project, u32 track, u32 index, i32 value)
             e.index = static_cast<u8>(index);
             e.reserved = 0;
             e.value = value < 0 ? 0 : value;
+        }
+        if (known && silent()) {
+            // Only the stored value moves, which the encoder's next turn adds to.
+            *at<i32>(block + 0x3864 + index * 4) = known->last;
+            return;
         }
     }
     param_set(project, track, index, value);
@@ -317,6 +374,12 @@ extern "C" void sdk_control_forget() {
 // click. An overlaid parameter keeps its overlay instead, and the lock becomes
 // stock's value beneath it, as the next tick would have found it.
 extern "C" void sdk_param_step_set(u32 project, u32 track, u32 index, i32 value) {
+    // Silently captured: a step's lock plays and is held; the stored value it
+    // would write back is the edited one, so the value from before the edits plays.
+    if (Original* o = silent() ? captured(track, index) : nullptr) {
+        o->held = value == base(track, index) ? o->edit.value : (value < 0 ? 0 : value);
+        value = o->held;
+    }
     if (track < control::tracks)
         if (Applied* a = find(track, index))
             if (a->block == stock<u32(u32)>(0x8d587708)(track)) {
@@ -342,8 +405,12 @@ extern "C" void sdk_control_tick() {
     for (u32 t = 0; t < control::tracks; ++t) {
         const u32 block = stock<u32(u32)>(0x8d587708)(t);
         if (!playing && seen_blocks[t] && block != seen_blocks[t])
-            for (u32 p = 0; p < control::track_parameters; ++p)
-                if (live(t, p) != base(t, p)) live_set(t, p, base(t, p));
+            for (u32 p = 0; p < control::track_parameters; ++p) {
+                // A silently captured parameter of that pattern keeps playing its held value.
+                const Original* o = silent() ? captured(t, p) : nullptr;
+                const i32 value = o ? silent_value(*o) : base(t, p);
+                if (live(t, p) != value) live_set(t, p, value);
+            }
         seen_blocks[t] = block;
     }
 
@@ -353,7 +420,8 @@ extern "C" void sdk_control_tick() {
         Applied a = applied[i];
         if (a.block != stock<u32(u32)>(0x8d587708)(a.track)) continue;
         const i32 value = live(a.track, a.index);
-        if (value != a.written) a.underlying = value;
+        if (const Original* o = silent() ? captured(a.track, a.index) : nullptr) a.underlying = o->held;
+        else if (value != a.written) a.underlying = value;
         a.wanted = 0;
         applied[retained++] = a;
     }
@@ -366,7 +434,7 @@ extern "C" void sdk_control_tick() {
     last_cycles = now;
     wanted_count = 0;
     bool loaded = false, kept = false;
-    u32 asking = kNoTrack;
+    u32 asking = kNoTrack, kept_mode = 0, asking_mode = 0;
     for (u32 t = 0; t < control::all_tracks; ++t) {
         const ControlMachine* m = owner(t);
         if (m && m->unique && sdk_control_copies(t) > 1) m = nullptr;
@@ -419,8 +487,9 @@ extern "C" void sdk_control_tick() {
         if (overlay.count > control::overlay_capacity) overlay.count = control::overlay_capacity;
         if (input.muted) overlay.count = overlay.capture = overlay.mark = 0;
         if (overlay.capture) {
-            if (t == capture_track) kept = true;
-            else if (asking == kNoTrack) asking = t;
+            const u32 mode = overlay.capture == kSilent ? kSilent : kAudible;
+            if (t == capture_track) kept = true, kept_mode = mode;
+            else if (asking == kNoTrack) asking = t, asking_mode = mode;
         }
         marking[t] = overlay.mark != 0;
         for (u32 i = 0; i < control::display_words; ++i) shown_words[t][i] = overlay.display[i];
@@ -433,6 +502,9 @@ extern "C" void sdk_control_tick() {
         if (capture_track < kNoTrack) end_capture();
         capture_track = asking;
         capture_project = word(0x840a0524);
+        capture_mode = asking < kNoTrack ? asking_mode : 0;
+    } else {
+        set_capture_mode(kept_mode);
     }
 
     // Mark what the machines still overlay; restore and drop the rest.

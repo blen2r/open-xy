@@ -357,6 +357,19 @@ from MIDI or presets are not captured. Like the display, `control` is bounded
 and allocation-free; it is not an audio callback. Browser previews do not run
 it.
 
+Setting `overlay.capture` to 2 captures silently: an edit is recorded and
+arrives in `edits` as before, but what plays doesn't change. Each captured
+parameter is held at what stock would play without the capture's edits: its
+value from before them, then whatever the sequencer's steps set (their
+parameter locks play as usual). That held value is what `values` reports and
+what plays where no machine overlays the parameter; a machine's overlay still
+plays over it. The edit itself only moves the stored value, which the
+encoder's next turn adds to, and the page shows it while the knob is turned,
+then what plays. A capture can change between 1 and 2 from one tick to the
+next: back to 1, the edits play; back to 2, the held values do. When the
+capture ends, every captured parameter returns to its value from before it,
+as for an audible capture.
+
 An overlay lasts one tick: a machine adds every entry it still wants each tick,
 and a parameter it stops adding gets its underlying value back at the end of
 that tick. The underlying value is stock's: what `values` reports, including

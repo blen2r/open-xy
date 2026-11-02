@@ -78,11 +78,15 @@ struct Overlay {
     u32 count;  // 0 on entry; at most overlay_capacity
     Entry entries[overlay_capacity];
     // 0 on entry. 1 asks to capture encoder edits: they still play and show
-    // as usual, and arrive in the next tick's edits. One copy captures at a
-    // time: the one already capturing, else the first track asking. When the
-    // capture ends, every parameter edited meanwhile returns to its value
-    // from before it. While it captures, every page shows the machine's
-    // capture marks (a red frame fading inward, unless it supplies its own).
+    // as usual, and arrive in the next tick's edits. 2 captures silently: the
+    // edits arrive the same way, but what plays doesn't change (each captured
+    // parameter is held at what stock would play without them, step locks
+    // included), and a turned knob shows its edit only while it turns. One
+    // copy captures at a time: the one already capturing, else the first track
+    // asking. When the capture ends, every parameter edited meanwhile returns
+    // to its value from before it. While it captures, every page shows the
+    // machine's capture marks (a red frame fading inward, unless it supplies
+    // its own).
     u32 capture;
     // 0 on entry. 1 marks the pages of the tracks this tick overlays with the
     // machine's line marks (a thin dark red frame, unless it supplies its own).
