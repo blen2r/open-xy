@@ -249,6 +249,8 @@ def service_users(machines):
     they declare ('trackControl', 'auxTrack'), and 'extension' when it links
     extensions (native builds link all of the collection's)."""
     users = [m.kind for m in machines] + (['extension'] if extensions_of(machines) else [])
+    # An extension that captures encoder edits uses track control's capture.
+    users += ['capture' for e in extensions_of(machines) if 'capture' in e.actions]
     return (users + ['trackControl' for m in machines if track_control(m)] +
             ['auxTrack' for m in machines if track_control(m) and track_control(m).get('aux')])
 
@@ -885,7 +887,8 @@ def prepare_assets(catalog, profile, machines):
             outputs[f'content/display/{m.native_name}.svg'] = screen.compose(validate_panel(m))
         for path, preset in preset_files(m).items():
             outputs[path] = (json.dumps(preset, indent=2) + '\n').encode('utf-8')
-    if any(track_control(m) for m in machines):
+    # Track control's marks, also for an extension's capture.
+    if 'control' in active_services(profile, service_users(machines)):
         outputs['content/display/openxy_overlay.svg'] = control_artwork(machines)
     for m in machines:
         outputs.update(aux_preset_files(m))

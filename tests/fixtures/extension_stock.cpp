@@ -4,6 +4,10 @@
 #include <extension_probe.cpp>
 #include <extension_collection.cpp>
 #include <extension_stock.cpp>
+// Builds without the control service capture nothing (startup's stand-ins).
+extern "C" opxy::u32 sdk_capture_request(opxy::u32, opxy::u32) { return 0; }
+extern "C" opxy::u32 sdk_capture_holds(opxy::u32) { return 0; }
+extern "C" opxy::u32 sdk_capture_edits(opxy::u32, opxy::extensions::Edit*, opxy::u32) { return 0; }
 
 #define CHECK(value) do { if (!(value)) return __LINE__; } while (false)
 using namespace opxy;

@@ -596,5 +596,39 @@ int main() {
     require(value(0, 1) == 100, "Silent again, but the edit still plays");
     capture = 0; sdk_gui_tick();
     require(bases[0][1] == 100 && value(0, 1) == 100 && original_count == 0, "Silent capture not restored");
+
+    // An extension's capture (owner 1): it counts from the next tick, gets the
+    // edits instead of a machine, and lasts while renewed every tick.
+    plan({}); capture = 0; sdk_gui_tick();
+    require(sdk_capture_request(1, 1) == 1 && !sdk_capture_holds(1), "Request not accepted, or held at once");
+    sdk_gui_tick();
+    require(sdk_capture_holds(1) && opxy::platform::control_marks().kind == opxy::platform::kMarkCapture &&
+            opxy::platform::control_marks().machine == sdk_control_machine_count, "Extension capture not marked");
+    sdk_param_edit_set(kProject, 0, 1, 130);
+    require(value(0, 1) == 130, "An audible extension capture was silent");
+    sdk_capture_request(1, 1);
+    sdk_gui_tick();
+    require(edits_seen == 0, "A machine got the extension's edits");
+    opxy::extensions::Edit taken[4];
+    require(sdk_capture_edits(1, taken, 4) == 1 && taken[0].value == 130 && sdk_capture_edits(1, taken, 4) == 0,
+            "Extension edits not given once");
+    require(sdk_capture_edits(2, taken, 4) == 0, "Another extension took the edits");
+    // Another owner can't take it while it holds it; a machine asking waits too.
+    require(sdk_capture_request(2, 1) == 0, "A second extension took over the capture");
+    capture = 1; sdk_capture_request(1, 2); sdk_gui_tick();
+    require(sdk_capture_holds(1) && value(0, 1) == 100, "Renewed silently, but the edit still plays");
+    capture = 0;
+    // Not renewed: the capture ends and the edit is undone.
+    sdk_gui_tick();
+    require(!sdk_capture_holds(1) && bases[0][1] == 100 && value(0, 1) == 100, "Unrenewed capture not ended");
+    // Mode 0 ends it at once.
+    sdk_capture_request(1, 1); sdk_gui_tick();
+    sdk_param_edit_set(kProject, 0, 1, 140);
+    sdk_capture_request(1, 0);
+    require(!sdk_capture_holds(1) && bases[0][1] == 100 && value(0, 1) == 100, "Mode 0 did not end the capture");
+    // A machine asking goes first; an extension asking then waits.
+    capture = 1; sdk_capture_request(1, 1); sdk_gui_tick();
+    require(!sdk_capture_holds(1) && sdk_capture_request(1, 1) == 0, "An extension took a machine's capture");
+    capture = 0; sdk_gui_tick();
     return 0;
 }

@@ -200,7 +200,9 @@ flowchart BT
   adds every entry it still wants each tick; a parameter none overlays any more
   returns to the layer beneath. Machines read the value beneath their
   overlays, never each other's.
-- **Capture** records encoder turns for one owner. Audibly (`capture` 1), the
+- **Capture** records encoder turns for one owner, a machine or an extension
+  (through the `capture` action, which turns the control service on for its
+  build). Audibly (`capture` 1), the
   turns play as usual. Silently (`capture` 2), a captured parameter is held at
   what stock would play without the turns, so the turns only move the stored
   value; machines read the held value, and their overlays play over it. When a
@@ -212,9 +214,9 @@ flowchart BT
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> Capturing: a machine asks (capture 1 or 2)
-    Capturing --> Capturing: it asks again next tick (it may change 1 and 2)
-    Capturing --> Idle: it stops asking, leaves its track, or a project loads
+    Idle --> Capturing: a machine asks (capture 1 or 2), or an extension (Actions::capture, from a claimed key)
+    Capturing --> Capturing: its owner asks again next tick (it may change 1 and 2)
+    Capturing --> Idle: the owner stops asking, a machine leaves its track, or a project loads
     note right of Idle
         On ending, every captured parameter
         returns to its value from before it.

@@ -81,6 +81,14 @@ def render(prefixes, effects=(), stock_page=(), sample_screens=(), effect_screen
     if extensions:
         declarations.append('void sdk_extensions_gui_tick() __asm__("sdk_extensions_gui_tick");')
         tick.append('    sdk_extensions_gui_tick();')
+    # Extensions reach track control's capture; without the control service, nothing captures.
+    capture = '' if control or not extensions else (
+        'extern "C" u32 sdk_capture_request(u32, u32) __asm__("sdk_capture_request");\n'
+        'extern "C" u32 sdk_capture_holds(u32) __asm__("sdk_capture_holds");\n'
+        'extern "C" u32 sdk_capture_edits(u32, void*, u32) __asm__("sdk_capture_edits");\n'
+        'u32 sdk_capture_request(u32, u32) { return 0; }\n'
+        'u32 sdk_capture_holds(u32) { return 0; }\n'
+        'u32 sdk_capture_edits(u32, void*, u32) { return 0; }')
     if aux:
         require(control, 'The aux service needs the control service')
         declarations.append('void sdk_aux_startup() __asm__("sdk_aux_startup");')
@@ -92,7 +100,7 @@ def render(prefixes, effects=(), stock_page=(), sample_screens=(), effect_screen
                   EFFECTS='\n'.join(f'    {prefix}_fx_register();' for prefix in effects),
                   ENGINES='\n'.join(f'    {prefix}_register();' for prefix in prefixes),
                   SCREENS='\n'.join(screens), CATALOG='\n'.join(catalog), ENGINE_SENTINEL=str(ENGINE_SENTINEL),
-                  PROJECT_KEPT=kept, GUI_TICK='\n'.join(tick),
+                  PROJECT_KEPT=kept, GUI_TICK='\n'.join(tick), CAPTURE=capture,
                   INSTALLED='\n'.join(f'    if ({prefix}_name_matches(name)) return 1;' for prefix in prefixes))
     source = (ROOT / TEMPLATE).read_text(encoding='utf-8')
     for key, text in values.items():

@@ -13,6 +13,8 @@ char notification[32];
 // undo transaction and at most one notification per callback.
 struct Transaction { u32 granted; bool attempted, notified; };
 Transaction transaction;
+// The extension whose callback runs, as its place in the collection plus 1 (0: none).
+u32 running;
 
 bool same_text(const char* a, const char* b) {
     if (!a || !b) return false;
@@ -99,7 +101,12 @@ u32 insert_notes(const extensions::Context& expected, u32 track, const RecordedN
 u32 replace_notes(const extensions::Context& expected, u32 track, const RecordedNote* notes, u32 count) {
     return write_notes(expected, track, notes, count, true);
 }
-const extensions::Actions actions = {insert_notes, notify, replace_notes};
+u32 capture(u32 mode) {
+    if (!running || !(transaction.granted & action_capture) || mode > 2) return 0;
+    sdk_capture_request(running, mode);
+    return sdk_capture_holds(running);
+}
+const extensions::Actions actions = {insert_notes, notify, replace_notes, capture};
 }
 
 void extensions_sync() {
@@ -154,13 +161,28 @@ void extensions_recording_tick(u32 delta) {
         if (entries[i].hooks->recording_tick) entries[i].hooks->recording_tick(current, tick);
     dispatching = false;
 }
+// Each extension in turn: the edits it captured since the last tick, then its
+// gui_tick, which may renew the capture it holds.
 void extensions_gui_tick() {
     if (dispatching) return;
     extensions_sync();
     if (!entries) return;
     dispatching = true;
-    for (u32 i = 0; i < entry_count; ++i)
-        if (entries[i].hooks->gui_tick) entries[i].hooks->gui_tick(current);
+    for (u32 i = 0; i < entry_count; ++i) {
+        const ExtensionEntry& entry = entries[i];
+        const bool holds = sdk_capture_holds(i + 1) != 0;
+        if (holds) {
+            extensions::Edit edits[32];
+            const u32 count = sdk_capture_edits(i + 1, edits, 32);
+            if (count && entry.hooks->captured_edits) entry.hooks->captured_edits(current, edits, count);
+        }
+        if (!entry.hooks->gui_tick) continue;
+        running = i + 1;
+        transaction = {holds ? entry.actions & action_capture : 0u, false, false};
+        entry.hooks->gui_tick(current, actions);
+        transaction = {0, false, false};
+        running = 0;
+    }
     dispatching = false;
 }
 void extensions_queued_control(const extensions::Control& control) {
@@ -169,9 +191,11 @@ void extensions_queued_control(const extensions::Control& control) {
     if (!entries) return;
     dispatching = true;
     for (u32 i = 0; i < entry_count; ++i) {
+        running = i + 1;
         transaction = {granted(entries[i], control), false, false};
         if (entries[i].hooks->queued_control) entries[i].hooks->queued_control(current, control, actions);
         transaction = {0, false, false};
+        running = 0;
     }
     dispatching = false;
 }

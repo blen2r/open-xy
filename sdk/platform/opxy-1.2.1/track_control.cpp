@@ -40,6 +40,7 @@
 #include "stock.hpp"
 #include "synth_controls.hpp"
 #include "benchmark.hpp"
+#include <opxy/extension.hpp>
 
 namespace {
 using opxy::i32;
@@ -116,8 +117,14 @@ u32 gui_ticks, turned_track = kNoTrack, turned_index, turned_tick;
 // An edit then writes only the stored value, which stock's encoder adds the
 // next turn to, so nothing of it is heard until the capture ends.
 const u32 kOriginals = 2 * control::overlay_capacity;
+//
+// The owner is a machine (`capture_track`, the track it holds) or an extension
+// (`capture_extension`, its place in the collection plus 1), never both. An
+// extension asks from its gui_tick (sdk_capture_request), which runs after
+// this tick, so its request counts as asking in the next one.
 const u32 kAudible = 1, kSilent = 2;
-u32 capture_track = kNoTrack, capture_mode;
+u32 capture_track = kNoTrack, capture_mode, capture_extension;
+u32 extension_asks, extension_mode;
 // The tracks whose machine asked to mark the pages of the tracks it overlays.
 bool marking[control::all_tracks];
 control::Entry pending[control::edit_capacity];
@@ -164,11 +171,12 @@ Applied* find(u32 track, u32 index) {
     return nullptr;
 }
 
-bool silent() { return capture_track < kNoTrack && capture_mode == kSilent; }
+bool capturing() { return capture_track < kNoTrack || capture_extension != 0; }
+bool silent() { return capturing() && capture_mode == kSilent; }
 
 // The captured parameter `index` of `track` in its current pattern, or null.
 Original* captured(u32 track, u32 index) {
-    if (capture_track >= kNoTrack || track >= control::tracks) return nullptr;
+    if (!capturing() || track >= control::tracks) return nullptr;
     const u32 block = stock<u32(u32)>(0x8d587708)(track);
     for (u32 i = 0; i < original_count; ++i)
         if (originals[i].edit.track == track && originals[i].edit.index == index && originals[i].block == block)
@@ -221,6 +229,7 @@ void end_capture() {
     original_count = 0;
     pending_count = 0;
     capture_track = kNoTrack;
+    capture_extension = 0;
     capture_mode = 0;
 }
 
@@ -248,6 +257,8 @@ void merge(u32 host) {
 Marks opxy::platform::control_marks() {
     if (capture_track < kNoTrack && hosts[capture_track])
         return Marks{kMarkCapture, machine_index(hosts[capture_track])};
+    // An extension's capture shows the SDK's marks: the row after the machines'.
+    if (capture_extension) return Marks{kMarkCapture, sdk_control_machine_count};
     const u32 track = selected_track();
     for (u32 i = 0; i < applied_count; ++i) {
         const Applied& a = applied[i];
@@ -306,7 +317,7 @@ extern "C" void sdk_param_edit_set(u32 project, u32 track, u32 index, i32 value)
     turned_track = track;
     turned_index = index;
     turned_tick = gui_ticks;
-    if (capture_track < kNoTrack && track < control::tracks && track != capture_track &&
+    if (capturing() && track < control::tracks && track != capture_track &&
         index < control::track_parameters) {
         const u32 block = stock<u32(u32)>(0x8d587708)(track);
         Original* known = nullptr;
@@ -356,10 +367,42 @@ extern "C" void sdk_control_queue_page_key(u32 track, u32 key) {
     key_number = key;
 }
 
+// An extension's capture (extension_runtime.cpp): `owner` is its place in the
+// collection plus 1. A request, from its gui_tick or a claimed key, counts in
+// the next GUI tick; mode 0 ends a capture it holds at once.
+extern "C" {
+u32 sdk_capture_request(u32 owner, u32 mode) __asm__("sdk_capture_request");
+u32 sdk_capture_holds(u32 owner) __asm__("sdk_capture_holds");
+u32 sdk_capture_edits(u32 owner, opxy::extensions::Edit* edits, u32 capacity) __asm__("sdk_capture_edits");
+}
+extern "C" u32 sdk_capture_request(u32 owner, u32 mode) {
+    if (!owner || mode > kSilent) return 0;
+    if (mode == 0) {
+        if (capture_extension == owner) end_capture();
+        if (extension_asks == owner) extension_asks = 0;
+        return 0;
+    }
+    if (capture_track < kNoTrack || (capture_extension && capture_extension != owner)) return 0;
+    if (extension_asks && extension_asks != owner) return 0;
+    extension_asks = owner;
+    extension_mode = mode;
+    return 1;
+}
+extern "C" u32 sdk_capture_holds(u32 owner) { return owner && capture_extension == owner; }
+// The edits since the last tick, for the extension that captures; they are its once.
+extern "C" u32 sdk_capture_edits(u32 owner, opxy::extensions::Edit* edits, u32 capacity) {
+    if (!owner || capture_extension != owner) return 0;
+    const u32 count = pending_count < capacity ? pending_count : capacity;
+    for (u32 i = 0; i < count; ++i) edits[i] = {pending[i].track, pending[i].index, pending[i].value};
+    pending_count = 0;
+    return count;
+}
+
 extern "C" void sdk_control_forget() {
     sdk_control_queue_page_key(kNoTrack, 0);
     original_count = pending_count = applied_count = wanted_count = 0;
     capture_track = kNoTrack;
+    capture_extension = extension_asks = 0;
     for (u32 t = 0; t < control::all_tracks; ++t) {
         hosts[t] = nullptr;
         timed[t] = marking[t] = false;
@@ -498,14 +541,19 @@ extern "C" void sdk_control_tick() {
 
     // The copy capturing keeps on while it asks; otherwise the first asking
     // starts. Ending a capture sets its base values back before this tick's overlays.
+    // An extension that captures keeps on while it renews; one asking starts
+    // only when no machine does.
+    if (capture_extension && extension_asks == capture_extension) kept = true, kept_mode = extension_mode;
     if (!kept) {
-        if (capture_track < kNoTrack) end_capture();
+        if (capturing()) end_capture();
         capture_track = asking;
+        capture_extension = asking == kNoTrack ? extension_asks : 0;
         capture_project = word(0x840a0524);
-        capture_mode = asking < kNoTrack ? asking_mode : 0;
+        capture_mode = asking < kNoTrack ? asking_mode : capture_extension ? extension_mode : 0;
     } else {
         set_capture_mode(kept_mode);
     }
+    extension_asks = 0;
 
     // Mark what the machines still overlay; restore and drop the rest.
     for (u32 i = 0; i < wanted_count; ++i)

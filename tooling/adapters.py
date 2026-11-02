@@ -288,6 +288,7 @@ def generate_track_control_overlay(directory, machines):
             rows.append(f'    {{{first}, {marks["capture"]}, {first + marks["capture"]}, {marks["line"]}}},  // {m.id}')
         else:
             rows.append(f'    {{0, 4, 4, 1}},  // {m.id}: the SDK\'s')
+    rows.append('    {0, 4, 4, 1},  // an extension\'s capture: the SDK\'s')
     values = dict(RELOCATED, MARK_NODES=str(len(ids)), MARK_IDS=''.join(f'    "{i}",\n' for i in ids),
                   MARK_MACHINES='\n'.join(rows))
     return expand('track_control_overlay.cpp.in', values, Path(directory) / 'track_control_overlay.cpp')

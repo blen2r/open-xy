@@ -6,7 +6,7 @@
 // The init preset's authored settings, shared with tooling.adapters.default_preset
 // (write_builder inlines this same file's content for the offline export).
 import DEFAULT_PRESET_TEMPLATE from '../tooling/default_preset.json' with { type: 'json' };
-export const PROFILE_SHA256 = '6d4e4ead7c4f385b53db91281c5e756d1547b747693c351919f0baddb0ea8127';
+export const PROFILE_SHA256 = 'be8c815b9fb068623d13db00be9d9b42ddf30f27c9ad8d043bd8494ce46541c7';
 export function requireThat(ok, message) { if (!ok) throw new Error(message); }
 const check = requireThat;
 const utf8 = new TextEncoder();
@@ -482,7 +482,7 @@ export function linkKit(kit, selection, layout = null, extensionIds = []) {
   const definitions = {...kit.definitions, ...numberSymbols(kit, selection, numbers)};
   const selected = new Set(selection), limit = moduleBytes(kit.profile);
   const services = activeServices(kit.profile, [...kit.machines.filter(m => selected.has(m.id)),
-    ...(extensions.size ? [{kind: 'extension'}] : [])]);
+    ...extensionUsers(kit, extensions)]);
   const objects = kit.objects.filter(o => !o.runtime && (o.extension === undefined || extensions.has(o.extension)) &&
     (o.owner === null ? !o.service || services.has(o.service) : selected.has(o.owner)));
   objects.push(...selectRuntime(objects, kit.objects.filter(o => o.runtime), definitions));
@@ -839,7 +839,15 @@ function defaultPreset(machine) {
   };
 }
 
-export async function buildAssets(kit, selection, catalog, numbers) {
+// What selected extensions turn services on with (tooling.native.service_users):
+// 'extension', and 'capture' for one that captures encoder edits.
+export function extensionUsers(kit, extensions) {
+  const chosen = (kit.extensions ?? []).filter(e => extensions.has(e.id));
+  if (!chosen.length) return [];
+  return [{kind: 'extension', features: chosen.some(e => (e.actions ?? []).includes('capture')) ? ['capture'] : []}];
+}
+
+export async function buildAssets(kit, selection, catalog, numbers, extensions = []) {
   check(await sha256(catalog) === kit.profile.stock_catalog_sha256, 'The site’s machine data is damaged. Reload this page.');
   const machines = kit.machines.filter(m => selection.includes(m.id));
   // Each machine's entry ends its stock list; the offsets are bound to the
@@ -872,7 +880,8 @@ export async function buildAssets(kit, selection, catalog, numbers) {
     }
   }
   // Track control's marks over every page (tooling.native.prepare_assets).
-  if (machines.some(m => (m.features ?? []).includes('trackControl'))) {
+  // Track control's marks, also for an extension's capture.
+  if (activeServices(kit.profile, [...machines, ...extensionUsers(kit, new Set(extensions))]).has('control')) {
     check(typeof kit.controlArtwork === 'string' && kit.controlArtwork.split('</svg>').length === 2,
           'The site’s machine data is damaged. Reload this page.');
     // The SDK's marks, then each selected machine's own (tooling.native.control_artwork).

@@ -125,7 +125,8 @@
       "drum"
     ],
     "control": [
-      "trackControl"
+      "trackControl",
+      "capture"
     ],
     "tick": [
       "trackControl",
@@ -1475,7 +1476,8 @@
       "call": true,
       "service": "tick",
       "events": [
-        "gui_tick"
+        "gui_tick",
+        "captured_edits"
       ]
     },
     {

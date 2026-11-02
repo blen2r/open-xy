@@ -112,13 +112,19 @@ test("track control's marks: the SDK's, then each selected machine's own", async
   const plain = {...machines[1], features: ['trackControl']};
   const {kit, catalog} = await fixture([steering, plain, ...machines.slice(2)]);
   kit.controlArtwork = '<svg><path id="overlay_line"/></svg>';
-  const marks = async selected => new TextDecoder().decode(
-    (await buildAssets(kit, selected, catalog, numbers))['content/display/openxy_overlay.svg']);
+  kit.profile.services = {control: ['trackControl', 'capture']};
+  const marks = async (selected, extensions = []) => new TextDecoder().decode(
+    (await buildAssets(kit, selected, catalog, numbers, extensions))['content/display/openxy_overlay.svg']);
   assert.equal(await marks(['probesources']), kit.controlArtwork);
   assert.equal(await marks(['probesynth', 'probesources']),
     '<svg><path id="overlay_line"/><g id="probesynth_marks"><circle id="probesynth_capture_0"/></g></svg>');
   const files = await buildAssets(kit, ['probesample'], catalog, numbers);
   assert.equal(files['content/display/openxy_overlay.svg'], undefined);
+  // An extension that captures encoder edits shows the SDK's marks too; one that doesn't, nothing.
+  kit.extensions = [{id: 'states', actions: ['capture']}, {id: 'other', actions: ['notify']}];
+  assert.equal(await marks(['probesample'], ['states']), kit.controlArtwork);
+  const without = await buildAssets(kit, ['probesample'], catalog, numbers, ['other']);
+  assert.equal(without['content/display/openxy_overlay.svg'], undefined);
 });
 
 test("an aux machine's presets install as files, with the init of the role it replaces", () => {

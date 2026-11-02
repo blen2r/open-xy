@@ -370,6 +370,12 @@ next: back to 1, the edits play; back to 2, the held values do. When the
 capture ends, every captured parameter returns to its value from before it,
 as for an audible capture.
 
+Extensions share this capture through their `capture` action
+([extensions](extensions.md#claims-and-actions)): one owner at a time,
+machines and extensions alike. The one capturing keeps it; otherwise machines
+that ask go first, by track, then extensions. `input.capturing` is 0 for every
+machine while an extension captures.
+
 An overlay lasts one tick: a machine adds every entry it still wants each tick,
 and a parameter it stops adding gets its underlying value back at the end of
 that tick. The underlying value is stock's: what `values` reports, including

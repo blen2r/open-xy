@@ -84,9 +84,12 @@ def main():
             require(symbols[name]['value'] == value, 'GNU symbol differs: ' + name)
         # Services follow each selected machine's kind and its declared features (trackControl, ...),
         # as the browser chooses them (builder/core.mjs activeServices).
+        capturing = any('capture' in e.get('actions', []) for e in kit.get('extensions', [])
+                        if e['id'] in result['extensions'])
         services = active_services(kit['profile'], [user for m in kit['machines'] if m['id'] in result['selected']
                                                     for user in (m['kind'], *m.get('features', []))] +
-                                   (['extension'] if result['extensions'] else []))
+                                   (['extension'] if result['extensions'] else []) +
+                                   (['capture'] if capturing else []))
         modes = {}
         for profiling in (True, False):
             profile = copy.deepcopy(kit['profile'])
@@ -153,8 +156,9 @@ def main():
                 art = screen.compose(machine['artwork'].encode())
                 require((prefix / name).read_bytes() == art, 'Browser artwork differs')
                 expected_files[name] = art
-        # Track control's marks over every page: the SDK's, then each selected machine's own.
-        if any('trackControl' in m.get('features', []) for m in selected):
+        # Track control's marks over every page: the SDK's, then each selected machine's own
+        # (also for an extension's capture, which uses the control service).
+        if 'control' in services:
             own = ''.join(m['marks'] for m in selected if isinstance(m.get('marks'), str))
             name = 'content/display/openxy_overlay.svg'
             marks = kit['controlArtwork'].replace('</svg>', own + '</svg>').encode()

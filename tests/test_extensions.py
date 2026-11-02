@@ -85,9 +85,10 @@ class Extensions(unittest.TestCase):
         profile = config()
         extensions.check_profile(profile)
         self.assertEqual(extensions.events(), ['context', 'recordable_note_on', 'selected_note_off',
-                                               'recording_tick', 'input_activity', 'queued_control', 'gui_tick'])
+                                               'recording_tick', 'input_activity', 'queued_control', 'gui_tick',
+                                               'captured_edits'])
         # The GUI tick feeds extensions from the tick service, which they share with track control.
-        tick = next(x for x in profile['patches'] if x.get('events') == ['gui_tick'])
+        tick = next(x for x in profile['patches'] if 'gui_tick' in x.get('events', []))
         self.assertEqual(tick['service'], 'tick')
         self.assertIn('extension', profile['services']['tick'])
         hook = lambda p: next(x for x in p['patches'] if x.get('events'))
@@ -98,7 +99,7 @@ class Extensions(unittest.TestCase):
             lambda p: next(x for x in p['patches'] if not x.get('service')).update(events=['context']),
             lambda p: [x.update(events=['context']) for x in p['patches'] if x.get('events')],
             # An event hook in a service extensions don't use.
-            lambda p: next(x for x in p['patches'] if x.get('events') == ['gui_tick']).update(service='control'),
+            lambda p: next(x for x in p['patches'] if 'gui_tick' in x.get('events', [])).update(service='control'),
         ):
             changed = copy.deepcopy(profile)
             mutate(changed)

@@ -74,7 +74,7 @@ filters to that track for it.
 | Kind | What | Here |
 | --- | --- | --- |
 | Events | Something happened | The `Hooks` callbacks |
-| Actions | Change something through stock | `Actions::insert_notes`, `Actions::replace_notes`, `Actions::notify` |
+| Actions | Change something through stock | `Actions::insert_notes`, `Actions::replace_notes`, `Actions::notify`, `Actions::capture` |
 | Surfaces | Add to the screen | None for extensions yet: menu rows, pages, overlays |
 | Saved state | Data kept with a project | None for extensions yet |
 
@@ -98,7 +98,8 @@ only for the callback. The SDK does not sandbox native code.
 | `recording_tick` | The selected track's scaled Q8 recording time, while playing and recordable; a discontinuity asks the subscriber to discard timing | Recorder tick |
 | `input_activity` | Any live note input, accepted or not, on any track; for cancelling gestures | Live onset |
 | `queued_control` | A queued key (Record and the other queued controls; not keyboard keys 26–49) after stock handled it, with a microsecond time. `accepted`: stock took it as input (for Record, stock registered the press or release); `unmodified`: no other key or Shift held. Key numbers are in `keys` | Key queue |
-| `gui_tick` | Once per GUI tick, playing or stopped, after stock's own call at that site and track control's | GUI tick (the `tick` service) |
+| `gui_tick` | Once per GUI tick, playing or stopped, after stock's own call at that site and track control's. Its actions renew a capture the extension holds | GUI tick (the `tick` service) |
+| `captured_edits` | While the extension captures: the encoder edits of instrument tracks' parameters since the last GUI tick (at most 32, oldest first: track, parameter index, edited value), before its `gui_tick` | GUI tick (the `tick` service) |
 
 Project and pattern IDs are opaque equality tokens. Lengths use pattern ticks;
 scale 1 has 480 ticks per step. Stock's pickup gives negative positions near
@@ -131,6 +132,17 @@ SDK's claims and actions. Each extension's `extension.json` lists those it uses.
     once. Replacing is refused, changing nothing, while stock is still
     recording a held note there.
   - `notify` unlocks `Actions::notify`: one short popup per callback.
+  - `capture` unlocks `Actions::capture(mode)`: track control's
+    [capture](api.md#track-control), shared with machines. Mode 1 captures
+    audibly (the edits play as usual), 2 silently (what plays doesn't change),
+    0 ends it. A claimed key's callback starts it; while the extension holds
+    it, every `gui_tick` renews it, and a tick without renewal ends it. Ending
+    it returns every captured parameter to its value from before. One owner at
+    a time, machines and extensions alike: the one capturing keeps it,
+    otherwise machines asking go first, then extensions in collection order. It
+    returns 1 while the extension holds the capture, from the tick after it
+    first asks. An extension declaring `capture` uses the control service, so
+    its build links track control's capture and marks (the SDK's red frame).
 
   Calls outside the callback, with a stale context, or a second write or
   popup in one callback are refused.

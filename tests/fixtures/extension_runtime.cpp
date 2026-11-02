@@ -20,8 +20,10 @@ void observe_control(const extensions::Context& context, const extensions::Contr
     result = actions.insert_notes(context, 0, &good, 1);
     actions.notify("unauthorized");
 }
+u32 capture_result;  // what the last capture call returned
 void edit_control(const extensions::Context& context, const extensions::Control&, const extensions::Actions& actions) {
     saved = actions; saved_context = context;
+    if (mode == 20) { capture_result = actions.capture(1); return; }
     RecordedNote note = good;
     u32 track = context.recording.track;
     if (mode == 1) ++stock_context.pattern;
@@ -41,16 +43,35 @@ const extensions::Hooks first = extensions::Hooks().with_recordable_note_on(firs
                                                    .with_queued_control(observe_control);
 // The GUI tick reaches its subscribers in collection order, with the current context.
 u32 gui_ticks, tick_order;
-void second_tick(const extensions::Context& context) { ++gui_ticks; tick_order = order_count; (void)context; }
+u32 tick_mode, edits_heard, last_edit_value;
+void second_tick(const extensions::Context& context, const extensions::Actions& actions) {
+    ++gui_ticks; tick_order = order_count; (void)context;
+    if (tick_mode) capture_result = actions.capture(tick_mode);
+}
+void second_edits(const extensions::Context&, const extensions::Edit* edits, u32 count) {
+    edits_heard += count; last_edit_value = edits[count - 1].value;
+}
 const extensions::Hooks second = extensions::Hooks().with_recordable_note_on(second_note)
                                                     .with_queued_control(edit_control)
-                                                    .with_gui_tick(second_tick);
+                                                    .with_gui_tick(second_tick)
+                                                    .with_captured_edits(second_edits);
 // Two claims on different keys. edit_notes needs the first (or any claim once
 // set to 0); notify needs any claim its holder owns.
-u32 claim_keys[] = {50, 51}, action_claims[] = {1u, 0};
-const ExtensionRegistry tables = {claim_keys, 2, action_claims, 2};
+u32 claim_keys[] = {50, 51}, action_claims[] = {1u, 0, 0};
+const ExtensionRegistry tables = {claim_keys, 2, action_claims, 3};
 ExtensionEntry collection[] = {{"observer", 0, 0, &first},
-                               {"writer", 1u, action_edit_notes | action_notify, &second}};
+                               {"writer", 1u, action_edit_notes | action_notify | action_capture, &second}};
+// Track control's capture, played by the test: whom it grants, and the edits it holds.
+u32 requests, requested_owner, requested_mode, holder;
+}
+extern "C" u32 sdk_capture_request(u32 owner, u32 mode) {
+    ++requests; requested_owner = owner; requested_mode = mode; return 1;
+}
+extern "C" u32 sdk_capture_holds(u32 owner) { return owner && owner == holder; }
+extern "C" u32 sdk_capture_edits(u32 owner, extensions::Edit* edits, u32 capacity) {
+    if (owner != holder || capacity < 2) return 0;
+    edits[0] = {0, 1, 10}; edits[1] = {3, 9, 20};
+    return 2;
 }
 namespace opxy { namespace platform {
 const ExtensionEntry* extension_collection(u32& count) { count = 2; return collection; }
@@ -78,6 +99,19 @@ int main() {
     extensions_recordable_note_on(7, 60, 100); CHECK(order_count == 2);
     extensions_gui_tick(); extensions_gui_tick();
     CHECK(gui_ticks == 2 && tick_order == 2 && first.gui_tick == nullptr);
+    // Capture: renewing needs the capture, so a gui_tick alone cannot start one.
+    tick_mode = 2; extensions_gui_tick();
+    CHECK(requests == 0 && capture_result == 0);
+    // A claimed key starts it, for the extension's own place (2: the writer).
+    mode = 20; control(50, true); mode = 0;
+    CHECK(requests == 1 && requested_owner == 2 && requested_mode == 1 && capture_result == 0);
+    // Holding it, the writer hears its edits before its gui_tick, which renews it.
+    holder = 2; extensions_gui_tick();
+    CHECK(edits_heard == 2 && last_edit_value == 20 && requests == 2 && requested_mode == 2 && capture_result == 1);
+    // Ending it: mode 0.
+    tick_mode = 0; capture_result = 7;
+    holder = 0; tick_mode = 0; extensions_gui_tick();
+    CHECK(requests == 2 && edits_heard == 2);
     // Only the claim owner acts: one write and one notification per callback.
     control(50, true);
     CHECK(writes == 1 && notices == 1 && result == 1 && written_track == 0);

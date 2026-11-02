@@ -26,6 +26,10 @@ struct LiveNote { u32 track, pitch, velocity; i32 position; u32 collision_radius
 struct NoteOff { u32 track, pitch; };
 struct Tick { u32 delta_q8; bool discontinuity; };
 using Time = __UINT64_TYPE__;
+// An encoder edit of an instrument track's parameter while an extension
+// captures (Actions::capture): the track (0..7), the parameter's index in the
+// track's 58 live words, and the edited value.
+struct Edit { u32 track, index; i32 value; };
 // Key numbers as stock reports them in queued controls.
 namespace keys { const u32 record = 50; }
 struct Control {
@@ -52,6 +56,18 @@ struct Actions {
     // Replace an instrument track's pattern notes with these. Refused, changing
     // nothing, while stock is still recording a held note there. Needs edit_notes.
     u32 (*replace_notes)(const Context&, u32 track, const Note*, u32 count);
+    // Capture encoder edits (track control's capture, shared with machines):
+    // mode 1 audibly (the edits play as usual), 2 silently (what plays doesn't
+    // change), 0 to end it. It lasts while the extension renews it in every
+    // gui_tick; ending it, or not renewing it, returns every captured parameter
+    // to its value from before. Starting needs one of the extension's claims (a
+    // queued_control callback for its key); renewing works in gui_tick while it
+    // holds the capture. One owner at a time, machines and extensions alike:
+    // the one capturing keeps it; otherwise machines that ask go first, by
+    // track, then extensions, in collection order. Returns 1 while this
+    // extension holds the capture (from the tick after it first asks), else 0.
+    // Needs capture.
+    u32 (*capture)(u32 mode);
 };
 
 using OnContext = void (*)(const Context&);
@@ -60,7 +76,8 @@ using OnSelectedNoteOff = void (*)(const Context&, const NoteOff&);
 using OnRecordingTick = void (*)(const Context&, const Tick&);
 using OnInputActivity = void (*)();
 using OnQueuedControl = void (*)(const Context&, const Control&, const Actions&);
-using OnGuiTick = void (*)(const Context&);
+using OnGuiTick = void (*)(const Context&, const Actions&);
+using OnCapturedEdits = void (*)(const Context&, const Edit* edits, u32 count);
 
 // One callback per event, named for what it delivers. Each event lists its
 // firmware sites in the profile ("events"); docs/extensions.md says how to
@@ -89,36 +106,43 @@ struct Hooks {
     // 26-49) after stock handled it. Actions act only for their claim owner.
     OnQueuedControl queued_control;
     // Once per GUI tick, after stock's own work for the tick and track
-    // control's, whether or not the sequencer plays.
+    // control's, whether or not the sequencer plays. Its actions renew a
+    // capture the extension holds (Actions::capture).
     OnGuiTick gui_tick;
+    // While this extension captures: the edits since the last GUI tick, oldest
+    // first, at most 32, before gui_tick.
+    OnCapturedEdits captured_edits;
 
-    constexpr Hooks() : Hooks(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) {}
+    constexpr Hooks() : Hooks(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) {}
     // Every callback in order; prefer the with_ builders below.
     constexpr Hooks(OnContext a, OnRecordableNoteOn b, OnSelectedNoteOff c, OnRecordingTick d,
-                    OnInputActivity e, OnQueuedControl f, OnGuiTick g)
+                    OnInputActivity e, OnQueuedControl f, OnGuiTick g, OnCapturedEdits h)
         : context(a), recordable_note_on(b), selected_note_off(c), recording_tick(d),
-          input_activity(e), queued_control(f), gui_tick(g) {}
+          input_activity(e), queued_control(f), gui_tick(g), captured_edits(h) {}
 
     constexpr Hooks with_context(OnContext f) const {
-        return Hooks(f, recordable_note_on, selected_note_off, recording_tick, input_activity, queued_control, gui_tick);
+        return Hooks(f, recordable_note_on, selected_note_off, recording_tick, input_activity, queued_control, gui_tick, captured_edits);
     }
     constexpr Hooks with_recordable_note_on(OnRecordableNoteOn f) const {
-        return Hooks(context, f, selected_note_off, recording_tick, input_activity, queued_control, gui_tick);
+        return Hooks(context, f, selected_note_off, recording_tick, input_activity, queued_control, gui_tick, captured_edits);
     }
     constexpr Hooks with_selected_note_off(OnSelectedNoteOff f) const {
-        return Hooks(context, recordable_note_on, f, recording_tick, input_activity, queued_control, gui_tick);
+        return Hooks(context, recordable_note_on, f, recording_tick, input_activity, queued_control, gui_tick, captured_edits);
     }
     constexpr Hooks with_recording_tick(OnRecordingTick f) const {
-        return Hooks(context, recordable_note_on, selected_note_off, f, input_activity, queued_control, gui_tick);
+        return Hooks(context, recordable_note_on, selected_note_off, f, input_activity, queued_control, gui_tick, captured_edits);
     }
     constexpr Hooks with_input_activity(OnInputActivity f) const {
-        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, f, queued_control, gui_tick);
+        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, f, queued_control, gui_tick, captured_edits);
     }
     constexpr Hooks with_queued_control(OnQueuedControl f) const {
-        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, input_activity, f, gui_tick);
+        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, input_activity, f, gui_tick, captured_edits);
     }
     constexpr Hooks with_gui_tick(OnGuiTick f) const {
-        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, input_activity, queued_control, f);
+        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, input_activity, queued_control, f, captured_edits);
+    }
+    constexpr Hooks with_captured_edits(OnCapturedEdits f) const {
+        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, input_activity, queued_control, gui_tick, f);
     }
 };
 }}

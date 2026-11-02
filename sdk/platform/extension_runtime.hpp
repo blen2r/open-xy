@@ -10,6 +10,7 @@ using RecordedNote = extensions::Note;
 // each claim's key, and each action the claims that grant it (0: any claim).
 const u32 action_edit_notes = 1u << 0;
 const u32 action_notify = 1u << 1;
+const u32 action_capture = 1u << 2;
 
 struct ExtensionEntry {
     const char* id;
@@ -43,6 +44,14 @@ i32 extension_position(u32 track);
 u32 extension_scaled_delta(u32 track, u32 delta);
 i32 extension_collision_radius(u32 track);
 bool extension_record_held();
+// Track control's capture (track_control.cpp), shared with machines; `owner` is
+// an extension's place in the collection plus 1. Startup stands in for them in
+// builds without the control service.
+extern "C" {
+u32 sdk_capture_request(u32 owner, u32 mode) __asm__("sdk_capture_request");
+u32 sdk_capture_holds(u32 owner) __asm__("sdk_capture_holds");
+u32 sdk_capture_edits(u32 owner, extensions::Edit* edits, u32 capacity) __asm__("sdk_capture_edits");
+}
 u32 extension_write(u32 track, const RecordedNote* notes, u32 count, bool replace);
 void extension_notify(const char* text);
 }}
