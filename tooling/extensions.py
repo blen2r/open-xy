@@ -118,17 +118,19 @@ def events():
 
 
 def check_profile(profile):
-    """Every extension hook names the events it feeds, and every event has a site."""
+    """Every extension hook names the events it feeds, and every event has a site. An
+    extension hook is in the extensions service, or in a service extensions share with
+    others (the tick service), whose users include extensions."""
     known, fed = set(events()), set()
+    shared = {name for name, users in profile.get('services', {}).items() if 'extension' in users}
     for patch in profile['patches']:
-        if patch.get('service') == 'extensions':
+        if patch.get('service') == 'extensions' or 'events' in patch:
             listed = patch.get('events')
+            require(patch.get('service') in shared, 'Only hooks of services extensions use name events')
             require(patch['kind'] == 'hook' and isinstance(listed, list) and listed and
                     len(set(listed)) == len(listed) and set(listed) <= known,
                     'An extension hook names the events it feeds: ' + str(patch.get('symbol')))
             fed |= set(listed)
-        else:
-            require('events' not in patch, 'Only extension hooks name events')
     require(fed == known, 'Events without a firmware site: ' + ', '.join(sorted(known - fed)))
 
 

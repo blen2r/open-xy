@@ -326,8 +326,8 @@ extern "C" void sdk_param_step_set(u32 project, u32 track, u32 index, i32 value)
     stock<void(u32, u32, u32, i32)>(0x8d5acea8)(project, track, index, value);
 }
 
-extern "C" void sdk_gui_tick() {
-    stock<void()>(0x8d580074)();
+// Once per GUI tick, from the tick service's dispatcher (startup.cpp.in), after stock's call.
+extern "C" void sdk_control_tick() {
     ++gui_ticks;
     if (!sdk_control_machine_count && !applied_count) return;
     sdk_control_kept_apply();

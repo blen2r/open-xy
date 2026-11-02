@@ -16,7 +16,7 @@ class Startup(unittest.TestCase):
         text = render(['probesynth', 'probesources', 'probesample'], ['probefx'], ['probesample'])
         self.assertIsNone(re.search(r'0x[0-9a-fA-F]+', text))
         stock = set(re.findall(r'__asm__\("(stock_\w+)"\)', text))
-        self.assertEqual(stock, {'stock_catalog_insert', 'stock_gui_role'})
+        self.assertEqual(stock, {'stock_catalog_insert', 'stock_gui_role', 'stock_gui_update'})
         self.assertLessEqual(stock, set(DEFINITIONS))
         for prefix in ('probesynth', 'probesources', 'probesample'):
             self.assertIn(f'__asm__("{prefix}_engine_id")', text)

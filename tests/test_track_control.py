@@ -252,8 +252,11 @@ class TrackControl(unittest.TestCase):
         aux.definition['resources']['trackControl'].update(unique=True, aux=[12])
         hooks = [p for p in config()['patches'] if p.get('service') == 'control' and p['kind'] == 'hook']
         self.assertEqual(sorted(p['symbol'] for p in hooks),
-                         ['sdk_gui_tick', 'sdk_param_edit_set', 'sdk_param_shown_hook', 'sdk_param_step_set',
+                         ['sdk_param_edit_set', 'sdk_param_shown_hook', 'sdk_param_step_set',
                           'sdk_param_step_set', 'sdk_param_step_set', 'sdk_project_clear', 'sdk_project_clear_random'])
+        # The GUI tick is the tick service's, shared with extensions.
+        tick = [p for p in config()['patches'] if p.get('service') == 'tick']
+        self.assertEqual([p['symbol'] for p in tick], ['sdk_gui_tick'])
         # Aux tracks are a service of their own: its hooks and MTP allowlist edits.
         aux_edits = [p for p in config()['patches'] if p.get('service') == 'aux']
         self.assertEqual(sorted(p.get('symbol', p['address']) for p in aux_edits),
@@ -265,6 +268,7 @@ class TrackControl(unittest.TestCase):
             services = active_services(config(), native.service_users(machines))
             self.assertEqual(('control' in services, 'aux' in services), (used, aux_used))
             self.assertEqual(all(patch_active(p, services) for p in hooks), used)
+            self.assertEqual(all(patch_active(p, services) for p in tick), used)
             self.assertEqual(all(patch_active(p, services) for p in aux_edits), aux_used)
             units = {step for _name, _m, step in native.plan(machines)}
             for unit in ('track_control', 'track_control_table', 'track_control_hooks', 'track_control_overlay',
@@ -280,6 +284,15 @@ class TrackControl(unittest.TestCase):
         self.assertNotIn('sdk_control_kept_write', plain_startup)
         self.assertIn('    sdk_overlay_startup();', control_startup)
         self.assertIn('{ return sdk_control_kept_write(file); }', control_startup)
+        # The GUI tick makes stock's call, then track control's and the extensions', when linked.
+        self.assertNotIn('sdk_control_tick', plain_startup)
+        self.assertNotIn('sdk_extensions_gui_tick', control_startup)
+        both = render(['probe'], control=True, extensions=True)
+        tick_body = both[both.index('void sdk_gui_tick() {'):]
+        self.assertLess(tick_body.index('stock_gui_update();'), tick_body.index('    sdk_control_tick();'))
+        self.assertLess(tick_body.index('    sdk_control_tick();'), tick_body.index('    sdk_extensions_gui_tick();'))
+        extension_only = active_services(config(), ['synth', 'extension'])
+        self.assertTrue(all(patch_active(p, extension_only) for p in tick) and 'control' not in extension_only)
         # The aux service starts after the control service's marks, only when linked.
         aux_startup = render(['probe'], control=True, aux=True)
         self.assertNotIn('sdk_aux_startup', control_startup)
@@ -291,7 +304,7 @@ class TrackControl(unittest.TestCase):
         self.assertEqual([(int(p['address'], 16), p['length'], p['call']) for p in hooks],
                          [(0x8c0baade, 8, True), (0x8d5937b4, 4, True), (0x8d5938c2, 4, True), (0x8d59396a, 4, True),
                           (0x8d5ad5ae, 4, True), (0x8d5aca48, 4, False)])
-        self.assertTrue(all(p.get('service') == 'control' for p in hooks))
+        self.assertEqual([p.get('service') for p in hooks], ['tick'] + ['control'] * 5)
         # CC = R0 == 0; IF CC JUMP 8d5aca80: the getter's choice of live or base value.
         self.assertEqual(hooks[5]['before'], '000c1b18')
         for unit in ('track_control', 'track_control_hooks'):

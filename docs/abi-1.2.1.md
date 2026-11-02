@@ -43,7 +43,8 @@ version is rejected. The output differs from stock in exactly these places:
 | Project companions | 7 | Writes a [companion](projects.md) after every project save, maps a project's machine numbers through its companion on every load, gives track control machines what they kept after every load (and nothing after a new project), and shows companions beside projects over MTP |
 | Diagnostic benchmark | 1 | Extends explicit command 0xc8 with the selected machines; no normal-playback callbacks added |
 | Per-voice profiling | 10 optional | Bypasses diagnostic timing in both stock voice renderers when built with profiling off |
-| Track control | 3 | Runs a synth's track control once per GUI tick, after stock's own call at that site, lets it capture encoder edits, and shows its overlays as parameter values |
+| GUI tick | 1 | Shared by track control and extensions (the `tick` service): stock's own call at that site, then track control's tick, then the extensions' `gui_tick` |
+| Track control | 7 | Runs track control machines from the GUI tick, lets them capture encoder edits, keeps their overlays over parameter locks, shows their overlays as parameter values, and clears them for a new project |
 | Aux tracks | 13 | Lets a track control machine take over aux track 12 (CV): its chooser on Shift + M1 (the effect list on the sends), its presets on Shift + track key, its page on M1, its parameter names on the LFO's destinations, its own LFO whichever track is selected, and CV and gate kept silent; four MTP allowlist edits show the user's aux presets |
 | Preset scan | 1 | Hides factory presets whose engine the build does not install ([presets](#presets)) |
 | Startup label | 1 | Shows `OPEN <version>-1.2.1` at boot, `<version>` from [`VERSION`](../VERSION), through the stock startup text renderer |
@@ -58,7 +59,8 @@ kit. Synthesis drum transport is the `drums` service, used only by drum kits.
 Otherwise their sites stay stock. The track control rows (and the project read of the
 project companion rows) form the `control` service in the same way: a build
 uses them only when it includes a machine with [track control](api.md#track-control).
-The aux track rows form the `aux`
+The GUI tick row forms the `tick` service, used by track control and by
+extensions alike. The aux track rows form the `aux`
 service, used only by a machine that [takes over aux tracks](api.md#aux-tracks).
 Everything else must reconstruct byte for byte. Protected ranges in
 [`pipeline.py`](../tooling/pipeline.py) admit only hooks into the module and
@@ -440,8 +442,11 @@ when it changed.
 
 `8c0baacc`, the GUI's per-tick update, calls the void function `8d580074` (which calls `8d5be290`) just
 before the sequencer tick. That call at `8c0baade` routes through
-`sdk_gui_tick` ([`track_control.cpp`](../sdk/platform/opxy-1.2.1/track_control.cpp)),
-which makes the original call first. After a project load or new project it
+`sdk_gui_tick`, the `tick` service's dispatcher, generated in
+[`startup.cpp`](../sdk/platform/opxy-1.2.1/startup.cpp.in): it makes the original
+call (`stock_gui_update`) first, then track control's tick (`sdk_control_tick`,
+[`track_control.cpp`](../sdk/platform/opxy-1.2.1/track_control.cpp)), then the
+extensions' `gui_tick`, for those the build links. After a project load or new project, track control's tick
 gives machines their data (the [project hook](#project-companions) only records
 it, on the file task). Then it treats any live value that differs from the one
 it last wrote as stock's, and runs the [track control](api.md#track-control)

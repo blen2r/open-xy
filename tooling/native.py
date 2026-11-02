@@ -39,7 +39,9 @@ TARGET = 'opxy-1.2.1'
 # The stock instrument catalog every build extends, kept in the repository for
 # development: the builder distributes it too. Firmware always comes from the device.
 STOCK_CONTENT = ROOT / 'profiles/opxy-1.2.1/content'
-DEFINITIONS = dict(stock_catalog_insert=0x8d5bd928, stock_gui_role=0x8d5c3eac, stock_sample_classify_tail=0x8d5b79c6,
+# stock_gui_update: the call the GUI's per-tick update makes at 8c0baade (the tick service's site).
+DEFINITIONS = dict(stock_catalog_insert=0x8d5bd928, stock_gui_role=0x8d5c3eac, stock_gui_update=0x8d580074,
+                   stock_sample_classify_tail=0x8d5b79c6,
                    stock_sample_key_tail=0x8d589214, stock_drum_classify_tail=0x8d5b79f6, stock_player_factory_tail=0x8d57ee70,
                    stock_player_load_tail=0x8d588d98, stock_player_load_kept=0x8d588da2,
                    stock_player_name_tail=0x8d5bdddc, stock_player_id_tail=0x8d5bde64, stock_sample_slice_receive_tail=0x8d5b1264)
@@ -468,7 +470,8 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
                                                 [x.prefix for x in sample_engines if x.display != 'stock'],
                                                 effect_screens=[x.prefix for x in effects if x.display != 'stock'],
                                                 player_pages=[x.prefix for x in by_kind(machines, 'player')],
-                                                control='control' in services, aux='aux' in services)), obj)
+                                                control='control' in services, aux='aux' in services,
+                                                extensions='extensions' in services)), obj)
             if (ROOT / TEMPLATES / (step + '.cpp')).is_file():
                 return cxx(TEMPLATES + step + '.cpp', obj)
             return assemble_unit(ROOT / TEMPLATES / (step + '.s'), obj)

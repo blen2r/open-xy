@@ -57,7 +57,8 @@ Marks control_marks();
 extern "C" {
 extern const opxy::platform::ControlMachine sdk_control_machines[] __asm__("sdk_control_machines");
 extern const opxy::u32 sdk_control_machine_count __asm__("sdk_control_machine_count");
-void sdk_gui_tick() __asm__("sdk_gui_tick");
+// Once per GUI tick, after stock's call (startup.cpp.in's sdk_gui_tick, the tick service).
+void sdk_control_tick() __asm__("sdk_control_tick");
 // Stock's step values reaching the live parameters: an overlay stays over them.
 void sdk_param_step_set(opxy::u32 project, opxy::u32 track, opxy::u32 index, opxy::i32 value)
     __asm__("sdk_param_step_set");

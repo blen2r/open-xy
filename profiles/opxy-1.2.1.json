@@ -127,6 +127,10 @@
     "control": [
       "trackControl"
     ],
+    "tick": [
+      "trackControl",
+      "extension"
+    ],
     "aux": [
       "auxTrack"
     ],
@@ -1469,7 +1473,10 @@
       "before": "00de588d74000000",
       "symbol": "sdk_gui_tick",
       "call": true,
-      "service": "control"
+      "service": "tick",
+      "events": [
+        "gui_tick"
+      ]
     },
     {
       "kind": "hook",

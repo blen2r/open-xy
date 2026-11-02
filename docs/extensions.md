@@ -45,11 +45,14 @@ while playing. A subscriber that wants a narrower scope filters; one that needs
 a wider scope widens the event (below), never adds a nearby site. The same
 holds for time (transport, GUI tick), controls (queued keys, keyboard keys,
 encoder edits, page keys) and the project lifecycle (loading, starting a new
-project, saving); of these, only queued keys are exposed.
+project, saving); of these, the GUI tick and queued keys are exposed.
 
 Adjacent sites are still separate sites. The controller update behind `context`
-follows stock's GUI tick in the same main loop; a GUI-tick event would be a site
-of its own beside it.
+follows stock's GUI tick in the same main loop; the GUI tick is a site of its
+own beside it, behind `gui_tick`. A site can serve extensions and the SDK's own
+services: the GUI tick belongs to the profile's `tick` service, which both
+extensions and track control use, so its dispatcher (`sdk_gui_tick`, generated
+in `startup.cpp`) calls each user the build links, in turn.
 
 ### Access: observe, transform or claim
 
@@ -95,6 +98,7 @@ only for the callback. The SDK does not sandbox native code.
 | `recording_tick` | The selected track's scaled Q8 recording time, while playing and recordable; a discontinuity asks the subscriber to discard timing | Recorder tick |
 | `input_activity` | Any live note input, accepted or not, on any track; for cancelling gestures | Live onset |
 | `queued_control` | A queued key (Record and the other queued controls; not keyboard keys 26–49) after stock handled it, with a microsecond time. `accepted`: stock took it as input (for Record, stock registered the press or release); `unmodified`: no other key or Shift held. Key numbers are in `keys` | Key queue |
+| `gui_tick` | Once per GUI tick, playing or stopped, after stock's own call at that site and track control's | GUI tick (the `tick` service) |
 
 Project and pattern IDs are opaque equality tokens. Lengths use pattern ticks;
 scale 1 has 480 ticks per step. Stock's pickup gives negative positions near
@@ -161,7 +165,9 @@ callback order. Native builds include the whole collection. The site's Extension
 Machines, starts with none selected, saves choices with the layout and omits
 unselected extensions entirely. The SDK's extension hooks form the profile's
 `extensions` service: a build with no extension selected links none of the
-runtime and leaves every one of its stock call sites unchanged.
+runtime and leaves every one of its stock call sites unchanged. A site extensions
+share with the SDK's own services is in a shared service instead (`tick`), which
+names `extension` among its users.
 
 ## Change the SDK for an extension
 
@@ -188,8 +194,9 @@ build reads the event list from the builders). The pull request states:
 
 - the event's name, by what it delivers and its scope;
 - its stage, access (observe, transform or claim), thread and host;
-- each firmware site, tagged with `events` and the `extensions` service, and
-  how it was found and verified in the stock OS;
+- each firmware site, tagged with `events` and a service extensions use (the
+  `extensions` service, or a shared one such as `tick`), and how it was found
+  and verified in the stock OS;
 - why widening an existing event would not serve.
 
 Extensions name their callbacks, so adding one changes none of them. Renaming

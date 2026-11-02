@@ -7,6 +7,7 @@
 extern "C" {
 void sdk_extensions_controller_update(opxy::u32, opxy::u32) __asm__("sdk_extensions_controller_update");
 void sdk_extensions_key(const opxy::u32*) __asm__("sdk_extensions_key");
+void sdk_extensions_gui_tick() __asm__("sdk_extensions_gui_tick");
 opxy::u32 sdk_extensions_key_queue(const opxy::u32*) __asm__("sdk_extensions_key_queue");
 void sdk_extensions_recorder_tick(opxy::u32, opxy::u32) __asm__("sdk_extensions_recorder_tick");
 void sdk_extensions_stop(opxy::u32) __asm__("sdk_extensions_stop");
@@ -176,6 +177,9 @@ void sdk_extensions_key(const u32* event) {
         (control.pressed ? extension_record_held() : was_held && !extension_record_held()));
     extensions_queued_control(control);
 }
+// Once per GUI tick, from the tick service's dispatcher (startup.cpp.in), after
+// stock's call and track control's.
+void sdk_extensions_gui_tick() { extensions_gui_tick(); }
 u32 sdk_extensions_key_queue(const u32* event) {
     sdk_extensions_key(event);
     // The authenticated span includes stock's following R0 = queue address.

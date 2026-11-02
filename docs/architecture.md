@@ -104,22 +104,35 @@ the same split from the side of events: sites, events, subscribers.
 A **profile service** groups the patch sites and SDK code one feature needs.
 A build applies a service's edits, and links its code, only when a selected
 machine or extension needs it; otherwise those sites stay stock. The profile
-names each service and what turns it on: the machine kinds that use it, or
-`extension` when the build includes an extension.
+names each service and what turns it on: the machine kinds that use it, the
+features machines declare (`trackControl`, `auxTrack`), or `extension` when the
+build includes an extension.
 
 ```mermaid
 flowchart LR
+    tc["a track control machine"] --> control["control service"] & tick["tick service"]
+    ax["a machine on an aux track"] --> aux["aux service"]
     s["a sample engine"] --> samples["samples service"] & octaves["octaves service"]
     d["a drum kit"] --> samples & drums["drums service"] & octaves
     p["a note player"] --> players["players service"] & octaves
-    e["any extension"] --> ext["extensions service"]
-    samples & drums & players & octaves & ext --> edits["their sites and code<br/>applied and linked"]
+    e["any extension"] --> ext["extensions service"] & tick
+    control & tick & aux & samples & drums & players & octaves & ext --> edits["their sites and code<br/>applied and linked"]
     none["none of these"] --> stockonly["those sites stay stock"]
 ```
 
 [`tooling/native.py`](../tooling/native.py) chooses the services from the
 selection (`service_users`) and the units each one links (`UNIT_SERVICES`);
-the browser builder does the same from the kit. A feature that needs new sites
+the browser builder does the same from the kit.
+
+A site belongs to exactly one service. When several features need the same site,
+it gets a small shared service of its own, used by each of them, and a
+dispatcher that calls each user the build links, in a fixed order. The GUI tick
+is the first: the `tick` service, used by track control and by extensions. Its
+dispatcher, `sdk_gui_tick`, is generated with the build's startup code, which
+already stands in for the services a build leaves out; in a browser kit, a user
+the selection leaves out resolves to a stand-in that does nothing.
+
+A feature that needs new sites
 adds a service, or extends the one it belongs to, rather than editing builds
 that don't use it.
 
@@ -137,7 +150,7 @@ controls and the sequencer.
 flowchart TB
     subgraph gui["GUI side"]
         loop["Main loop, every GUI tick"]
-        tick["GUI tick"]
+        tick["GUI tick (tick service):<br/>stock, track control, extensions' gui_tick"]
         ctrl["Controller update and sequencer<br/>extension events"]
         screens["Screens: machines' displays"]
         file["Background file task:<br/>project load and save"]

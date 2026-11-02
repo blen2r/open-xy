@@ -47,6 +47,8 @@ int effect_ready() { calls += "effect? "; return ready_state; }
 int player_screen_register() { calls += "player-page "; return 1; }
 u32 stock_gui_role() { calls += "role "; return gui; }
 void sdk_overlay_startup() { calls += "overlay "; }
+void stock_gui_update() { calls += "stock-tick "; }
+void sdk_control_tick() { calls += "control-tick "; }
 u32 sdk_control_kept_write(void* file) { calls += "kept "; return file ? 2 : 0; }
 void sdk_control_kept_load(const char* path) { calls += path; }
 u32 stock_catalog_insert(void*, const void*, u32 id) { inserted = id; return 7; }
@@ -137,5 +139,9 @@ int main() {
     track = 8;   // no track selected
     require(sdk_sample_screen(2) == 0);
     std::puts("startup ok");
+    // The GUI tick: stock's call, then track control's (this collection links no extension).
+    calls.clear();
+    sdk_gui_tick();
+    require(calls == "stock-tick control-tick ");
     return 0;
 }

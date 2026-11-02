@@ -14,7 +14,7 @@ def _declare(name, signature='()'):
 
 
 def render(prefixes, effects=(), stock_page=(), sample_screens=(), effect_screens=(), player_pages=(), control=False,
-           aux=False):
+           aux=False, extensions=False):
     """stock_page: engines that show a stock page (e.g. sample engines on the
     sampler page); they register on the GUI role without an own-page guard.
     sample_screens: those of them that also draw their own screen over it.
@@ -22,7 +22,9 @@ def render(prefixes, effects=(), stock_page=(), sample_screens=(), effect_screen
     registers on the GUI role.
     control: the build links the control service; its marks screen registers
     last. Without it, the companion's calls into the service do nothing.
-    aux: the build links the aux service (aux tracks), which starts after it."""
+    aux: the build links the aux service (aux tracks), which starts after it.
+    extensions: the build links extensions. The GUI tick (the tick service) makes
+    stock's call, then track control's and the extensions' when the build links them."""
     require(prefixes or effects or player_pages, 'Startup needs at least one machine')
     require(0 <= len(prefixes) <= ENGINE_COUNT and len(set(prefixes)) == len(prefixes),
             'Startup needs distinct engine prefixes')
@@ -72,6 +74,13 @@ def render(prefixes, effects=(), stock_page=(), sample_screens=(), effect_screen
         screens.append('    sdk_overlay_startup();')
         kept = ('u32 sdk_project_kept(void* file) { return sdk_control_kept_write(file); }\n'
                 'void sdk_project_loaded(const char* path) { sdk_control_kept_load(path); }')
+    tick = []
+    if control:
+        declarations.append('void sdk_control_tick() __asm__("sdk_control_tick");')
+        tick.append('    sdk_control_tick();')
+    if extensions:
+        declarations.append('void sdk_extensions_gui_tick() __asm__("sdk_extensions_gui_tick");')
+        tick.append('    sdk_extensions_gui_tick();')
     if aux:
         require(control, 'The aux service needs the control service')
         declarations.append('void sdk_aux_startup() __asm__("sdk_aux_startup");')
@@ -83,7 +92,7 @@ def render(prefixes, effects=(), stock_page=(), sample_screens=(), effect_screen
                   EFFECTS='\n'.join(f'    {prefix}_fx_register();' for prefix in effects),
                   ENGINES='\n'.join(f'    {prefix}_register();' for prefix in prefixes),
                   SCREENS='\n'.join(screens), CATALOG='\n'.join(catalog), ENGINE_SENTINEL=str(ENGINE_SENTINEL),
-                  PROJECT_KEPT=kept,
+                  PROJECT_KEPT=kept, GUI_TICK='\n'.join(tick),
                   INSTALLED='\n'.join(f'    if ({prefix}_name_matches(name)) return 1;' for prefix in prefixes))
     source = (ROOT / TEMPLATE).read_text(encoding='utf-8')
     for key, text in values.items():
@@ -94,8 +103,8 @@ def render(prefixes, effects=(), stock_page=(), sample_screens=(), effect_screen
 
 
 def generate(directory, prefixes, effects=(), stock_page=(), sample_screens=(), effect_screens=(), player_pages=(),
-             control=False, aux=False):
+             control=False, aux=False, extensions=False):
     destination = Path(directory) / 'startup.cpp'
     destination.write_text(render(prefixes, effects, stock_page, sample_screens, effect_screens, player_pages, control,
-                                  aux), encoding='utf-8', newline='\n')
+                                  aux, extensions), encoding='utf-8', newline='\n')
     return destination

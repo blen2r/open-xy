@@ -218,7 +218,9 @@ test('SDK objects of a profile service link only when a selected machine uses it
 });
 test('track control uses the control service, whose entry points fall back while unused', () => {
   const k=fixture(), o=k.objects[0];
-  assert.deepEqual([...activeServices(k.profile,[{kind:'synth',features:['trackControl']}])],['control']);
+  // The GUI tick is the tick service's, shared by track control and extensions.
+  assert.deepEqual([...activeServices(k.profile,[{kind:'synth',features:['trackControl']}])].sort(),['control','tick']);
+  assert.deepEqual([...activeServices(k.profile,[{kind:'synth'},{kind:'extension'}])].sort(),['extensions','tick']);
   assert.deepEqual([...activeServices(k.profile,[{kind:'synth'}])],[]);
   // Shared startup calls the marks screen, which only a control build links.
   k.definitions.fallback=k.profile.module_base;

@@ -88,7 +88,8 @@ class Services(unittest.TestCase):
         self.assertEqual(active_services(profile, ['synth', 'effect']), set())
         self.assertEqual(active_services(profile, ['sample']), {'samples', 'octaves'})
         self.assertEqual(active_services(profile, ['drum']), {'samples', 'octaves', 'drums'})
-        self.assertEqual(active_services(profile, ['synth', 'extension']), {'extensions'})
+        # An extension uses the extensions service, and the GUI tick it shares with track control.
+        self.assertEqual(active_services(profile, ['synth', 'extension']), {'extensions', 'tick'})
         from tooling.extensions import extension_at
         from tooling.pipeline import ROOT
         probe = extension_at(ROOT / 'tests/fixtures/extension_probe')

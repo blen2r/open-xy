@@ -130,6 +130,11 @@ void plan(std::initializer_list<control::Entry> entries) {
     script_count = 0;
     for (const control::Entry& e : entries) script[script_count++] = e;
 }
+// The tick service's dispatcher (startup.cpp.in): stock's call, then track control's.
+void sdk_gui_tick() {
+    opxy::platform::stock<void()>(0x8d580074)();
+    sdk_control_tick();
+}
 void tick(u32 expected_writes, const char* message) {
     writes = 0;
     sdk_gui_tick();

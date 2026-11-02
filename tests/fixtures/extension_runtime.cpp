@@ -39,8 +39,12 @@ void edit_control(const extensions::Context& context, const extensions::Control&
 }
 const extensions::Hooks first = extensions::Hooks().with_recordable_note_on(first_note)
                                                    .with_queued_control(observe_control);
+// The GUI tick reaches its subscribers in collection order, with the current context.
+u32 gui_ticks, tick_order;
+void second_tick(const extensions::Context& context) { ++gui_ticks; tick_order = order_count; (void)context; }
 const extensions::Hooks second = extensions::Hooks().with_recordable_note_on(second_note)
-                                                    .with_queued_control(edit_control);
+                                                    .with_queued_control(edit_control)
+                                                    .with_gui_tick(second_tick);
 // Two claims on different keys. edit_notes needs the first (or any claim once
 // set to 0); notify needs any claim its holder owns.
 u32 claim_keys[] = {50, 51}, action_claims[] = {1u, 0};
@@ -72,6 +76,8 @@ int main() {
     extensions_recordable_note_on(0, 60, 100);
     CHECK(order_count == 2 && order[0] == 1 && order[1] == 2 && observations == 1);
     extensions_recordable_note_on(7, 60, 100); CHECK(order_count == 2);
+    extensions_gui_tick(); extensions_gui_tick();
+    CHECK(gui_ticks == 2 && tick_order == 2 && first.gui_tick == nullptr);
     // Only the claim owner acts: one write and one notification per callback.
     control(50, true);
     CHECK(writes == 1 && notices == 1 && result == 1 && written_track == 0);

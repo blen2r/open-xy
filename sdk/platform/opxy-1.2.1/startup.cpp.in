@@ -15,12 +15,14 @@ u32 extensions_catalog_checked(void*, const void*, u32) __asm__("extensions_cata
 int kit_absent() __asm__("kit_absent");
 u32 stock_catalog_insert(void*, const void*, u32) __asm__("stock_catalog_insert");
 u32 stock_gui_role() __asm__("stock_gui_role");
+void stock_gui_update() __asm__("stock_gui_update");
 int sdk_screen_owned(u32) __asm__("sdk_screen_owned");
 u32 sdk_project_kept(void*) __asm__("sdk_project_kept");
 void sdk_project_loaded(const char*) __asm__("sdk_project_loaded");
 u32 sdk_sample_screen(u32) __asm__("sdk_sample_screen");
 int sdk_engine_installed(const void*) __asm__("sdk_engine_installed");
 int sdk_stock_engine_known(const void*) __asm__("sdk_stock_engine_known");
+void sdk_gui_tick() __asm__("sdk_gui_tick");
 @DECLARATIONS@
 }
 
@@ -30,6 +32,15 @@ u32 value(const char* symbol) { return static_cast<u32>(reinterpret_cast<Address
 }
 
 int kit_absent() { return 0; }
+
+// The GUI's per-tick update calls stock_gui_update just before the controller
+// update; that call routes here (the tick service), so the services that run
+// every GUI tick share one site: stock's call first, then track control's, then
+// the extensions', for those this collection links.
+void sdk_gui_tick() {
+    stock_gui_update();
+@GUI_TICK@
+}
 
 // What track control machines keep, written into a project's open companion, and
 // given back after a project loads: the control service's, when this collection links it.

@@ -154,6 +154,15 @@ void extensions_recording_tick(u32 delta) {
         if (entries[i].hooks->recording_tick) entries[i].hooks->recording_tick(current, tick);
     dispatching = false;
 }
+void extensions_gui_tick() {
+    if (dispatching) return;
+    extensions_sync();
+    if (!entries) return;
+    dispatching = true;
+    for (u32 i = 0; i < entry_count; ++i)
+        if (entries[i].hooks->gui_tick) entries[i].hooks->gui_tick(current);
+    dispatching = false;
+}
 void extensions_queued_control(const extensions::Control& control) {
     if (dispatching) return;
     extensions_sync();
