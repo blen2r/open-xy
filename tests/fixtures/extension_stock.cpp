@@ -4,7 +4,11 @@
 #include <extension_probe.cpp>
 #include <extension_collection.cpp>
 #include <extension_stock.cpp>
-// Builds without the control service capture nothing (startup's stand-ins).
+#include <keys.cpp>
+// Builds without the control service capture nothing and hold no claims (startup's stand-ins).
+extern "C" opxy::u32 sdk_control_claimant(opxy::u32) { return 0; }
+extern "C" void sdk_control_queue_gesture(opxy::u32, const opxy::platform::KeyGesture*) {}
+extern "C" opxy::u32 sdk_control_takes(opxy::u32) { return 0; }
 extern "C" opxy::u32 sdk_capture_request(opxy::u32, opxy::u32) { return 0; }
 extern "C" opxy::u32 sdk_capture_holds(opxy::u32) { return 0; }
 extern "C" opxy::u32 sdk_capture_edits(opxy::u32, opxy::extensions::Edit*, opxy::u32) { return 0; }
@@ -109,7 +113,7 @@ void popup(const char* text,u32 a,u32 b,u32 duration) {
 void key(u32 key, bool pressed, u32 elapsed=50000) {
     clock_time += elapsed;
     const u32 event[4]={key, pressed ? 100u : 0u, 123, 456};
-    failed |= sdk_extensions_key_queue(event) != 0x08023c78;
+    failed |= sdk_key_queue(event) != 0x08023c78;
 }
 void record() { key(50,true); key(50,false); }
 void play() { key(51,true); key(51,false); }

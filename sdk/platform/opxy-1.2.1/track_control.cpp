@@ -40,6 +40,7 @@
 #include "stock.hpp"
 #include "synth_controls.hpp"
 #include "benchmark.hpp"
+#include "../keys.hpp"
 #include <opxy/extension.hpp>
 
 namespace {
@@ -135,6 +136,13 @@ u32 original_count;
 u32 capture_project;
 // What each track's machine passed to its display last tick.
 i32 shown_words[control::all_tracks][control::display_words];
+// Chord claims' keys for one track's machine (the keys service, keys.cpp),
+// for its next tick; and the tracks whose machine takes the held key.
+u32 gesture_track = kNoTrack, gesture_count;
+control::Gesture gestures[control::gesture_capacity];
+bool taking[control::all_tracks];
+// The popup a machine asked for, kept while stock shows it.
+char popup_text[control::popup_bytes];
 
 }
 
@@ -398,14 +406,33 @@ extern "C" u32 sdk_capture_edits(u32 owner, opxy::extensions::Edit* edits, u32 c
     return count;
 }
 
+// The keys service's gesture layer (keys.cpp): the track whose running,
+// unmuted machine holds a chord claim, plus 1, or 0; and its keys.
+extern "C" u32 sdk_control_claimant(u32 claim) {
+    if (claim >= 32) return 0;
+    for (u32 t = 0; t < control::all_tracks; ++t)
+        if (hosts[t] && (hosts[t]->claims & (1u << claim)) && !muted(t)) return t + 1;
+    return 0;
+}
+extern "C" void sdk_control_queue_gesture(u32 track, const KeyGesture* g) {
+    if (!g || track >= control::all_tracks) return;
+    if (track != gesture_track) gesture_track = track, gesture_count = 0;
+    if (gesture_count >= control::gesture_capacity) return;
+    gestures[gesture_count++] = {static_cast<u8>(g->lead), static_cast<u8>(g->key),
+                                 static_cast<u8>(g->pressed ? 1 : 0), 0};
+}
+extern "C" u32 sdk_control_takes(u32 track) { return track < control::all_tracks && taking[track]; }
+
 extern "C" void sdk_control_forget() {
     sdk_control_queue_page_key(kNoTrack, 0);
+    gesture_track = kNoTrack;
+    gesture_count = 0;
     original_count = pending_count = applied_count = wanted_count = 0;
     capture_track = kNoTrack;
     capture_extension = extension_asks = 0;
     for (u32 t = 0; t < control::all_tracks; ++t) {
         hosts[t] = nullptr;
-        timed[t] = marking[t] = false;
+        timed[t] = marking[t] = taking[t] = false;
         for (u32 i = 0; i < control::display_words; ++i) shown_words[t][i] = 0;
     }
 }
@@ -491,7 +518,7 @@ extern "C" void sdk_control_tick() {
             if (m && !(m->unique && sdk_control_prepared[machine_index(m)])) m->reset(copy);
             if (m && m->unique) sdk_control_prepared[machine_index(m)] = true;
         }
-        marking[t] = false;
+        marking[t] = taking[t] = false;
         for (u32 i = 0; i < control::display_words; ++i) shown_words[t][i] = 0;
         if (!m) continue;
         if (!loaded) {
@@ -519,16 +546,30 @@ extern "C" void sdk_control_tick() {
         input.edit_count = input.capturing ? pending_count : 0;
         for (u32 i = 0; i < input.edit_count; ++i) input.edits[i] = pending[i];
         if (input.capturing) pending_count = 0;
+        input.gesture_count = t == gesture_track ? gesture_count : 0;
+        for (u32 i = 0; i < input.gesture_count; ++i) input.gestures[i] = gestures[i];
+        if (t == gesture_track) gesture_track = kNoTrack, gesture_count = 0;
         input.elapsed_us = timed[t] ? (us < 1000000 ? us : 1000000) : 0;
         timed[t] = true;
         overlay.count = 0;
         overlay.capture = 0;
         overlay.mark = 0;
+        overlay.take = 0;
+        overlay.popup[0] = 0;
         for (u32 i = 0; i < control::display_words; ++i) overlay.display[i] = 0;
         m->control(copy, &input, &overlay);
         for (u32 p = 0; p < kEngineControls; ++p) input.values[t][p] = own[p];
         if (overlay.count > control::overlay_capacity) overlay.count = control::overlay_capacity;
-        if (input.muted) overlay.count = overlay.capture = overlay.mark = 0;
+        if (input.muted) overlay.count = overlay.capture = overlay.mark = overlay.take = 0;
+        taking[t] = overlay.take && m->claims;
+        if (overlay.popup[0] && !input.muted) {
+            u32 n = 0;
+            while (n + 1 < control::popup_bytes && overlay.popup[n]) popup_text[n] = overlay.popup[n], ++n;
+            if (!overlay.popup[n]) {
+                popup_text[n] = 0;
+                show_popup(popup_text);
+            }
+        }
         if (overlay.capture) {
             const u32 mode = overlay.capture == kSilent ? kSilent : kAudible;
             if (t == capture_track) kept = true, kept_mode = mode;

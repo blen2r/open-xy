@@ -82,6 +82,9 @@ def export(package, output, tools, preview_cxx='clang++', *, stock_catalog, pers
         uses = sorted(set(native.service_users([m])) - {m.kind, 'extension'})
         if uses:
             entry['features'] = uses
+        # Its chord claims, which no selected extension may hold too (core.mjs linkKit).
+        if native.track_control(m) and native.track_control(m).get('claims'):
+            entry['claims'] = list(native.track_control(m)['claims'])
         entry['presetDefaults'] = m.preset_defaults
         # A machine that takes over aux tracks: its preset files, which the builder installs as they are.
         aux_presets = aux_preset_files(m)
@@ -144,8 +147,18 @@ def export(package, output, tools, preview_cxx='clang++', *, stock_catalog, pers
         kit['controlArtwork'] = read(ROOT / native.TEMPLATES / 'track_control_overlay.svg').decode('utf-8')
         kit['serviceFallbacks'] = {'control': dict.fromkeys(
             ('sdk_overlay_startup', 'sdk_control_kept_write', 'sdk_control_kept_load'), 'kit_absent')}
-    if 'aux' in native.active_services(profile, native.service_users(machines)):
+    active = native.active_services(profile, native.service_users(machines))
+    if 'aux' in active:
         kit.setdefault('serviceFallbacks', {})['aux'] = {'sdk_aux_startup': 'kit_absent'}
+    # The keys service's gesture layer reaches extensions and track control: where a
+    # selection leaves either out, keys go straight to stock and it holds no claims.
+    if 'keys' in active and 'extensions' in active:
+        kit.setdefault('serviceFallbacks', {})['extensions'] = dict(
+            sdk_extensions_key='sdk_key_stock', **dict.fromkeys(
+                ('sdk_extensions_claim_owner', 'sdk_extensions_gesture', 'sdk_extensions_takes'), 'kit_absent'))
+    if 'keys' in active and 'control' in active:
+        kit.setdefault('serviceFallbacks', {}).setdefault('control', {}).update(dict.fromkeys(
+            ('sdk_control_claimant', 'sdk_control_queue_gesture', 'sdk_control_takes'), 'kit_absent'))
     kit_path = output / 'kit.json'
     kit_path.write_text(json.dumps(kit, separators=(',', ':')), encoding='utf-8')
     # Reference validation exercises every subset against GNU ld. Failure leaves

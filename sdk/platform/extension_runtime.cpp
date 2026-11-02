@@ -15,6 +15,10 @@ struct Transaction { u32 granted; bool attempted, notified; };
 Transaction transaction;
 // The extension whose callback runs, as its place in the collection plus 1 (0: none).
 u32 running;
+// The extensions that take their chord claims' held key (bit: place in the
+// collection), until the next GUI tick; and whether the running callback may.
+u32 taking;
+bool may_take;
 
 bool same_text(const char* a, const char* b) {
     if (!a || !b) return false;
@@ -37,7 +41,9 @@ bool ready() {
         const ExtensionEntry& entry = list[i];
         if (!entry.id || !*entry.id || !entry.hooks || (entry.claims & claimed) ||
             (entry.claims & ~bits(known.claim_count)) || (entry.actions & ~bits(known.action_count)) ||
-            (entry.claims && !entry.hooks->queued_control)) return false;
+            // A chord claim's keys arrive as gestures; any other claim's as queued controls.
+            ((entry.claims & ~known.chord_claims) && !entry.hooks->queued_control) ||
+            ((entry.claims & known.chord_claims) && !entry.hooks->gesture)) return false;
         for (u32 a = 0; a < known.action_count; ++a) {
             if (!(entry.actions & (1u << a))) continue;
             const u32 needs = known.action_claims[a] ? known.action_claims[a] : bits(known.claim_count);
@@ -53,18 +59,24 @@ bool ready() {
     return true;
 }
 
-// Actions granted while a claimed key fires and stock accepted it.
-u32 granted(const ExtensionEntry& entry, const extensions::Control& control) {
-    if (!control.accepted) return 0;
-    u32 fired = 0;
-    for (u32 c = 0; c < registry->claim_count; ++c)
-        if ((entry.claims & (1u << c)) && registry->claim_keys[c] == control.key) fired |= 1u << c;
+// Actions the fired claims grant their holder.
+u32 grants(const ExtensionEntry& entry, u32 fired) {
     u32 result = 0;
     for (u32 a = 0; fired && a < registry->action_count; ++a) {
         const u32 needs = registry->action_claims[a] ? registry->action_claims[a] : entry.claims;
         if ((entry.actions & (1u << a)) && (fired & needs)) result |= 1u << a;
     }
     return result;
+}
+// Actions granted while a claimed key fires and stock accepted it. A chord
+// claim's keys fire as gestures instead.
+u32 granted(const ExtensionEntry& entry, const extensions::Control& control) {
+    if (!control.accepted) return 0;
+    u32 fired = 0;
+    for (u32 c = 0; c < registry->claim_count; ++c)
+        if ((entry.claims & ~registry->chord_claims & (1u << c)) && registry->claim_keys[c] == control.key)
+            fired |= 1u << c;
+    return grants(entry, fired);
 }
 
 // The caller's context must still be current: a stale one means the project,
@@ -106,7 +118,12 @@ u32 capture(u32 mode) {
     sdk_capture_request(running, mode);
     return sdk_capture_holds(running);
 }
-const extensions::Actions actions = {insert_notes, notify, replace_notes, capture};
+void take(u32 on) {
+    if (!running || !may_take || !(entries[running - 1].claims & registry->chord_claims)) return;
+    const u32 bit = 1u << (running - 1);
+    taking = on ? taking | bit : taking & ~bit;
+}
+const extensions::Actions actions = {insert_notes, notify, replace_notes, capture, take};
 }
 
 void extensions_sync() {
@@ -176,11 +193,15 @@ void extensions_gui_tick() {
             const u32 count = sdk_capture_edits(i + 1, edits, 32);
             if (count && entry.hooks->captured_edits) entry.hooks->captured_edits(current, edits, count);
         }
+        // Taking the held key lasts while renewed here.
+        taking &= ~(1u << i);
         if (!entry.hooks->gui_tick) continue;
         running = i + 1;
+        may_take = true;
         transaction = {holds ? entry.actions & action_capture : 0u, false, false};
         entry.hooks->gui_tick(current, actions);
         transaction = {0, false, false};
+        may_take = false;
         running = 0;
     }
     dispatching = false;
@@ -200,3 +221,32 @@ void extensions_queued_control(const extensions::Control& control) {
     dispatching = false;
 }
 }}
+
+using namespace opxy;
+using namespace opxy::platform;
+
+// The keys service's gesture layer (keys.cpp) asks who holds a chord claim,
+// delivers its keys, and asks whether the holder takes the held key.
+u32 sdk_extensions_claim_owner(u32 claim) {
+    if (!ready() || claim >= registry->claim_count) return 0;
+    for (u32 i = 0; i < entry_count; ++i)
+        if (entries[i].claims & (1u << claim)) return i + 1;
+    return 0;
+}
+void sdk_extensions_gesture(u32 owner, const KeyGesture* g) {
+    if (dispatching || !ready() || !owner || owner > entry_count || !g || g->claim >= registry->claim_count) return;
+    extensions_sync();
+    const ExtensionEntry& entry = entries[owner - 1];
+    if (!entry.hooks->gesture || !(entry.claims & (1u << g->claim))) return;
+    const extensions::Gesture gesture = {g->lead, g->key, g->pressed != 0, g->time};
+    dispatching = true;
+    running = owner;
+    may_take = true;
+    transaction = {grants(entry, 1u << g->claim), false, false};
+    entry.hooks->gesture(current, gesture, actions);
+    transaction = {0, false, false};
+    may_take = false;
+    running = 0;
+    dispatching = false;
+}
+u32 sdk_extensions_takes(u32 owner) { return owner && owner <= 32 && (taking & (1u << (owner - 1))) ? 1 : 0; }

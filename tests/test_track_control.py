@@ -69,7 +69,7 @@ class TrackControl(unittest.TestCase):
         self.assertNotIn('sdk/track_control_table.o', native.object_owners(machines))
         with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
             table = generate_track_controls(folder, machines).read_text(encoding='utf-8')
-        self.assertIn('{nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}, false}', table)
+        self.assertIn('{nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}, false, 0}', table)
         self.assertNotIn('probesynth', table)
 
     def test_a_machine_that_keeps_data_exports_save_and_load(self):
@@ -85,6 +85,48 @@ class TrackControl(unittest.TestCase):
         self.assertIn('ControlState states[1];', binding)
         self.assertIn('control_save(states[0], data, 100)', binding)
         self.assertIn('return bytes <= 100 ? bytes : 0;', binding)
+
+    def test_chord_claims_machines_declare_turn_the_keys_service_on(self):
+        import dataclasses
+        from tooling import extensions
+        from tooling.firmware import patch_active
+        from tooling.startup import render
+        synth = fixture('probesynth')
+        base = {'stateBytes': 8, 'stateAlignment': 4, 'unique': True, 'aux': [12]}
+        validate_definition(with_control(synth.definition, {**base, 'claims': ['metronome_chord']}), 'synth')
+        # Only the registry's chord claims, each once, and a unique machine's.
+        for claims in ([], ['record_double_tap'], ['missing'], ['metronome_chord'] * 2, 'metronome_chord'):
+            with self.subTest(claims=claims), self.assertRaises(ValueError):
+                validate_definition(with_control(synth.definition, {**base, 'claims': claims}), 'synth')
+        claiming = dataclasses.replace(synth, definition=with_control(synth.definition,
+                                                                       {**base, 'claims': ['metronome_chord']}))
+        plain = dataclasses.replace(synth, definition=with_control(synth.definition, base))
+        with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
+            table = generate_track_controls(folder, [claiming]).read_text(encoding='utf-8')
+            bit = 1 << list(extensions.registry()[0]).index('metronome_chord')
+            self.assertIn(f', false, {bit:#x}u}},', table)
+        # The keys service (the key queue's site) and its unit come with a claim, or with extensions.
+        site = next(p for p in config()['patches'] if p.get('symbol') == 'sdk_key_queue')
+        self.assertEqual(site['service'], 'keys')
+        for machines, used in (([plain], False), ([claiming], True)):
+            services = native.active_services(config(), native.service_users(machines))
+            self.assertEqual(('keys' in services, patch_active(site, services)), (used, used))
+            self.assertEqual('keys' in {step for _n, _m, step in native.plan(machines)}, used)
+        self.assertIn('keys', native.active_services(config(), ['synth', 'extension']))
+        # An extension's claim is always active: no machine in its build may hold it too.
+        holder = extensions.Extension('holder', ROOT, ('metronome_chord',), (), {})
+        with self.assertRaisesRegex(ValueError, 'multiple owners'):
+            extensions.check_claims([holder], {'morph': ('metronome_chord',)})
+        extensions.check_claims([holder], {'other': ()})
+        extensions.check_claims([], {'a': ('metronome_chord',), 'b': ('metronome_chord',)})
+        # Startup stands in for what the gesture layer reaches but the build doesn't link.
+        alone = render(['probe'], keys=True)
+        self.assertIn('void sdk_extensions_key(const u32* event) { sdk_key_stock(event); }', alone)
+        self.assertIn('u32 sdk_control_claimant(u32) { return 0; }', alone)
+        linked = render(['probe'], control=True, extensions=True, keys=True)
+        self.assertNotIn('sdk_extensions_claim_owner', linked)
+        self.assertNotIn('sdk_control_claimant', linked)
+        self.assertNotIn('sdk_key_stock', render(['probe'], control=True, extensions=True))
 
     def test_many_machines_may_take_over_an_aux_track_up_to_the_list(self):
         from tooling.adapters import AUX_CHOICES

@@ -180,6 +180,16 @@ test('extensions omit code/state and resolve only shared registry imports to an 
   assert.throws(() => linkKit(k, ['a'], null, []), /Unresolved import/);
 });
 
+test('an extension and a selected machine never hold the same chord claim', () => {
+  const k = fixture();
+  k.extensions = [{id:'chorder', name:'Chorder', claims:['metronome_chord'], actions:[],
+                   claim_labels:{metronome_chord:'Metronome + key'}}];
+  k.machines[0].claims = ['metronome_chord'];
+  k.definitions.kit_absent = k.profile.module_base;
+  assert.throws(() => linkKit(k, ['a'], null, ['chorder']), /both use Metronome \+ key/);
+  linkKit(k, ['a'], null, []);
+});
+
 test('extension selections preserve collection order, empty choices and exclusive gestures', () => {
   const k = {extensions:[{id:'observer', claims:[]}, {id:'capture', claims:['record_double_tap']}, {id:'replace', claims:['record_double_tap']}]};
   assert.deepEqual(extensionSelection(k, []), []);
@@ -220,7 +230,10 @@ test('track control uses the control service, whose entry points fall back while
   const k=fixture(), o=k.objects[0];
   // The GUI tick is the tick service's, shared by track control and extensions.
   assert.deepEqual([...activeServices(k.profile,[{kind:'synth',features:['trackControl']}])].sort(),['control','tick']);
-  assert.deepEqual([...activeServices(k.profile,[{kind:'synth'},{kind:'extension'}])].sort(),['extensions','tick']);
+  // Extensions share the key queue's site with chord claims (the keys service).
+  assert.deepEqual([...activeServices(k.profile,[{kind:'synth'},{kind:'extension'}])].sort(),['extensions','keys','tick']);
+  assert.deepEqual([...activeServices(k.profile,[{kind:'synth',features:['trackControl','gesture']}])].sort(),
+                   ['control','keys','tick']);
   assert.deepEqual([...activeServices(k.profile,[{kind:'synth'}])],[]);
   // Shared startup calls the marks screen, which only a control build links.
   k.definitions.fallback=k.profile.module_base;

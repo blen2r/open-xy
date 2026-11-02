@@ -93,6 +93,8 @@ def configuration(entries=None, layout=None):
     require([p['kind'] for p in profile['patches']].count('startup') == 1, 'Expected one startup label edit')
     machines = Collection(collection(entries, layout), extensions.check_collection(
         [extensions.extension_at(e['extension']) for e in entries or () if 'extension' in e]))
+    extensions.check_claims(extensions_of(machines),
+                            {m.id: track_control(m).get('claims', ()) for m in machines if track_control(m)})
     definitions = dict(DEFINITIONS)
     for m in machines:
         if m.kind == 'player':
@@ -219,7 +221,7 @@ SDK_UNITS = ('divide', 'memory', 'registration', 'registration_stock', 'startup'
              'pad_assignment_stock', 'drum_page', 'drum_controls_stock', 'sample_slice_clock', 'drum_display_stock', 'screen_order',
              'screen_hooks', 'synth_controls', 'synth_control_table', 'note_activity', 'project_companion',
              'project_companion_table', 'profiling', 'lfo', 'lfo_stock', 'lfo_hooks', 'stock_browser',
-             'extension_runtime', 'extension_collection', 'extension_stock', 'track_control',
+             'keys', 'extension_runtime', 'extension_collection', 'extension_stock', 'track_control',
              'track_control_table', 'track_control_hooks', 'track_control_overlay', 'track_control_project',
              'aux_tracks', 'aux_hooks', 'presets',
              'players', 'player_hooks', 'player_table', 'keyboard_octaves', 'sample_overview', 'sample_overview_stock',
@@ -232,6 +234,8 @@ UNIT_SERVICES = dict.fromkeys(('sample_machines', 'sample_hooks', 'sample_callba
 UNIT_SERVICES.update(dict.fromkeys(('players', 'player_hooks', 'player_table'), 'players'))
 UNIT_SERVICES['keyboard_octaves'] = 'octaves'
 UNIT_SERVICES.update(dict.fromkeys(('extension_runtime', 'extension_collection', 'extension_stock'), 'extensions'))
+# The key queue's dispatch and gesture layer, shared by extensions and chord claims.
+UNIT_SERVICES['keys'] = 'keys'
 # Track control runs from the GUI tick hook; the marks' screen
 # registers at startup only in builds that link it, and startup stands in for the
 # saved data's entry points in builds that don't.
@@ -246,13 +250,14 @@ UNIT_SERVICES['drum_synthesis_stock'] = 'drums'
 
 def service_users(machines):
     """What a native build's services are chosen by: its machines' kinds, the features
-    they declare ('trackControl', 'auxTrack'), and 'extension' when it links
-    extensions (native builds link all of the collection's)."""
+    they declare ('trackControl', 'auxTrack', 'gesture' for chord claims), and
+    'extension' when it links extensions (native builds link all of the collection's)."""
     users = [m.kind for m in machines] + (['extension'] if extensions_of(machines) else [])
     # An extension that captures encoder edits uses track control's capture.
     users += ['capture' for e in extensions_of(machines) if 'capture' in e.actions]
     return (users + ['trackControl' for m in machines if track_control(m)] +
-            ['auxTrack' for m in machines if track_control(m) and track_control(m).get('aux')])
+            ['auxTrack' for m in machines if track_control(m) and track_control(m).get('aux')] +
+            ['gesture' for m in machines if track_control(m) and track_control(m).get('claims')])
 
 
 def module_bytes(profile):
@@ -473,7 +478,7 @@ def compile_collection(directory, toolchain, compiler, profile, machines, defini
                                                 effect_screens=[x.prefix for x in effects if x.display != 'stock'],
                                                 player_pages=[x.prefix for x in by_kind(machines, 'player')],
                                                 control='control' in services, aux='aux' in services,
-                                                extensions='extensions' in services)), obj)
+                                                extensions='extensions' in services, keys='keys' in services)), obj)
             if (ROOT / TEMPLATES / (step + '.cpp')).is_file():
                 return cxx(TEMPLATES + step + '.cpp', obj)
             return assemble_unit(ROOT / TEMPLATES / (step + '.s'), obj)

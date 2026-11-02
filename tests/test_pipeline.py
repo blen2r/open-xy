@@ -88,8 +88,9 @@ class Services(unittest.TestCase):
         self.assertEqual(active_services(profile, ['synth', 'effect']), set())
         self.assertEqual(active_services(profile, ['sample']), {'samples', 'octaves'})
         self.assertEqual(active_services(profile, ['drum']), {'samples', 'octaves', 'drums'})
-        # An extension uses the extensions service, and the GUI tick it shares with track control.
-        self.assertEqual(active_services(profile, ['synth', 'extension']), {'extensions', 'tick'})
+        # An extension uses the extensions service, the GUI tick it shares with track control,
+        # and the key queue it shares with chord claims.
+        self.assertEqual(active_services(profile, ['synth', 'extension']), {'extensions', 'tick', 'keys'})
         from tooling.extensions import extension_at
         from tooling.pipeline import ROOT
         probe = extension_at(ROOT / 'tests/fixtures/extension_probe')
@@ -104,7 +105,7 @@ class Services(unittest.TestCase):
                                           if native.UNIT_SERVICES.get(u) not in ('players', 'control', 'aux')])
         without = [m for m in machines if m.kind not in ('sample', 'drum')]  # nor any extension
         self.assertEqual(steps(without), [u for u in native.SDK_UNITS if u not in native.UNIT_SERVICES])
-        self.assertEqual(set(native.object_services(machines).values()), {'samples', 'octaves', 'drums', 'extensions'})
+        self.assertEqual(set(native.object_services(machines).values()), {'samples', 'octaves', 'drums', 'extensions', 'keys'})
         self.assertEqual(native.object_services(without), {})
 
     def test_only_a_service_edit_may_stay_stock(self):

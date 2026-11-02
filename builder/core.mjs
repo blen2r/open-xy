@@ -6,7 +6,7 @@
 // The init preset's authored settings, shared with tooling.adapters.default_preset
 // (write_builder inlines this same file's content for the offline export).
 import DEFAULT_PRESET_TEMPLATE from '../tooling/default_preset.json' with { type: 'json' };
-export const PROFILE_SHA256 = 'be8c815b9fb068623d13db00be9d9b42ddf30f27c9ad8d043bd8494ce46541c7';
+export const PROFILE_SHA256 = 'd73abbdd9f229cb3378f272890c27c1e6af5f6d4d02fe3fe088d9be2fe67eafe';
 export function requireThat(ok, message) { if (!ok) throw new Error(message); }
 const check = requireThat;
 const utf8 = new TextEncoder();
@@ -481,6 +481,13 @@ export function linkKit(kit, selection, layout = null, extensionIds = []) {
   const numbers = assignNumbers(kit, selection, layout);
   const definitions = {...kit.definitions, ...numberSymbols(kit, selection, numbers)};
   const selected = new Set(selection), limit = moduleBytes(kit.profile);
+  // An extension's claim is always active: no selected machine may hold it too
+  // (tooling.extensions.check_claims). Machines may share one; one runs at a time.
+  const chosen = (kit.extensions ?? []).filter(e => extensions.has(e.id));
+  for (const m of kit.machines.filter(m => selected.has(m.id))) for (const claim of m.claims ?? []) {
+    const e = chosen.find(e => (e.claims ?? []).includes(claim));
+    check(!e, e && `${m.name} and ${e.name} both use ${claimLabel(chosen, claim)}. Choose only one.`);
+  }
   const services = activeServices(kit.profile, [...kit.machines.filter(m => selected.has(m.id)),
     ...extensionUsers(kit, extensions)]);
   const objects = kit.objects.filter(o => !o.runtime && (o.extension === undefined || extensions.has(o.extension)) &&

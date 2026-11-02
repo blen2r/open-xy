@@ -63,7 +63,10 @@ class Extensions(unittest.TestCase):
             extensions.check_collection([probe, other])
 
     def test_the_registry_is_claims_and_actions_only(self):
+        self.assertEqual(extensions.chord_claims(), ['metronome_chord'])
         for mutate in (lambda d: d['claims'].update(bad={'label': ''}),
+                       lambda d: d['claims']['metronome_chord'].update(chord='pads'),
+                       lambda d: d['claims']['metronome_chord'].update(key=64),
                        lambda d: d['actions'].update(other={'requires': 'missing'}),
                        lambda d: d.update(extensions=[]), lambda d: d.update(schema=2)):
             data = document(ROOT / extensions.PROFILE)
@@ -86,7 +89,7 @@ class Extensions(unittest.TestCase):
         extensions.check_profile(profile)
         self.assertEqual(extensions.events(), ['context', 'recordable_note_on', 'selected_note_off',
                                                'recording_tick', 'input_activity', 'queued_control', 'gui_tick',
-                                               'captured_edits'])
+                                               'captured_edits', 'gesture'])
         # The GUI tick feeds extensions from the tick service, which they share with track control.
         tick = next(x for x in profile['patches'] if 'gui_tick' in x.get('events', []))
         self.assertEqual(tick['service'], 'tick')

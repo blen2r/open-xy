@@ -15,6 +15,7 @@ from pathlib import Path
 
 from .benchmark import append_callback
 from .definitions import ROOT, SYNTH_POSITIONS, control_positions, paged, shift_parameters, validate_definition
+from .extensions import registry
 
 # An effect's shift-row controls follow its eight parameter words (slots 8..11).
 SHIFT_SLOT = 8
@@ -590,8 +591,10 @@ def generate_track_controls(directory, machines):
         # Its presets become files in content/aux_presets (aux_preset_files), named by them.
         require(not aux or all(len(name) <= 15 for name in m.definition['presets']),
                 'A machine that takes over aux tracks names its presets in at most 15 characters')
+        # Its chord claims, as bits in the registry's order.
+        claims = sum(1 << i for i, name in enumerate(registry()[0]) if name in track_control(m).get('claims', ()))
         rows.append(f'    {{{p}_engine_id, {p}_ready, {p}_control_reset, {p}_control, "{m.id}", {saved}, {callbacks}, '
-                    f'{unique}, {aux:#x}u, {page}, {{{defaults}}}, {shared_lfo}}},')
+                    f'{unique}, {aux:#x}u, {page}, {{{defaults}}}, {shared_lfo}, {claims:#x}u}},')
     return expand('track_control_table.cpp.in', dict(CONTROL_DECLS='\n'.join(declarations), MACHINES='\n'.join(rows)),
                   Path(directory) / 'track_control_table.cpp')
 

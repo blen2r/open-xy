@@ -325,7 +325,8 @@ hold its role (CV) play, and when it comes back.
 | `elapsed_us` | Microseconds since the previous tick, from the core clock: 0 on the first tick after a reset, at most one second |
 | `transport` | The project's tempo in tenths of BPM (0 when unknown), the song position in 96ths of a quarter note, which advances only while playing, and whether the sequencer plays |
 | `page_key` | Last directly handled page key since the last tick: 1..4 for M1..M4, or 0. M1 returns to the machine page; M2/M3 leave the current page alone. With `sharedLfo: true`, M4 belongs to the shared LFO and is not delivered |
-| `muted` | 1 while the machine's track is muted in the current scene (aux + track key, or the mixer). As with stock's brain, a muted machine has no effect: none of its overlays, capture or marks apply. It still runs, so its page can say so |
+| `muted` | 1 while the machine's track is muted in the current scene (aux + track key, or the mixer). As with stock's brain, a muted machine has no effect: none of its overlays, capture, marks, claims or popups apply. It still runs, so its page can say so |
+| `gesture_count`, `gestures` | Its chord claims' keys since the last tick, up to 8, oldest first (below) |
 
 `overlay` arrives empty; `opxy::control::add` appends up to 64 entries, each a
 track, parameter index and value for this tick. Entries for the machine's own
@@ -386,6 +387,26 @@ runs at a time, so no two overlay together. All machines together overlay at mos
 parameters in a tick; entries beyond that are ignored. A capture restores at
 most 128 different parameters: further edits during it play and stay as edited,
 and do not arrive in `edits`.
+
+A machine can claim key combinations, as extensions do: it lists chord claims
+from [the registry](extensions.md#claims-and-actions) in `trackControl`, such as
+`"claims": ["metronome_chord"]` (the metronome held with a keyboard key), and
+must be unique. While it runs, unmuted, and no extension in the build holds
+the claim (a build refuses both), the metronome's press waits; keyboard keys
+pressed while it is held reach `gestures` (`lead` the held key, `key` the
+keyboard key from [`opxy/keys.hpp`](../sdk/include/opxy/keys.hpp), `pressed`
+1 or 0 for its release) and never stock: no note plays and no drum pad is
+selected. Released alone, or followed by another key, the metronome reaches
+stock after all, so its page opens on release. Setting `overlay.take` to 1
+takes the held key itself for the next tick: its own press and release then
+arrive too, with `key == lead`, and stock never sees them, so a tap of it
+alone is the machine's. Ask again every tick. Several machines in a build may
+hold the same claim; the first track running one gets it.
+[`ChordTap`](../sdk/include/opxy/chord_tap.hpp) tells a chord from a tap.
+
+A machine shows a short popup over any page by writing its text (1 to 31
+characters, then a zero) into `overlay.popup`, which arrives empty; it shows
+once, as stock's own popups do.
 
 A unique machine can keep data with each project, such as Morphose's states.
 It adds `"savedBytes": n` (1..8192) to `trackControl` and supplies:

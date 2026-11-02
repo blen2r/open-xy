@@ -32,18 +32,25 @@ RUNTIME = 'sdk/platform/extension_runtime.hpp'
 SOURCE_SUFFIXES = ('.cpp', '.cc', '.h', '.hpp', '.inc')
 
 
+# What a chord claim's held key combines with (keys.cpp): the keyboard.
+CHORD_KEYS = ('keyboard',)
+
+
 def registry():
     """The claims and actions an extension may declare: SDK contracts. Claims are
-    data (a label and the key it governs); actions are one bit each in RUNTIME."""
+    data (a label and the key it governs; a chord claim's held key also names the
+    keys it combines with, which reach its holder as gestures); actions are one bit
+    each in RUNTIME."""
     data = document(ROOT / PROFILE)
     require(set(data) == {'schema', 'claims', 'actions'} and data['schema'] == 3, 'Invalid extension registry')
     claims, actions = data['claims'], data['actions']
     require(isinstance(claims, dict) and isinstance(actions, dict), 'Claims and actions are registries')
     require(len(claims) <= 32 and len(actions) <= 32, 'At most 32 claims and 32 actions')
     for name, claim in claims.items():
-        require(NAME.fullmatch(name) and isinstance(claim, dict) and set(claim) == {'label', 'key'} and
-                isinstance(claim['label'], str) and 0 < len(claim['label']) <= 40 and
-                type(claim['key']) is int and 0 <= claim['key'] < 256, 'Invalid claim: ' + name)
+        require(NAME.fullmatch(name) and isinstance(claim, dict) and {'label', 'key'} <= set(claim) <=
+                {'label', 'key', 'chord'} and isinstance(claim['label'], str) and 0 < len(claim['label']) <= 40 and
+                type(claim['key']) is int and 0 <= claim['key'] < 64 and claim.get('chord', 'keyboard') in CHORD_KEYS,
+                'Invalid claim: ' + name)
     for name, action in actions.items():
         require(NAME.fullmatch(name) and isinstance(action, dict) and set(action) <= {'requires'} and
                 ('requires' not in action or action['requires'] in claims), 'Invalid action: ' + name)
@@ -93,6 +100,23 @@ def extension_at(folder):
             validate_source_boundary(path.read_text(encoding='utf-8'), f'{name}/{path.relative_to(root).as_posix()}')
     return Extension(name, root, tuple(data['claims']), tuple(data['actions']),
                      {k: data[k] for k in TEXT_LIMITS if k in data})
+
+
+def chord_claims():
+    """The registry's chord claims, which machines may hold too (resources.trackControl.claims)."""
+    claims, _actions = registry()
+    return [name for name, claim in claims.items() if 'chord' in claim]
+
+
+def check_claims(extensions, machine_claims):
+    """An extension's claim is always active, so no machine in its build may hold it
+    too; machines may share one, as only one of them runs it at a time.
+    `machine_claims` maps machine IDs to their claims."""
+    claims, _actions = registry()
+    for e in extensions:
+        for claim in e.claims:
+            holders = sorted(m for m, held in machine_claims.items() if claim in held)
+            require(not holders, f'{claims[claim]["label"]} has multiple owners: {e.id}, {", ".join(holders)}')
 
 
 def check_collection(extensions):
@@ -153,8 +177,8 @@ def generate_collection(folder, extensions):
               '// ' + ', '.join(actions) if actions else '// no actions',
               'const u32 action_claims[] = {' + table(
                   [mask(claim_bit, [a['requires']] if 'requires' in a else []) for a in actions.values()]) + '};',
-              'const ExtensionRegistry registry_tables = {claim_keys, %d, action_claims, %d};' % (
-                  len(claims), len(actions)),
+              'const ExtensionRegistry registry_tables = {claim_keys, %d, %s, action_claims, %d};' % (
+                  len(claims), mask(claim_bit, [n for n, c in claims.items() if 'chord' in c]), len(actions)),
               '}',
               'const ExtensionRegistry& extension_registry() { return registry_tables; }',
               'const ExtensionEntry* extension_collection(u32& count) {', '    count = 0;']

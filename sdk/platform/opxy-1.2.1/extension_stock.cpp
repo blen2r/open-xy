@@ -1,14 +1,13 @@
 // Exact 1.2.1 call replacements. Each forwards the original C ABI unchanged.
 // Recovery calls the pattern editor, never the live/audio note dispatcher.
 #include "../extension_runtime.hpp"
+#include "../keys.hpp"
 #include "note_container.hpp"
 #include "stock.hpp"
 
 extern "C" {
 void sdk_extensions_controller_update(opxy::u32, opxy::u32) __asm__("sdk_extensions_controller_update");
-void sdk_extensions_key(const opxy::u32*) __asm__("sdk_extensions_key");
 void sdk_extensions_gui_tick() __asm__("sdk_extensions_gui_tick");
-opxy::u32 sdk_extensions_key_queue(const opxy::u32*) __asm__("sdk_extensions_key_queue");
 void sdk_extensions_recorder_tick(opxy::u32, opxy::u32) __asm__("sdk_extensions_recorder_tick");
 void sdk_extensions_stop(opxy::u32) __asm__("sdk_extensions_stop");
 void sdk_extensions_note_accepted(opxy::u32, opxy::u32) __asm__("sdk_extensions_note_accepted");
@@ -25,7 +24,6 @@ const u32 kController = 0x860c6adc;
 const u32 kRecorder = 0x860c072c;
 const u32 kProject = 0x840a0524;
 const u32 kRecordHeld = kPlaying + 3;  // byte: Record held
-const u32 kInputEnabled = 0x08023c48;
 using Wide = __UINT64_TYPE__;
 // Only the normal live-input call establishes this scope. Sequencer playback
 // calls the broad dispatcher directly and cannot become a history event.
@@ -118,9 +116,7 @@ u32 extension_write(u32 track, const RecordedNote* notes, u32 count, bool replac
     if (written || replace) stock<void(u32)>(0x8d587668)(track);  // A cleared pattern is a change too.
     return written;
 }
-void extension_notify(const char* text) {
-    stock<void(const char*, u32, u32, u32)>(0x8d549168)(text, 1, 0, 0x3f000000u);
-}
+void extension_notify(const char* text) { show_popup(text); }
 }}
 
 using namespace opxy;
@@ -164,6 +160,7 @@ void sdk_extensions_live_note_off(u32 controller, u32 track, u32 note, u32 a3, u
     extensions_selected_note_off(track, note);
     stock<void(u32,u32,u32,u32,u32,const void*)>(0x8d595420)(controller,track,note,a3,flags,event);
 }
+// From the keys service's gesture layer (keys.cpp), for every key it doesn't keep.
 void sdk_extensions_key(const u32* event) {
     extensions_sync();
     extensions::Control control = {event[0], event[1] != 0, false, unmodified(event[0]), 0};
@@ -171,7 +168,7 @@ void sdk_extensions_key(const u32* event) {
     const bool enabled = byte(kInputEnabled) != 0;
     // The clock writes a full 64-bit microsecond value through its argument.
     stock<void(extensions::Time*)>(0x8d5be3a0)(&control.time);
-    stock<void(const u32*)>(0x8c0b5d58)(event);
+    sdk_key_stock(event);
     // Stock records Record's held state; other keys are accepted while input is enabled.
     control.accepted = enabled && (control.key != extensions::keys::record ||
         (control.pressed ? extension_record_held() : was_held && !extension_record_held()));
@@ -180,9 +177,3 @@ void sdk_extensions_key(const u32* event) {
 // Once per GUI tick, from the tick service's dispatcher (startup.cpp.in), after
 // stock's call and track control's.
 void sdk_extensions_gui_tick() { extensions_gui_tick(); }
-u32 sdk_extensions_key_queue(const u32* event) {
-    sdk_extensions_key(event);
-    // The authenticated span includes stock's following R0 = queue address.
-    // A 12-byte span admits CALL.A across the module's relative-call range.
-    return 0x08023c78;
-}

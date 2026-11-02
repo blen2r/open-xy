@@ -58,7 +58,7 @@ const extensions::Hooks second = extensions::Hooks().with_recordable_note_on(sec
 // Two claims on different keys. edit_notes needs the first (or any claim once
 // set to 0); notify needs any claim its holder owns.
 u32 claim_keys[] = {50, 51}, action_claims[] = {1u, 0, 0};
-const ExtensionRegistry tables = {claim_keys, 2, action_claims, 3};
+const ExtensionRegistry tables = {claim_keys, 2, 0, action_claims, 3};
 ExtensionEntry collection[] = {{"observer", 0, 0, &first},
                                {"writer", 1u, action_edit_notes | action_notify | action_capture, &second}};
 // Track control's capture, played by the test: whom it grants, and the edits it holds.

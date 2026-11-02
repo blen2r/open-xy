@@ -3,6 +3,7 @@
 // values. The machine is a scripted overlay; no machine behavior is tested.
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <initializer_list>
 #include <track_control.cpp>
 
@@ -21,6 +22,10 @@ u32 engines[16], ticks, writes, resets, runs, sets, edits_seen;
 u32 aux_engines[16], aux_ticks;
 control::Entry last_edit;
 u32 capture, mark;
+// Chord claims: what the machine got, and what it asks for (Overlay::take, popup).
+u32 gestures_seen, want_take, popups;
+control::Gesture last_gesture;
+char want_popup[control::popup_bytes], popup_seen[control::popup_bytes];
 i32 seen;  // the value of track 0, parameter 1 the machine was given
 u32 seen_elapsed, seen_bpm, seen_ticks, seen_playing, seen_key, seen_muted;
 // The project's scene records (g_project + 0x98, 33 bytes a scene: patterns, then
@@ -109,6 +114,11 @@ void run(u32 copy, const control::Input* input, control::Overlay* overlay) {
     require(overlay->display[0] == 0 && overlay->display[3] == 0, "Display words not cleared");
     overlay->display[1] = 77;
     for (u32 i = 0; i < script_count; ++i) overlay->entries[overlay->count++] = script[i];
+    gestures_seen = input->gesture_count;
+    if (input->gesture_count) last_gesture = input->gestures[input->gesture_count - 1];
+    require(overlay->take == 0 && overlay->popup[0] == 0, "Take or popup not cleared");
+    overlay->take = want_take;
+    std::strcpy(overlay->popup, want_popup);
 }
 // Machine 41, not unique: each copy overlays its scripted entries, with its
 // copy's own count of runs, and asks to capture and mark when told.
@@ -135,6 +145,8 @@ void sdk_gui_tick() {
     opxy::platform::stock<void()>(0x8d580074)();
     sdk_control_tick();
 }
+// 8d549168: stock's popup.
+void stock_popup(const char* text, u32, u32, u32) { ++popups; std::strcpy(popup_seen, text); }
 void tick(u32 expected_writes, const char* message) {
     writes = 0;
     sdk_gui_tick();
@@ -150,7 +162,7 @@ const volatile unsigned short* stock_project_tempo() { return &tempo; }
 
 extern "C" {
 const opxy::platform::ControlMachine sdk_control_machines[] = {
-    {reinterpret_cast<const char*>(40), ready, reset, run, nullptr, 0, nullptr, nullptr, true, 1u << 11, nullptr, {}, true},
+    {reinterpret_cast<const char*>(40), ready, reset, run, nullptr, 0, nullptr, nullptr, true, 1u << 11, nullptr, {}, true, 2u},
     {reinterpret_cast<const char*>(41), ready, reset_other, run_other, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}},
     {nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}}};
 const opxy::u32 sdk_control_machine_count = 2;
@@ -163,6 +175,7 @@ opxy::platform::Address opxy::platform::host_stock_address(opxy::platform::Addre
     if (address >= kLive && address < kLive + sizeof(table))
         return reinterpret_cast<Address>(table) + (address - kLive);
     if (address == 0x8d580074) return reinterpret_cast<Address>(&stock_tick);
+    if (address == 0x8d549168) return reinterpret_cast<Address>(&stock_popup);
     if (address == 0x8d4d68b8) return reinterpret_cast<Address>(&stock_lfo_publish);
     if (address == 0x8d4d666a) return reinterpret_cast<Address>(&stock_telemetry);
     if (address == 0x080376e4 + 25 * 4) return reinterpret_cast<Address>(&telemetry25);
@@ -630,5 +643,34 @@ int main() {
     capture = 1; sdk_capture_request(1, 1); sdk_gui_tick();
     require(!sdk_capture_holds(1) && sdk_capture_request(1, 1) == 0, "An extension took a machine's capture");
     capture = 0; sdk_gui_tick();
+
+    // Chord claims (keys.cpp): the running, unmuted machine holding one is its
+    // claimant; its gestures reach its next tick once; take and popup per tick.
+    require(aux_engines[11] == 40 && sdk_control_claimant(1) == 12 && sdk_control_claimant(0) == 0,
+            "Claimant not the machine's track");
+    opxy::platform::KeyGesture g = {1, 1, 30, 1, 0};
+    sdk_control_queue_gesture(11, &g);
+    g.pressed = 0;
+    sdk_control_queue_gesture(11, &g);
+    want_take = 1;
+    std::strcpy(want_popup, "writing to state 3");
+    sdk_gui_tick();
+    require(gestures_seen == 2 && last_gesture.lead == 1 && last_gesture.key == 30 && !last_gesture.pressed,
+            "Gestures not given");
+    require(sdk_control_takes(11) && !sdk_control_takes(2) && popups == 1 &&
+            std::strcmp(popup_seen, "writing to state 3") == 0, "Take or popup not applied");
+    want_take = 0;
+    want_popup[0] = 0;
+    sdk_gui_tick();
+    require(gestures_seen == 0 && !sdk_control_takes(11) && popups == 1, "Gestures twice, or take kept");
+    // Muted: no claim, no take, no popup.
+    mute_flags(0, 11) = 0x02;
+    want_take = 1;
+    std::strcpy(want_popup, "muted");
+    sdk_gui_tick();
+    require(sdk_control_claimant(1) == 0 && !sdk_control_takes(11) && popups == 1, "A muted machine kept its claim");
+    mute_flags(0, 11) = 0;
+    want_take = 0;
+    want_popup[0] = 0;
     return 0;
 }

@@ -105,8 +105,8 @@ A **profile service** groups the patch sites and SDK code one feature needs.
 A build applies a service's edits, and links its code, only when a selected
 machine or extension needs it; otherwise those sites stay stock. The profile
 names each service and what turns it on: the machine kinds that use it, the
-features machines declare (`trackControl`, `auxTrack`), or `extension` when the
-build includes an extension.
+features machines declare (`trackControl`, `auxTrack`, `gesture` for a chord
+claim), or `extension` when the build includes an extension.
 
 ```mermaid
 flowchart LR
@@ -115,8 +115,9 @@ flowchart LR
     s["a sample engine"] --> samples["samples service"] & octaves["octaves service"]
     d["a drum kit"] --> samples & drums["drums service"] & octaves
     p["a note player"] --> players["players service"] & octaves
-    e["any extension"] --> ext["extensions service"] & tick
-    control & tick & aux & samples & drums & players & octaves & ext --> edits["their sites and code<br/>applied and linked"]
+    g["a machine with a chord claim"] --> keys["keys service"]
+    e["any extension"] --> ext["extensions service"] & tick & keys
+    control & tick & keys & aux & samples & drums & players & octaves & ext --> edits["their sites and code<br/>applied and linked"]
     none["none of these"] --> stockonly["those sites stay stock"]
 ```
 
@@ -130,7 +131,9 @@ dispatcher that calls each user the build links, in a fixed order. The GUI tick
 is the first: the `tick` service, used by track control and by extensions. Its
 dispatcher, `sdk_gui_tick`, is generated with the build's startup code, which
 already stands in for the services a build leaves out; in a browser kit, a user
-the selection leaves out resolves to a stand-in that does nothing.
+the selection leaves out resolves to a stand-in that does nothing. The key queue
+is the second: the `keys` service, used by extensions and by chord claims
+([keys and gestures](#keys-and-gestures)).
 
 A feature that needs new sites
 adds a service, or extends the one it belongs to, rather than editing builds
@@ -223,6 +226,34 @@ stateDiagram-v2
     end note
 ```
 
+## Keys and gestures
+
+Stock queues every key, the keyboard's included, and dispatches each from the
+queue. The `keys` service takes that one call: its gesture layer sees each key
+before stock does, so a combination can be the SDK's without stock acting on it
+first.
+
+```mermaid
+flowchart LR
+    queue["Stock's key queue"] --> layer{"Gesture layer<br/>(keys service)"}
+    layer -- "a chord claim's held key:<br/>waits" --> wait["held back"]
+    wait -- "released alone,<br/>or another key" --> next
+    layer -- "a keyboard key while it waits,<br/>or while it is taken" --> owner["the claim's owner:<br/>an extension's gesture event,<br/>or a machine's next tick"]
+    layer -- "any other key" --> next["extensions' wrapper:<br/>stock, then queued_control"]
+```
+
+- **A chord claim** names a held key and the keys it combines with
+  (`metronome_chord`: the metronome and the keyboard). Its owner is the
+  extension that holds it, else the first running, unmuted machine that does; a
+  build refuses an extension and a machine holding the same one. Without an
+  owner, keys pass untouched.
+- **The held key's own action waits**: stock gets its press when it is released
+  alone (the metronome page opens on release) or when another key comes, never
+  after a chord. An owner can **take** it, renewing every tick, so its taps are
+  the owner's too.
+- **Chord keys never reach stock**, their releases included: no note plays and
+  no drum pad is selected.
+
 ## Machines and extensions
 
 | | Machine | Extension |
@@ -286,7 +317,7 @@ here.
 | Site, hook | A place in stock code that calls into the module; a hook replaces a reviewed call or jump |
 | Profile service | A group of sites and SDK code applied only when a selected machine or extension needs it |
 | Event | A public callback that something happened in stock, delivered to extensions |
-| Claim | An exclusive gesture on a key, owned by one extension per build |
+| Claim | An exclusive gesture on a key, owned by one extension per build; a chord claim (a held key with others) may be a machine's instead |
 | Action | Permission to change stock state, granted inside a claim |
 | Kit | A precompiled collection the browser builder links from |
 | Role (side) | Where code runs: the audio side or the GUI side |

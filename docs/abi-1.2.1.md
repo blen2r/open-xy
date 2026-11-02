@@ -48,7 +48,8 @@ version is rejected. The output differs from stock in exactly these places:
 | Aux tracks | 13 | Lets a track control machine take over aux track 12 (CV): its chooser on Shift + M1 (the effect list on the sends), its presets on Shift + track key, its page on M1, its parameter names on the LFO's destinations, its own LFO whichever track is selected, and CV and gate kept silent; four MTP allowlist edits show the user's aux presets |
 | Preset scan | 1 | Hides factory presets whose engine the build does not install ([presets](#presets)) |
 | Startup label | 1 | Shows `OPEN <version>-1.2.1` at boot, `<version>` from [`VERSION`](../VERSION), through the stock startup text renderer |
-| Extension events | 7 | Observes live input, stock transport and queued controls for extensions, and lets a Record double-tap owner edit notes through stock editing and undo; linked only when an extension is selected |
+| Extension events | 6 | Observes live input and stock transport for extensions, and lets a Record double-tap owner edit notes through stock editing and undo; linked only when an extension is selected |
+| Key queue | 1 | Shared by extensions and chord claims (the `keys` service): a chord claim's held key waits until it is known not to start a chord, and the keyboard keys pressed meanwhile go to the claim's owner, never stock; every other key reaches stock, then the extensions' `queued_control` |
 | Module | 1 record | One loader block holding the linked module |
 
 The sample rows (sample dispatch, analysis, drum-page services and recorder)
@@ -170,20 +171,33 @@ named for the stock calls they replace; they are adapter entry points, not
 extension APIs. Capture ([open-xy-core-machines](https://github.com/etcetc000/open-xy-core-machines/tree/main/extensions/capture)) is the first
 subscriber: it owns the bounded current-track ghost pattern and the Record gesture.
 
-The seven hooks replace the controller-update call at `0x8c0baaf0`, queued key
-dispatch at `0x8c0b6184`, normalized live onset/release at `0x8d594376` and
-`0x8d59420a`, accepted-note bookkeeping at `0x8d595844`, recorder tick at
-`0x8d59819c`, and Stop cleanup at `0x8d597db8`.
-The controller-update call follows the GUI tick call in the same main loop;
-they are separate sites. The Stop hook observes a stop/restart pair within one controller update. The key
-span also replaces the following queue-address load; its wrapper returns that
-address in R0. This
-permits an absolute call without changing the stock stack or adding assembly.
-Immediate input is restricted by stock to keyboard keys 26–49; Record (50)
-uses the queue. The live-note wrappers also cancel interrupted tap gestures.
+The six hooks replace the controller-update call at `0x8c0baaf0`, normalized
+live onset/release at `0x8d594376` and `0x8d59420a`, accepted-note bookkeeping
+at `0x8d595844`, recorder tick at `0x8d59819c`, and Stop cleanup at
+`0x8d597db8`. The controller-update call follows the GUI tick call in the same
+main loop; they are separate sites. The Stop hook observes a stop/restart pair
+within one controller update. The live-note wrappers also cancel interrupted
+tap gestures.
 The onset wrapper establishes a scoped live-input identity; only stock-accepted
 notes inside that scope enter history. Direct sequencer calls and step entry do
 not. Stock input arguments and normal recording actions are forwarded unchanged.
+
+### Key queue
+
+The `keys` service replaces the queued key dispatch call at `0x8c0b6184`
+(stock's dispatch `0x8c0b5d58`, with event[0] the key and event[1] nonzero for a
+press), used by extensions and by machines with chord claims. The span also
+replaces the following queue-address load; `sdk_key_queue` returns that address
+in R0, which permits an absolute call without changing the stock stack or
+adding assembly. Every queued key passes its gesture layer (`keys.cpp`) first.
+The keyboard's keys (26–49) arrive here too, before stock's key handlers: on a
+drum kit those select the pad, so a key kept from stock here neither plays nor
+selects (checked on the device). A chord claim's held key (the metronome, 1)
+is held back while the claim has an owner, input is enabled and Shift is up;
+stock gets that press when the key is released alone (then the release) or
+when another key that isn't a keyboard key arrives, and never after a chord.
+Keys the layer passes on reach the extensions' wrapper (stock's dispatch, then
+`queued_control`), or stock directly without extensions.
 
 History uses the same position getter, pickup convention and scaled Q8 duration
 deltas as stock recording. Pattern quantization remains stock playback behavior.

@@ -10,6 +10,7 @@
 // project, reset before its first call and after a project is loaded or
 // created; it runs only while one track holds it.
 #pragma once
+#include <opxy/keys.hpp>
 #include <opxy/transport.hpp>
 #include <opxy/types.hpp>
 
@@ -28,6 +29,9 @@ const u32 overlay_capacity = 64;
 const u32 edit_capacity = 32;
 // Words the machine passes to its own display each tick (Overlay::display).
 const u32 display_words = 4;
+const u32 gesture_capacity = 8;
+// A popup's text (Overlay::popup), its terminating zero included.
+const u32 popup_bytes = 32;
 // A machine that declares resources.trackControl.savedBytes (1..saved_capacity)
 // keeps data with each project, on the GUI side, through two more functions:
 //   u32 control_save(const ControlState&, u8* data, u32 capacity);
@@ -40,6 +44,13 @@ const u32 saved_capacity = 8192;
 
 // One parameter of an instrument track: an overlay entry or a captured edit.
 struct Entry { u8 track, index; u16 reserved; i32 value; };
+// A key of a chord claim the machine declares (resources.trackControl.claims,
+// from profiles/extensions.json), as for extensions (extensions::Gesture):
+// while the claim's held key (`lead`, opxy/keys.hpp) is down, a chord key
+// pressed (1) or released (0); while the machine takes the held key
+// (Overlay::take), the held key's own press and release too, with key == lead.
+// None of them reach stock.
+struct Gesture { u8 lead, key, pressed, reserved; };
 
 struct Input {
     u32 track;  // the aux track this machine holds (zero-based)
@@ -67,6 +78,10 @@ struct Input {
     // its overlays, capture or marks apply then; it still runs, so its page
     // can say so.
     u32 muted;
+    // Its chord claims' keys since the last tick, oldest first. A claim is the
+    // machine's while it runs, unmuted, and no extension in the build holds it.
+    u32 gesture_count;
+    Gesture gestures[gesture_capacity];
 };
 
 // What the machine returns each tick. An overlay entry for the machine's own
@@ -95,6 +110,13 @@ struct Overlay {
     // from_control. The control and display are separate code, so this is
     // how the display shows what the control worked out.
     i32 display[display_words];
+    // 0 on entry. 1 takes the held key of the machine's chord claims for the
+    // next tick: its presses and releases arrive as gestures and never reach
+    // stock (a tap of it alone is the machine's). Ask again every tick.
+    u32 take;
+    // Empty on entry. A short text (1 to popup_bytes - 1 characters, then a
+    // zero) shows once as stock's popup, on any page.
+    char popup[popup_bytes];
 };
 
 // GUI side, for a display: how many tracks hold the same machine as `track`,

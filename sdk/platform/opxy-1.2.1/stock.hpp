@@ -16,6 +16,7 @@ inline u32 byte(u32 address) { return *reinterpret_cast<const volatile unsigned 
 // Globals.
 const u32 kSelectedTrack = 0x840a0534;     // byte: the GUI's selected track
 const u32 kScreen = 0x8400b9d0;            // current GUI screen
+const u32 kInputEnabled = 0x08023c48;      // byte: stock takes key input (0: it ignores queued keys)
 const u32 kSampleBrowserScreen = 4;        // kScreen while the sample browser is open
 const u32 kAudioBpm = 0x84c69824;          // audio clock tempo, IEEE-754 binary32 bits
 const u32 kPitchIncrements = 0x11902c00;   // 64 per-sample phase increments of the voice being rendered
@@ -58,6 +59,10 @@ inline u32 set_parameter(u32 project, u32 track, u32 index, i32 value) {
 }
 inline u32 selected_track() { return stock<u32()>(0x8d4d6f14)(); }
 inline bool shift_held() { return stock<u32()>(0x8d51f184)() != 0; }
+// Stock's short popup over any page; `text` must outlive it (a static buffer).
+inline void show_popup(const char* text) {
+    stock<void(const char*, u32, u32, u32)>(0x8d549168)(text, 1, 0, 0x3f000000u);
+}
 // Stock's held-key list survives encoder turns; its separate pending-click
 // flag does not. A turn while held suppresses the release's click action.
 inline bool encoder_held(u32 encoder) {

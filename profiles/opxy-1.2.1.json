@@ -138,6 +138,10 @@
     "extensions": [
       "extension"
     ],
+    "keys": [
+      "extension",
+      "gesture"
+    ],
     "drums": [
       "drum"
     ],
@@ -1627,11 +1631,12 @@
       "file_offset": "0xed3c0",
       "length": 12,
       "before": "ffe3eafd00da0208783c0000",
-      "symbol": "sdk_extensions_key_queue",
+      "symbol": "sdk_key_queue",
       "call": true,
-      "service": "extensions",
+      "service": "keys",
       "events": [
-        "queued_control"
+        "queued_control",
+        "gesture"
       ]
     },
     {

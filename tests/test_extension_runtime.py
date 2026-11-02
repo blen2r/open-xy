@@ -29,11 +29,27 @@ def build_and_run(test, source, folder, includes=()):
     test.assertEqual(ran.returncode, 0, f'{source.name}: check failed at line {ran.returncode}')
 
 
+def host_units(folder, *units):
+    """Copies of 1.2.1 platform units whose stock addresses map to the fixture's doubles."""
+    stock = (PLATFORM / 'stock.hpp').read_text()
+    stock = stock.replace('typedef __UINTPTR_TYPE__ Address;',
+                          'typedef __UINTPTR_TYPE__ Address;\nAddress host_stock_address(Address);')
+    for pointer in ('T*', 'const volatile u32*', 'const volatile unsigned char*'):
+        stock = stock.replace('reinterpret_cast<' + pointer + '>(address)',
+                              'reinterpret_cast<' + pointer + '>(host_stock_address(address))')
+    (folder / 'stock.hpp').write_text(stock)
+    for unit in units:
+        source = (PLATFORM / unit).read_text()
+        for header in ('extension_runtime.hpp', 'keys.hpp'):
+            source = source.replace(f'#include "../{header}"', f'#include <{header}>')
+        (folder / unit).write_text(source)
+
+
 class KeyQueueHook(unittest.TestCase):
     def test_queued_event_keeps_absolute_call_and_exact_nop_padding(self):
         from tooling.firmware import hook_instruction, hook_target
         from tooling.pipeline import config
-        patch = next(p for p in config()['patches'] if p.get('symbol') == 'sdk_extensions_key_queue')
+        patch = next(p for p in config()['patches'] if p.get('symbol') == 'sdk_key_queue')
         self.assertEqual(patch['length'], 12)
         target = 0x8d450380
         encoded = hook_instruction(patch, target)
@@ -59,6 +75,9 @@ class Runtime(unittest.TestCase):
     def test_extension_observers_order_and_write_ownership(self):
         self.run_fixture('extension_runtime')
 
+    def test_chord_claim_holders_gestures_and_taking_the_held_key(self):
+        self.run_fixture('extension_gestures')
+
     def test_generated_registry_omits_disabled_extensions_and_preserves_order(self):
         from tooling.extensions import Extension, generate_collection
         def prepare(folder):
@@ -71,16 +90,23 @@ class Runtime(unittest.TestCase):
     def test_stock_adapter_events_keys_and_writes_with_the_probe_subscribed(self):
         from tooling.extensions import extension_at, generate_collection, generate_extension
         def prepare(folder):
-            stock = (PLATFORM / 'stock.hpp').read_text()
-            stock = stock.replace('typedef __UINTPTR_TYPE__ Address;',
-                                  'typedef __UINTPTR_TYPE__ Address;\nAddress host_stock_address(Address);')
-            for pointer in ('T*', 'const volatile u32*', 'const volatile unsigned char*'):
-                stock = stock.replace('reinterpret_cast<' + pointer + '>(address)',
-                                      'reinterpret_cast<' + pointer + '>(host_stock_address(address))')
-            (folder / 'stock.hpp').write_text(stock)
-            (folder / 'extension_stock.cpp').write_text((PLATFORM / 'extension_stock.cpp').read_text().replace(
-                '#include "../extension_runtime.hpp"', '#include <extension_runtime.hpp>'))
+            host_units(folder, 'extension_stock.cpp', 'keys.cpp')
             probe = extension_at(PROBE)
             generate_collection(folder, [probe])
             generate_extension(folder, probe)
         self.run_fixture('extension_stock', prepare)
+
+    def test_chord_claims_hold_back_their_key_and_keep_chord_keys_from_stock(self):
+        self.run_fixture('keys', lambda folder: host_units(folder, 'keys.cpp'))
+
+    def test_chord_claims_in_the_gesture_layer_match_the_registry(self):
+        import re
+        from tooling.extensions import registry
+        claims, _actions = registry()
+        source = (PLATFORM / 'keys.cpp').read_text()
+        table = re.search(r'kChordClaims\[\] = \{(.*?)\};', source).group(1)
+        declared = [(int(c), lead) for c, lead in re.findall(r'\{(\d+), keys::(\w+)\}', table)]
+        names = list(claims)
+        expected = [(names.index(n), c['key']) for n, c in claims.items() if 'chord' in c]
+        leads = {'metronome': 1}
+        self.assertEqual([(c, leads[lead]) for c, lead in declared], expected)

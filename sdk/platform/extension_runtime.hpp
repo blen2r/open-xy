@@ -1,5 +1,6 @@
 #pragma once
 #include <opxy/extension.hpp>
+#include "keys.hpp"
 
 namespace opxy { namespace platform {
 using extensions::RecordingContext;
@@ -7,7 +8,8 @@ using RecordedNote = extensions::Note;
 
 // Actions are SDK code, one bit each in profiles/extensions.json's order; a
 // test keeps the two in step. Claims are data: the generated registry gives
-// each claim's key, and each action the claims that grant it (0: any claim).
+// each claim's key, the chord claims (keys.cpp reads their keys), and each
+// action the claims that grant it (0: any claim).
 const u32 action_edit_notes = 1u << 0;
 const u32 action_notify = 1u << 1;
 const u32 action_capture = 1u << 2;
@@ -20,6 +22,7 @@ struct ExtensionEntry {
 struct ExtensionRegistry {
     const u32* claim_keys;
     u32 claim_count;
+    u32 chord_claims;  // bits of the claims whose keys are gestures (extensions::Gesture)
     const u32* action_claims;
     u32 action_count;
 };

@@ -45,14 +45,18 @@ while playing. A subscriber that wants a narrower scope filters; one that needs
 a wider scope widens the event (below), never adds a nearby site. The same
 holds for time (transport, GUI tick), controls (queued keys, keyboard keys,
 encoder edits, page keys) and the project lifecycle (loading, starting a new
-project, saving); of these, the GUI tick and queued keys are exposed.
+project, saving); of these, the GUI tick, queued keys and chord claims' keys are exposed.
 
 Adjacent sites are still separate sites. The controller update behind `context`
 follows stock's GUI tick in the same main loop; the GUI tick is a site of its
 own beside it, behind `gui_tick`. A site can serve extensions and the SDK's own
 services: the GUI tick belongs to the profile's `tick` service, which both
 extensions and track control use, so its dispatcher (`sdk_gui_tick`, generated
-in `startup.cpp`) calls each user the build links, in turn.
+in `startup.cpp`) calls each user the build links, in turn. The key queue
+belongs to the `keys` service, used by extensions and by machines with chord
+claims: its gesture layer (`keys.cpp`) sees every queued key first, keeps a
+chord claim's keys for the claim's owner, and passes the rest on to the
+extensions' wrapper, or to stock.
 
 ### Access: observe, transform or claim
 
@@ -60,7 +64,7 @@ in `startup.cpp`) calls each user the build links, in turn.
 | --- | --- | --- |
 | Observe | Read-only; every subscriber, in collection order | Every event |
 | Transform | One ordered chain that may change or drop the event | None yet |
-| Claim | One owner per build; a second claimant fails the build | `record_double_tap` |
+| Claim | One owner per build; a second claimant fails the build | `record_double_tap`, `metronome_chord` |
 
 ### Thread and host
 
@@ -74,7 +78,7 @@ filters to that track for it.
 | Kind | What | Here |
 | --- | --- | --- |
 | Events | Something happened | The `Hooks` callbacks |
-| Actions | Change something through stock | `Actions::insert_notes`, `Actions::replace_notes`, `Actions::notify`, `Actions::capture` |
+| Actions | Change something through stock | `Actions::insert_notes`, `Actions::replace_notes`, `Actions::notify`, `Actions::capture`, `Actions::take` |
 | Surfaces | Add to the screen | None for extensions yet: menu rows, pages, overlays |
 | Saved state | Data kept with a project | None for extensions yet |
 
@@ -97,8 +101,9 @@ only for the callback. The SDK does not sandbox native code.
 | `selected_note_off` | A live release on the selected track, playing or not; may have no preceding onset | Live release |
 | `recording_tick` | The selected track's scaled Q8 recording time, while playing and recordable; a discontinuity asks the subscriber to discard timing | Recorder tick |
 | `input_activity` | Any live note input, accepted or not, on any track; for cancelling gestures | Live onset |
-| `queued_control` | A queued key (Record and the other queued controls; not keyboard keys 26–49) after stock handled it, with a microsecond time. `accepted`: stock took it as input (for Record, stock registered the press or release); `unmodified`: no other key or Shift held. Key numbers are in `keys` | Key queue |
+| `queued_control` | A queued key after stock handled it, with a microsecond time; not the keys a chord claim keeps from stock. `accepted`: stock took it as input (for Record, stock registered the press or release); `unmodified`: no other key or Shift held. Key numbers are in [`opxy/keys.hpp`](../sdk/include/opxy/keys.hpp) | Key queue (the `keys` service) |
 | `gui_tick` | Once per GUI tick, playing or stopped, after stock's own call at that site and track control's. Its actions renew a capture the extension holds | GUI tick (the `tick` service) |
+| `gesture` | For the holder of a chord claim: a chord key (the keyboard's) pressed or released while the claim's held key is down, before stock would have seen it; while the extension takes the held key, the held key's own press and release too (`key == lead`). None reach stock. Its actions are the claim's | Key queue (the `keys` service) |
 | `captured_edits` | While the extension captures: the encoder edits of instrument tracks' parameters since the last GUI tick (at most 32, oldest first: track, parameter index, edited value), before its `gui_tick` | GUI tick (the `tick` service) |
 
 Project and pattern IDs are opaque equality tokens. Lengths use pattern ticks;
@@ -119,10 +124,23 @@ SDK's claims and actions. Each extension's `extension.json` lists those it uses.
   [`DoubleTap`](../sdk/include/opxy/double_tap.hpp) helper handles taps, holds,
   repeats and timeouts on any key without delaying stock controls.
   `record_double_tap` is capture's.
+- **A chord claim** (`"chord": "keyboard"`) is a claim on a held key and the
+  keys it combines with: `metronome_chord`, the metronome with the keyboard.
+  While its holder exists, the held key's press waits: released alone, or
+  followed by any key that isn't a keyboard key, it reaches stock after all (so
+  the metronome page opens on release); keyboard keys pressed meanwhile reach
+  the holder as `gesture`s, with their releases, and never stock: no note, and
+  no drum pad selected. Shift + the held key stays stock's. `Actions::take`
+  keeps the held key itself from stock, so its taps are the holder's. Machines
+  may hold a chord claim too (`resources.trackControl.claims`, [API](api.md#track-control)),
+  only while they run; a build refuses an extension and a machine holding the
+  same one. [`ChordTap`](../sdk/include/opxy/chord_tap.hpp) tells a chord from a
+  tap of the held key.
 - **An action** is permission to change stock state. The runtime grants an
   extension's actions inside its `queued_control` callback for a key it claims,
-  once stock accepted the event; an action's `requires` limits that to one
-  claim, and without it any claim its holder owns grants it.
+  once stock accepted the event, or its `gesture` callback for a chord claim;
+  an action's `requires` limits that to one claim, and without it any claim its
+  holder owns grants it.
   - `edit_notes` (requires `record_double_tap`) unlocks `Actions::insert_notes`
     (add beside the existing notes) and `Actions::replace_notes` (clear the
     track's notes, then add), on any instrument track whose pattern is
@@ -143,6 +161,9 @@ SDK's claims and actions. Each extension's `extension.json` lists those it uses.
     returns 1 while the extension holds the capture, from the tick after it
     first asks. An extension declaring `capture` uses the control service, so
     its build links track control's capture and marks (the SDK's red frame).
+  - `Actions::take(on)` needs no permission: the holder of a chord claim takes
+    its held key (1) or gives it back (0), in a `gesture` or `gui_tick`
+    callback. It lasts while renewed in every `gui_tick`.
 
   Calls outside the callback, with a stale context, or a second write or
   popup in one callback are refused.
@@ -217,7 +238,10 @@ or widening one updates every extension in the same pull request.
 **Add a claim** with one registry entry in [`profiles/extensions.json`](../profiles/extensions.json): its
 `label` and `key`. Nothing else changes; the runtime reads claims from the
 generated registry. Never add a per-claim field to the collection or a
-per-claim branch to the runtime.
+per-claim branch to the runtime. A chord claim is SDK code as well as data: its held key also
+goes in the gesture layer's table ([`keys.cpp`](../sdk/platform/opxy-1.2.1/keys.cpp),
+in registry order; a test keeps the two in step), and its `chord` names the
+keys it combines with, which the layer knows.
 
 **Add an action** with a registry entry (and its `requires`, if one claim must
 grant it), a bit in

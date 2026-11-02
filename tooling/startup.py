@@ -14,7 +14,7 @@ def _declare(name, signature='()'):
 
 
 def render(prefixes, effects=(), stock_page=(), sample_screens=(), effect_screens=(), player_pages=(), control=False,
-           aux=False, extensions=False):
+           aux=False, extensions=False, keys=False):
     """stock_page: engines that show a stock page (e.g. sample engines on the
     sampler page); they register on the GUI role without an own-page guard.
     sample_screens: those of them that also draw their own screen over it.
@@ -24,7 +24,9 @@ def render(prefixes, effects=(), stock_page=(), sample_screens=(), effect_screen
     last. Without it, the companion's calls into the service do nothing.
     aux: the build links the aux service (aux tracks), which starts after it.
     extensions: the build links extensions. The GUI tick (the tick service) makes
-    stock's call, then track control's and the extensions' when the build links them."""
+    stock's call, then track control's and the extensions' when the build links them.
+    keys: the build links the keys service (the key queue's gesture layer), which
+    reaches extensions and track control: without them, startup stands in."""
     require(prefixes or effects or player_pages, 'Startup needs at least one machine')
     require(0 <= len(prefixes) <= ENGINE_COUNT and len(set(prefixes)) == len(prefixes),
             'Startup needs distinct engine prefixes')
@@ -89,6 +91,26 @@ def render(prefixes, effects=(), stock_page=(), sample_screens=(), effect_screen
         'u32 sdk_capture_request(u32, u32) { return 0; }\n'
         'u32 sdk_capture_holds(u32) { return 0; }\n'
         'u32 sdk_capture_edits(u32, void*, u32) { return 0; }')
+    # The gesture layer's calls (sdk/platform/keys.hpp): without extensions, keys go
+    # straight to stock and no extension holds a claim; without track control, no machine does.
+    stand_ins = []
+    if keys and not extensions:
+        stand_ins += ['extern "C" void sdk_key_stock(const u32*) __asm__("sdk_key_stock");',
+                      'extern "C" void sdk_extensions_key(const u32*) __asm__("sdk_extensions_key");',
+                      'extern "C" u32 sdk_extensions_claim_owner(u32) __asm__("sdk_extensions_claim_owner");',
+                      'extern "C" void sdk_extensions_gesture(u32, const void*) __asm__("sdk_extensions_gesture");',
+                      'extern "C" u32 sdk_extensions_takes(u32) __asm__("sdk_extensions_takes");',
+                      'void sdk_extensions_key(const u32* event) { sdk_key_stock(event); }',
+                      'u32 sdk_extensions_claim_owner(u32) { return 0; }',
+                      'void sdk_extensions_gesture(u32, const void*) {}',
+                      'u32 sdk_extensions_takes(u32) { return 0; }']
+    if keys and not control:
+        stand_ins += ['extern "C" u32 sdk_control_claimant(u32) __asm__("sdk_control_claimant");',
+                      'extern "C" void sdk_control_queue_gesture(u32, const void*) __asm__("sdk_control_queue_gesture");',
+                      'extern "C" u32 sdk_control_takes(u32) __asm__("sdk_control_takes");',
+                      'u32 sdk_control_claimant(u32) { return 0; }',
+                      'void sdk_control_queue_gesture(u32, const void*) {}',
+                      'u32 sdk_control_takes(u32) { return 0; }']
     if aux:
         require(control, 'The aux service needs the control service')
         declarations.append('void sdk_aux_startup() __asm__("sdk_aux_startup");')
@@ -100,7 +122,7 @@ def render(prefixes, effects=(), stock_page=(), sample_screens=(), effect_screen
                   EFFECTS='\n'.join(f'    {prefix}_fx_register();' for prefix in effects),
                   ENGINES='\n'.join(f'    {prefix}_register();' for prefix in prefixes),
                   SCREENS='\n'.join(screens), CATALOG='\n'.join(catalog), ENGINE_SENTINEL=str(ENGINE_SENTINEL),
-                  PROJECT_KEPT=kept, GUI_TICK='\n'.join(tick), CAPTURE=capture,
+                  PROJECT_KEPT=kept, GUI_TICK='\n'.join(tick), CAPTURE=capture, KEYS='\n'.join(stand_ins),
                   INSTALLED='\n'.join(f'    if ({prefix}_name_matches(name)) return 1;' for prefix in prefixes))
     source = (ROOT / TEMPLATE).read_text(encoding='utf-8')
     for key, text in values.items():
@@ -111,8 +133,8 @@ def render(prefixes, effects=(), stock_page=(), sample_screens=(), effect_screen
 
 
 def generate(directory, prefixes, effects=(), stock_page=(), sample_screens=(), effect_screens=(), player_pages=(),
-             control=False, aux=False, extensions=False):
+             control=False, aux=False, extensions=False, keys=False):
     destination = Path(directory) / 'startup.cpp'
     destination.write_text(render(prefixes, effects, stock_page, sample_screens, effect_screens, player_pages, control,
-                                  aux, extensions), encoding='utf-8', newline='\n')
+                                  aux, extensions, keys), encoding='utf-8', newline='\n')
     return destination

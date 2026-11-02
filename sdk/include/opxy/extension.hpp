@@ -1,4 +1,5 @@
 #pragma once
+#include <opxy/keys.hpp>
 #include <opxy/types.hpp>
 
 namespace opxy { namespace extensions {
@@ -30,8 +31,8 @@ using Time = __UINT64_TYPE__;
 // captures (Actions::capture): the track (0..7), the parameter's index in the
 // track's 58 live words, and the edited value.
 struct Edit { u32 track, index; i32 value; };
-// Key numbers as stock reports them in queued controls.
-namespace keys { const u32 record = 50; }
+// Key numbers as stock reports them in queued controls (opxy/keys.hpp).
+namespace keys = ::opxy::keys;
 struct Control {
     u32 key;
     bool pressed;
@@ -40,6 +41,16 @@ struct Control {
     bool accepted;
     // No other key and no Shift held when the event arrived.
     bool unmodified;
+    Time time;
+};
+// A chord claim's key (profiles/extensions.json, "chord"): while the claim's
+// held key (`lead`, the metronome for metronome_chord) is down, a chord key
+// (the keyboard's) pressed or released. While the extension takes the held key
+// (Actions::take), the held key's own press and release arrive too, with
+// key == lead. None of these reach stock.
+struct Gesture {
+    u32 lead, key;
+    bool pressed;
     Time time;
 };
 
@@ -68,6 +79,12 @@ struct Actions {
     // extension holds the capture (from the tick after it first asks), else 0.
     // Needs capture.
     u32 (*capture)(u32 mode);
+    // Take a chord claim's held key (1), or give it back to stock (0): while
+    // taken, its presses and releases arrive as gestures and never reach stock,
+    // so a tap of it alone is the extension's. It lasts while the extension
+    // renews it in every gui_tick. Works in gesture and gui_tick callbacks, for
+    // an extension holding a chord claim; no permission of its own.
+    void (*take)(u32 on);
 };
 
 using OnContext = void (*)(const Context&);
@@ -78,6 +95,7 @@ using OnInputActivity = void (*)();
 using OnQueuedControl = void (*)(const Context&, const Control&, const Actions&);
 using OnGuiTick = void (*)(const Context&, const Actions&);
 using OnCapturedEdits = void (*)(const Context&, const Edit* edits, u32 count);
+using OnGesture = void (*)(const Context&, const Gesture&, const Actions&);
 
 // One callback per event, named for what it delivers. Each event lists its
 // firmware sites in the profile ("events"); docs/extensions.md says how to
@@ -102,8 +120,8 @@ struct Hooks {
     OnRecordingTick recording_tick;
     // Any live note input, accepted or not, on any track.
     OnInputActivity input_activity;
-    // A queued control (Record and other queued keys; not keyboard keys
-    // 26-49) after stock handled it. Actions act only for their claim owner.
+    // A queued control after stock handled it; not the keys a chord claim
+    // keeps from stock. Actions act only for their claim owner.
     OnQueuedControl queued_control;
     // Once per GUI tick, after stock's own work for the tick and track
     // control's, whether or not the sequencer plays. Its actions renew a
@@ -112,37 +130,43 @@ struct Hooks {
     // While this extension captures: the edits since the last GUI tick, oldest
     // first, at most 32, before gui_tick.
     OnCapturedEdits captured_edits;
+    // A chord claim's key, for the extension holding the claim (Gesture),
+    // before stock would have seen it. Its actions are the claim's.
+    OnGesture gesture;
 
-    constexpr Hooks() : Hooks(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) {}
+    constexpr Hooks() : Hooks(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) {}
     // Every callback in order; prefer the with_ builders below.
     constexpr Hooks(OnContext a, OnRecordableNoteOn b, OnSelectedNoteOff c, OnRecordingTick d,
-                    OnInputActivity e, OnQueuedControl f, OnGuiTick g, OnCapturedEdits h)
+                    OnInputActivity e, OnQueuedControl f, OnGuiTick g, OnCapturedEdits h, OnGesture i)
         : context(a), recordable_note_on(b), selected_note_off(c), recording_tick(d),
-          input_activity(e), queued_control(f), gui_tick(g), captured_edits(h) {}
+          input_activity(e), queued_control(f), gui_tick(g), captured_edits(h), gesture(i) {}
 
     constexpr Hooks with_context(OnContext f) const {
-        return Hooks(f, recordable_note_on, selected_note_off, recording_tick, input_activity, queued_control, gui_tick, captured_edits);
+        return Hooks(f, recordable_note_on, selected_note_off, recording_tick, input_activity, queued_control, gui_tick, captured_edits, gesture);
     }
     constexpr Hooks with_recordable_note_on(OnRecordableNoteOn f) const {
-        return Hooks(context, f, selected_note_off, recording_tick, input_activity, queued_control, gui_tick, captured_edits);
+        return Hooks(context, f, selected_note_off, recording_tick, input_activity, queued_control, gui_tick, captured_edits, gesture);
     }
     constexpr Hooks with_selected_note_off(OnSelectedNoteOff f) const {
-        return Hooks(context, recordable_note_on, f, recording_tick, input_activity, queued_control, gui_tick, captured_edits);
+        return Hooks(context, recordable_note_on, f, recording_tick, input_activity, queued_control, gui_tick, captured_edits, gesture);
     }
     constexpr Hooks with_recording_tick(OnRecordingTick f) const {
-        return Hooks(context, recordable_note_on, selected_note_off, f, input_activity, queued_control, gui_tick, captured_edits);
+        return Hooks(context, recordable_note_on, selected_note_off, f, input_activity, queued_control, gui_tick, captured_edits, gesture);
     }
     constexpr Hooks with_input_activity(OnInputActivity f) const {
-        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, f, queued_control, gui_tick, captured_edits);
+        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, f, queued_control, gui_tick, captured_edits, gesture);
     }
     constexpr Hooks with_queued_control(OnQueuedControl f) const {
-        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, input_activity, f, gui_tick, captured_edits);
+        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, input_activity, f, gui_tick, captured_edits, gesture);
     }
     constexpr Hooks with_gui_tick(OnGuiTick f) const {
-        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, input_activity, queued_control, f, captured_edits);
+        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, input_activity, queued_control, f, captured_edits, gesture);
     }
     constexpr Hooks with_captured_edits(OnCapturedEdits f) const {
-        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, input_activity, queued_control, gui_tick, f);
+        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, input_activity, queued_control, gui_tick, f, gesture);
+    }
+    constexpr Hooks with_gesture(OnGesture f) const {
+        return Hooks(context, recordable_note_on, selected_note_off, recording_tick, input_activity, queued_control, gui_tick, captured_edits, f);
     }
 };
 }}
