@@ -459,7 +459,7 @@ track, 0 when it did not run, and always 0 in browser previews.
 
 Track control marks what it does on every page, over stock's: while a machine
 captures, its capture marks; with `overlay.mark` set to 1, its line marks on the
-page of any track it overlays. While its marks show, `overlay.mark_text` (up to 7
+page of any track it overlays. While its marks show, `overlay.mark_text` (up to 2
 characters, empty on entry) shows in the top right corner, in the capture
 marks' red: a state's number, say. The SDK's are a red frame fading inward at the
 screen's edge and a thin dark red frame. The SDK draws them in the last screen

@@ -36,7 +36,7 @@ const u32 shown_capacity = 64;
 // A popup's text (Overlay::popup), its terminating zero included.
 const u32 popup_bytes = 32;
 // Text in a corner of the machine's marks (Overlay::mark_text), its zero included.
-const u32 mark_text_bytes = 8;
+const u32 mark_text_bytes = 3;
 // A machine that declares resources.trackControl.savedBytes (1..saved_capacity)
 // keeps data with each project, on the GUI side, through two more functions:
 //   u32 control_save(const ControlState&, u8* data, u32 capacity);
