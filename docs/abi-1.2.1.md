@@ -500,8 +500,8 @@ through `sdk_param_step_set`. Its resets copy a track's base values over its
 live ones in `8d5accf8` (`040201c4` at `8d5acd84` for one track, `8d5acd32`
 for each track of all), from ten places, among them the sequencer before it
 applies a step's locks (`8d593980`). Both copies route through
-`sdk_param_reset`, which makes the copy and then puts the held values back,
-before the reset publishes.
+`sdk_param_reset`, which makes the copy and then puts back the base values from
+before the edits, ending any lock a step held, before the reset publishes.
 
 Every page shows a parameter's value through `8d5ac9dc(project, track, index,
 …)`. With a step held it shows that step's lock; otherwise it reads the live

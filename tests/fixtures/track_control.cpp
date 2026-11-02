@@ -610,6 +610,10 @@ int main() {
     bases[0][2] = 55;
     sdk_param_reset(kLive, stock_track_data(0) + 0x3864, control::track_parameters * 4);
     require(value(0, 1) == 100 && value(0, 2) == 55, "A reset played the silent edit");
+    // A reset after a step's lock ends the lock: the value from before the edits plays.
+    sdk_param_step_set(kProject, 0, 1, 400);
+    sdk_param_reset(kLive, stock_track_data(0) + 0x3864, control::track_parameters * 4);
+    require(value(0, 1) == 100, "A reset kept a step's lock playing");
     // The machines read the held value; their overlay plays over it.
     plan({{0, 1, 0, 600}}); sdk_gui_tick();
     require(seen == 100 && value(0, 1) == 600, "A machine read the silent edit");
