@@ -50,8 +50,9 @@ struct AuxService {
 // The marks track control shows over every page (track_control_overlay.cpp.in):
 // a machine captures edits, or the selected track holds an overlay from one that
 // marks; `machine` indexes sdk_control_machines. GUI only.
+// `text` is the marking machine's Overlay::mark_text this tick ("" for none).
 const u32 kMarkCapture = 1, kMarkOverlaid = 2;
-struct Marks { u32 kind, machine; };
+struct Marks { u32 kind, machine; const char* text; };
 Marks control_marks();
 }}
 

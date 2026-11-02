@@ -29,6 +29,7 @@ char want_popup[control::popup_bytes], popup_seen[control::popup_bytes];
 // Values the machine asks the pages to show (Overlay::shown).
 control::Entry want_shown[4];
 u32 want_shown_count;
+const char* want_mark_text = "";
 i32 seen;  // the value of track 0, parameter 1 the machine was given
 u32 seen_elapsed, seen_bpm, seen_ticks, seen_playing, seen_key, seen_muted;
 // The project's scene records (g_project + 0x98, 33 bytes a scene: patterns, then
@@ -121,7 +122,8 @@ void run(u32 copy, const control::Input* input, control::Overlay* overlay) {
     require(overlay->take == 0 && overlay->popup[0] == 0, "Take or popup not cleared");
     overlay->take = want_take;
     std::strcpy(overlay->popup, want_popup);
-    require(overlay->shown_count == 0, "Shown values not cleared");
+    require(overlay->shown_count == 0 && overlay->mark_text[0] == 0, "Shown values or mark text not cleared");
+    std::strcpy(overlay->mark_text, want_mark_text);
     for (u32 i = 0; i < want_shown_count; ++i)
         control::show(*overlay, want_shown[i].track, want_shown[i].index, want_shown[i].value);
 }
@@ -720,5 +722,16 @@ int main() {
     tick(0, "End of capture wrote an overlay");
     require(bases[13][2] == 0 && bases[12][1] == 70, "Aux capture not restored, or a held track's edit undone");
     aux_engines[12] = 0;
+
+    // Mark text: the marking machine's, while its marks show.
+    capture = 1;
+    want_mark_text = "12";
+    tick(0, "Capture wrote an overlay");
+    const opxy::platform::Marks marks = opxy::platform::control_marks();
+    require(marks.kind == opxy::platform::kMarkCapture && std::strcmp(marks.text, "12") == 0, "Mark text not given");
+    capture = 0;
+    want_mark_text = "";
+    tick(0, "End of capture wrote an overlay");
+    require(opxy::platform::control_marks().kind == 0, "Marks kept after the capture");
     return 0;
 }

@@ -6,7 +6,8 @@
 // artwork has no background, so it is painted over whatever page is shown.
 // The artwork holds the SDK's marks and any machine's own (marks.svg.fragment);
 // each machine shows its capture nodes while it captures, or its line nodes on
-// the page of a track it overlays.
+// the page of a track it overlays; the SDK's text node shows the marking
+// machine's mark text.
 #include "screen.hpp"
 #include "registration.hpp"
 #include "track_control.hpp"
@@ -32,12 +33,16 @@ const MachineMarks kMarks[] = {
     {0, 0, 0, 0}};
 const u32 kMarkMachines = sizeof(kMarks) / sizeof(kMarks[0]) - 1;
 const char kAsset[] = "openxy_overlay.svg";
+const char kTextId[] = "overlay_text";
+const u32 kTextBytes = opxy::control::mark_text_bytes;
 
 struct Object {
     Base base;
     PathNode* nodes[kNodes];  // 0 until bound, or when missing
     u32 bound;
     u32 shown;                // the marks last applied, as key()
+    Leaf* text;               // the mark text node, or 0 when missing
+    char text_shown[kTextBytes];
 };
 u32 key(platform::Marks marks) { return marks.kind ? marks.kind | (marks.machine + 1) << 8 : 0; }
 Object overlay;
@@ -65,8 +70,10 @@ void apply(Object* o, platform::Marks marks) {
 void bind(Object* o) {
     if (o->bound || !o->base.svg) return;
     for (u32 i = 0; i < kNodes; ++i) o->nodes[i] = path_node(find(&o->base, kIds[i]));
+    o->text = text_node(find(&o->base, kTextId));
+    o->text_shown[0] = 1;  // set on the first frame
     o->bound = 1;
-    apply(o, platform::Marks{0, 0});
+    apply(o, platform::Marks{0, 0, ""});
 }
 
 void destroy(Object* o) { base_destroy(&o->base); }
@@ -76,6 +83,19 @@ void frame(Object* o, i32) {
     bind(o);
     const platform::Marks marks = platform::control_marks();
     if (o->bound && key(marks) != o->shown) apply(o, marks);
+    // The mark text, set only when it changes.
+    const char* text = marks.kind && marks.text ? marks.text : "";
+    bool same = true;
+    for (u32 i = 0; i < kTextBytes && same; ++i) {
+        same = o->text_shown[i] == text[i];
+        if (!text[i]) break;
+    }
+    if (o->bound && o->text && !same) {
+        u32 n = 0;
+        for (; n + 1 < kTextBytes && text[n]; ++n) o->text_shown[n] = text[n];
+        o->text_shown[n] = 0;
+        set_text(o->text, o->text_shown);
+    }
     draw(&o->base);
 }
 void init(Object* o) { bind(o); }

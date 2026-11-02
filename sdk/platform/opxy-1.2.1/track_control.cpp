@@ -141,6 +141,8 @@ i32 shown_words[control::all_tracks][control::display_words];
 u32 gesture_track = kNoTrack, gesture_count;
 control::Gesture gestures[control::gesture_capacity];
 bool taking[control::all_tracks];
+// Each track's machine's mark text this tick (Overlay::mark_text).
+char mark_texts[control::all_tracks][control::mark_text_bytes];
 // The popup a machine asked for, kept while stock shows it.
 char popup_text[control::popup_bytes];
 // What the pages show this tick in place of what plays (Overlay::shown), from
@@ -290,16 +292,16 @@ void merge(u32 host) {
 
 Marks opxy::platform::control_marks() {
     if (capture_track < kNoTrack && hosts[capture_track])
-        return Marks{kMarkCapture, machine_index(hosts[capture_track])};
+        return Marks{kMarkCapture, machine_index(hosts[capture_track]), mark_texts[capture_track]};
     // An extension's capture shows the SDK's marks: the row after the machines'.
-    if (capture_extension) return Marks{kMarkCapture, sdk_control_machine_count};
+    if (capture_extension) return Marks{kMarkCapture, sdk_control_machine_count, ""};
     const u32 track = selected_track();
     for (u32 i = 0; i < applied_count; ++i) {
         const Applied& a = applied[i];
         if (a.track == track && marking[a.owner] && hosts[a.owner])
-            return Marks{kMarkOverlaid, machine_index(hosts[a.owner])};
+            return Marks{kMarkOverlaid, machine_index(hosts[a.owner]), mark_texts[a.owner]};
     }
-    return Marks{0, 0};
+    return Marks{0, 0, ""};
 }
 
 extern "C" i32 sdk_control_display(u32 index) {
@@ -551,6 +553,7 @@ extern "C" void sdk_control_tick() {
             if (m && m->unique) sdk_control_prepared[machine_index(m)] = true;
         }
         marking[t] = taking[t] = false;
+        mark_texts[t][0] = 0;
         for (u32 i = 0; i < control::display_words; ++i) shown_words[t][i] = 0;
         if (!m) continue;
         if (!loaded) {
@@ -589,12 +592,15 @@ extern "C" void sdk_control_tick() {
         overlay.take = 0;
         overlay.popup[0] = 0;
         overlay.shown_count = 0;
+        overlay.mark_text[0] = 0;
         for (u32 i = 0; i < control::display_words; ++i) overlay.display[i] = 0;
         m->control(copy, &input, &overlay);
         for (u32 p = 0; p < kEngineControls; ++p) input.values[t][p] = own[p];
         if (overlay.count > control::overlay_capacity) overlay.count = control::overlay_capacity;
         if (input.muted) overlay.count = overlay.capture = overlay.mark = overlay.take = overlay.shown_count = 0;
         merge_shown(t, overlay);
+        for (u32 i = 0; i < control::mark_text_bytes; ++i)
+            mark_texts[t][i] = i + 1 < control::mark_text_bytes ? overlay.mark_text[i] : 0;
         taking[t] = overlay.take && m->claims;
         if (overlay.popup[0] && !input.muted) {
             u32 n = 0;

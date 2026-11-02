@@ -2,10 +2,12 @@
   <!-- SDK-owned track control marks, painted over every page, with no
        background. While a machine captures edits: four red outlines at the
        screen's edge, fading inward. On a page of a track it overlays: one
-       dark red outline. -->
+       dark red outline. In the top right corner, the marking machine's
+       text (Overlay::mark_text), empty otherwise. -->
   <path id="overlay_capture_0" d="M0.5 0.5 L479.5 0.5 L479.5 219.5 L0.5 219.5 Z" fill="none" stroke="#ff3b30" stroke-width="1" opacity="1"/>
   <path id="overlay_capture_1" d="M1.5 1.5 L478.5 1.5 L478.5 218.5 L1.5 218.5 Z" fill="none" stroke="#ff3b30" stroke-width="1" opacity="0.65"/>
   <path id="overlay_capture_2" d="M2.5 2.5 L477.5 2.5 L477.5 217.5 L2.5 217.5 Z" fill="none" stroke="#ff3b30" stroke-width="1" opacity="0.35"/>
   <path id="overlay_capture_3" d="M3.5 3.5 L476.5 3.5 L476.5 216.5 L3.5 216.5 Z" fill="none" stroke="#ff3b30" stroke-width="1" opacity="0.15"/>
   <path id="overlay_line" d="M0.5 0.5 L479.5 0.5 L479.5 219.5 L0.5 219.5 Z" fill="none" stroke="#7a1f1a" stroke-width="1"/>
+  <text id="overlay_text" transform="matrix(1 0 0 1 444 22)" fill="#ff3b30" font-family="UniversNextPro-Light" font-size="16px"> </text>
 </svg>

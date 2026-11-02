@@ -35,6 +35,8 @@ const u32 gesture_capacity = 8;
 const u32 shown_capacity = 64;
 // A popup's text (Overlay::popup), its terminating zero included.
 const u32 popup_bytes = 32;
+// Text in a corner of the machine's marks (Overlay::mark_text), its zero included.
+const u32 mark_text_bytes = 8;
 // A machine that declares resources.trackControl.savedBytes (1..saved_capacity)
 // keeps data with each project, on the GUI side, through two more functions:
 //   u32 control_save(const ControlState&, u8* data, u32 capacity);
@@ -127,6 +129,10 @@ struct Overlay {
     // parameter, the later track wins. A knob being turned still shows its edit.
     u32 shown_count;
     Entry shown[shown_capacity];
+    // Empty on entry. Up to mark_text_bytes - 1 characters, then a zero, shown
+    // in the top right corner while the machine's marks show (its capture
+    // marks, or its line marks): a state's number, say.
+    char mark_text[mark_text_bytes];
 };
 
 inline void show(Overlay& overlay, u32 track, u32 index, i32 value) {
