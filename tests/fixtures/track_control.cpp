@@ -605,6 +605,11 @@ int main() {
     require(value(0, 1) == 400, "A step's lock was not heard while capturing silently");
     sdk_param_step_set(kProject, 0, 1, 170);
     require(value(0, 1) == 100, "The silent edit leaked through the step's stored value");
+    // Stock resetting the track's live row to its stored one (a step with locks,
+    // starting play) leaves the held value playing, and every other stored one.
+    bases[0][2] = 55;
+    sdk_param_reset(kLive, stock_track_data(0) + 0x3864, control::track_parameters * 4);
+    require(value(0, 1) == 100 && value(0, 2) == 55, "A reset played the silent edit");
     // The machines read the held value; their overlay plays over it.
     plan({{0, 1, 0, 600}}); sdk_gui_tick();
     require(seen == 100 && value(0, 1) == 600, "A machine read the silent edit");

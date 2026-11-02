@@ -300,7 +300,7 @@ class TrackControl(unittest.TestCase):
         aux.definition['resources']['trackControl'].update(unique=True, aux=[12])
         hooks = [p for p in config()['patches'] if p.get('service') == 'control' and p['kind'] == 'hook']
         self.assertEqual(sorted(p['symbol'] for p in hooks),
-                         ['sdk_param_edit_set', 'sdk_param_shown_hook', 'sdk_param_step_set',
+                         ['sdk_param_edit_set', 'sdk_param_reset', 'sdk_param_reset', 'sdk_param_shown_hook', 'sdk_param_step_set',
                           'sdk_param_step_set', 'sdk_param_step_set', 'sdk_project_clear', 'sdk_project_clear_random'])
         # The GUI tick is the tick service's, shared with extensions.
         tick = [p for p in config()['patches'] if p.get('service') == 'tick']
@@ -424,6 +424,12 @@ class TrackControl(unittest.TestCase):
             offset = mapped_offset(ldr(stock), address, patch['length'])
             self.assertEqual(offset, int(patch['file_offset'], 16))
             self.assertEqual(decode_branch(address, stock[offset:offset + 4]), (0x8d5acea8, True))
+        # Both copies in 8d5accf8 that reset a track's live row to its stored one.
+        for patch in (p for p in profile['patches'] if p.get('symbol') == 'sdk_param_reset'):
+            address = int(patch['address'], 16)
+            offset = mapped_offset(ldr(stock), address, patch['length'])
+            self.assertEqual(offset, int(patch['file_offset'], 16))
+            self.assertEqual(absolute_target(stock[offset:offset + 8]), 0x040201c4)
         patch = next(p for p in profile['patches'] if p.get('symbol') == 'sdk_param_edit_set')
         address = int(patch['address'], 16)
         offset = mapped_offset(ldr(stock), address, patch['length'])

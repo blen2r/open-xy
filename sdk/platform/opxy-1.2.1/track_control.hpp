@@ -65,6 +65,8 @@ void sdk_control_tick() __asm__("sdk_control_tick");
 // Stock's step values reaching the live parameters: an overlay stays over them.
 void sdk_param_step_set(opxy::u32 project, opxy::u32 track, opxy::u32 index, opxy::i32 value)
     __asm__("sdk_param_step_set");
+// Stock resetting a live row to its stored values: a silent capture keeps its held values.
+opxy::u32 sdk_param_reset(opxy::u32 live_row, opxy::u32 stored, opxy::u32 bytes) __asm__("sdk_param_reset");
 // A project replacement invalidates transient edits/overlays without touching stock's buffers.
 void sdk_control_forget() __asm__("sdk_control_forget");
 // The page key (1..4 for M1..M4) an aux machine's track handled directly

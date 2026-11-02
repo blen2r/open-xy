@@ -44,7 +44,7 @@ version is rejected. The output differs from stock in exactly these places:
 | Diagnostic benchmark | 1 | Extends explicit command 0xc8 with the selected machines; no normal-playback callbacks added |
 | Per-voice profiling | 10 optional | Bypasses diagnostic timing in both stock voice renderers when built with profiling off |
 | GUI tick | 1 | Shared by track control and extensions (the `tick` service): stock's own call at that site, then track control's tick, then the extensions' `gui_tick` |
-| Track control | 7 | Runs track control machines from the GUI tick, lets them capture encoder edits, keeps their overlays over parameter locks, shows their overlays as parameter values, and clears them for a new project |
+| Track control | 9 | Runs track control machines from the GUI tick, lets them capture encoder edits (silently too, through stock's resets), keeps their overlays over parameter locks, shows their overlays as parameter values, and clears them for a new project |
 | Aux tracks | 13 | Lets a track control machine take over aux track 12 (CV): its chooser on Shift + M1 (the effect list on the sends), its presets on Shift + track key, its page on M1, its parameter names on the LFO's destinations, its own LFO whichever track is selected, and CV and gate kept silent; four MTP allowlist edits show the user's aux presets |
 | Preset scan | 1 | Hides factory presets whose engine the build does not install ([presets](#presets)) |
 | Startup label | 1 | Shows `OPEN <version>-1.2.1` at boot, `<version>` from [`VERSION`](../VERSION), through the stock startup text renderer |
@@ -493,6 +493,15 @@ the next tick, with the base value from before that parameter's first edit;
 when the capture ends, the SDK sets each of those base values back through
 `8d5acf28`. Lock edits and other setters (MIDI, presets, resets) are not
 captured.
+
+A silent capture keeps each captured parameter playing its value from before
+the edits, though its base value holds the edit. Stock's lock writes reach it
+through `sdk_param_step_set`. Its resets copy a track's base values over its
+live ones in `8d5accf8` (`040201c4` at `8d5acd84` for one track, `8d5acd32`
+for each track of all), from ten places, among them the sequencer before it
+applies a step's locks (`8d593980`). Both copies route through
+`sdk_param_reset`, which makes the copy and then puts the held values back,
+before the reset publishes.
 
 Every page shows a parameter's value through `8d5ac9dc(project, track, index,
 …)`. With a step held it shows that step's lock; otherwise it reads the live

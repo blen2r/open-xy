@@ -495,6 +495,25 @@ extern "C" void sdk_param_step_set(u32 project, u32 track, u32 index, i32 value)
     stock<void(u32, u32, u32, i32)>(0x8d5acea8)(project, track, index, value);
 }
 
+// 8d5acd32 and 8d5acd84: 8d5accf8 resets live values to the stored ones, for
+// one track or all, by copying the track's stored row (track data + 0x3864)
+// over its live row (the copy at 040201c4), then marks it to publish. Stock
+// resets this way from ten places, among them the sequencer before it applies
+// a step's locks (8d593980). A silently captured
+// parameter's stored value is its edit, so after the copy it keeps its held
+// value instead, before anything is published.
+extern "C" u32 sdk_param_reset(u32 live_row, u32 stored, u32 bytes) {
+    for (u32 i = 0; i < bytes / 4; ++i) *at<i32>(live_row + i * 4) = *at<const i32>(stored + i * 4);
+    const u32 row = control::track_parameters * 4, track = (live_row - kLive) / row;
+    if (!silent() || live_row < kLive || (live_row - kLive) % row || track >= control::all_tracks) return live_row;
+    for (u32 i = 0; i < original_count; ++i) {
+        const Original& o = originals[i];
+        if (o.edit.track == track && o.block + 0x3864 == stored && o.edit.index < bytes / 4)
+            live(track, o.edit.index) = silent_value(o);
+    }
+    return live_row;
+}
+
 // Once per GUI tick, from the tick service's dispatcher (startup.cpp.in), after stock's call.
 extern "C" void sdk_control_tick() {
     ++gui_ticks;
