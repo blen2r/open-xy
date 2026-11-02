@@ -195,8 +195,10 @@ flowchart BT
     live["Stock's live value<br/>(steps and parameter locks)"]
     hold["Silent capture's hold<br/>(what plays without the capture's edits)"]
     overlay["Machines' overlays<br/>(by track; the later track wins)"]
-    plays["What plays and the page shows"]
-    stored --> live --> hold --> overlay --> plays
+    plays["What plays"]
+    shown["Machines' shown values<br/>(pages only; a turned knob shows its edit)"]
+    page["What the page shows"]
+    stored --> live --> hold --> overlay --> plays --> shown --> page
 ```
 
 - **Overlays** set what plays for one tick, never what is saved. Each machine
@@ -210,6 +212,8 @@ flowchart BT
   what stock would play without the turns, so the turns only move the stored
   value; machines read the held value, and their overlays play over it. When a
   capture ends, every captured parameter returns to its value from before it.
+- **Shown values** change only what pages show, never what plays: a machine
+  writing a state can show the state's values on every page.
 - **Stock's writes** pass through the layers too: a step's parameter lock
   becomes the value beneath an overlay instead of sounding over it, and, while
   capturing silently, plays and is held.

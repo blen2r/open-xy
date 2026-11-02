@@ -26,6 +26,9 @@ u32 capture, mark;
 u32 gestures_seen, want_take, popups;
 control::Gesture last_gesture;
 char want_popup[control::popup_bytes], popup_seen[control::popup_bytes];
+// Values the machine asks the pages to show (Overlay::shown).
+control::Entry want_shown[4];
+u32 want_shown_count;
 i32 seen;  // the value of track 0, parameter 1 the machine was given
 u32 seen_elapsed, seen_bpm, seen_ticks, seen_playing, seen_key, seen_muted;
 // The project's scene records (g_project + 0x98, 33 bytes a scene: patterns, then
@@ -119,6 +122,9 @@ void run(u32 copy, const control::Input* input, control::Overlay* overlay) {
     require(overlay->take == 0 && overlay->popup[0] == 0, "Take or popup not cleared");
     overlay->take = want_take;
     std::strcpy(overlay->popup, want_popup);
+    require(overlay->shown_count == 0, "Shown values not cleared");
+    for (u32 i = 0; i < want_shown_count; ++i)
+        control::show(*overlay, want_shown[i].track, want_shown[i].index, want_shown[i].value);
 }
 // Machine 41, not unique: each copy overlays its scripted entries, with its
 // copy's own count of runs, and asks to capture and mark when told.
@@ -672,5 +678,28 @@ int main() {
     mute_flags(0, 11) = 0;
     want_take = 0;
     want_popup[0] = 0;
+
+    // Shown values: pages show them in place of what plays, which doesn't change;
+    // the machine's own track is ignored; a turned knob shows its edit; muted, none.
+    sdk_gui_tick();
+    const i32 playing_value = value(4, 3), own_shown = sdk_param_shown(kProject, 11, 2, 1);
+    want_shown[0] = {4, 3, 0, 4321};
+    want_shown[1] = {11, 2, 0, 99};
+    want_shown_count = 2;
+    tick(0, "Shown values written to what plays");
+    require(value(4, 3) == playing_value && sdk_param_shown(kProject, 4, 3, 1) == 4321 &&
+            sdk_param_shown(kProject, 4, 3, 0) == 4321, "Shown value not shown");
+    require(sdk_param_shown(kProject, 11, 2, 1) == own_shown, "Own track's shown value applied");
+    sdk_param_edit_set(kProject, 4, 3, 50);
+    require(sdk_param_shown(kProject, 4, 3, 1) == 50, "A turned knob didn't show its edit");
+    for (u32 i = 0; i < 41; ++i) sdk_gui_tick();
+    require(sdk_param_shown(kProject, 4, 3, 1) == 4321, "Shown value not back after the turn");
+    mute_flags(0, 11) = 0x02;
+    sdk_gui_tick();
+    require(sdk_param_shown(kProject, 4, 3, 1) == 50, "A muted machine's shown value applied");
+    mute_flags(0, 11) = 0;
+    want_shown_count = 0;
+    sdk_gui_tick();
+    require(sdk_param_shown(kProject, 4, 3, 1) == 50, "A shown value outlived its tick");
     return 0;
 }

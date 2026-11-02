@@ -143,6 +143,26 @@ control::Gesture gestures[control::gesture_capacity];
 bool taking[control::all_tracks];
 // The popup a machine asked for, kept while stock shows it.
 char popup_text[control::popup_bytes];
+// What the pages show this tick in place of what plays (Overlay::shown), from
+// every machine, the later track's winning a parameter.
+const u32 kShownCapacity = 2 * control::shown_capacity;
+control::Entry shown_values[kShownCapacity];
+u32 shown_value_count;
+control::Entry* shown_value(u32 track, u32 index) {
+    for (u32 i = 0; i < shown_value_count; ++i)
+        if (shown_values[i].track == track && shown_values[i].index == index) return &shown_values[i];
+    return nullptr;
+}
+void merge_shown(u32 host, const control::Overlay& o) {
+    const u32 count = o.shown_count < control::shown_capacity ? o.shown_count : control::shown_capacity;
+    for (u32 i = 0; i < count; ++i) {
+        const control::Entry& e = o.shown[i];
+        if (e.track >= control::all_tracks || e.index >= control::track_parameters || e.track == host) continue;
+        control::Entry* to = shown_value(e.track, e.index);
+        if (!to && shown_value_count < kShownCapacity) to = &shown_values[shown_value_count++];
+        if (to) *to = {e.track, e.index, 0, e.value < 0 ? 0 : e.value};
+    }
+}
 
 }
 
@@ -294,8 +314,11 @@ extern "C" i32 sdk_param_shown(u32 project, u32 track, u32 index, u32 playing) {
     const Applied* a = track < control::tracks && index < control::track_parameters ? find(track, index) : nullptr;
     const bool turned = track == turned_track && index == turned_index && gui_ticks - turned_tick < kTurnTicks;
     // A silently captured parameter shows its edited value while it is turned, then what plays.
-    if (const Original* o = silent() ? captured(track, index) : nullptr)
-        return turned ? base(track, index) : silent_value(*o);
+    const Original* o = silent() ? captured(track, index) : nullptr;
+    if (o && turned) return base(track, index);
+    // What a machine asks the pages to show, in place of what plays.
+    if (const control::Entry* e = turned ? nullptr : shown_value(track, index)) return e->value;
+    if (o) return silent_value(*o);
     if (a && !turned) return a->written;
     if (playing && !a) return live(track, index);
     return stock<i32(u32, u32, u32)>(0x8d5ac910)(project, track, index);
@@ -427,6 +450,7 @@ extern "C" void sdk_control_forget() {
     sdk_control_queue_page_key(kNoTrack, 0);
     gesture_track = kNoTrack;
     gesture_count = 0;
+    shown_value_count = 0;
     original_count = pending_count = applied_count = wanted_count = 0;
     capture_track = kNoTrack;
     capture_extension = extension_asks = 0;
@@ -503,6 +527,7 @@ extern "C" void sdk_control_tick() {
     const u32 now = opxy::benchmark::cycles(), us = (now - last_cycles) / kCyclesPerMicrosecond;
     last_cycles = now;
     wanted_count = 0;
+    shown_value_count = 0;
     bool loaded = false, kept = false;
     u32 asking = kNoTrack, kept_mode = 0, asking_mode = 0;
     for (u32 t = 0; t < control::all_tracks; ++t) {
@@ -556,11 +581,13 @@ extern "C" void sdk_control_tick() {
         overlay.mark = 0;
         overlay.take = 0;
         overlay.popup[0] = 0;
+        overlay.shown_count = 0;
         for (u32 i = 0; i < control::display_words; ++i) overlay.display[i] = 0;
         m->control(copy, &input, &overlay);
         for (u32 p = 0; p < kEngineControls; ++p) input.values[t][p] = own[p];
         if (overlay.count > control::overlay_capacity) overlay.count = control::overlay_capacity;
-        if (input.muted) overlay.count = overlay.capture = overlay.mark = overlay.take = 0;
+        if (input.muted) overlay.count = overlay.capture = overlay.mark = overlay.take = overlay.shown_count = 0;
+        merge_shown(t, overlay);
         taking[t] = overlay.take && m->claims;
         if (overlay.popup[0] && !input.muted) {
             u32 n = 0;

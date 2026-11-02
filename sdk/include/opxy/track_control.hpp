@@ -30,6 +30,7 @@ const u32 edit_capacity = 32;
 // Words the machine passes to its own display each tick (Overlay::display).
 const u32 display_words = 4;
 const u32 gesture_capacity = 8;
+const u32 shown_capacity = 64;
 // A popup's text (Overlay::popup), its terminating zero included.
 const u32 popup_bytes = 32;
 // A machine that declares resources.trackControl.savedBytes (1..saved_capacity)
@@ -117,7 +118,23 @@ struct Overlay {
     // Empty on entry. A short text (1 to popup_bytes - 1 characters, then a
     // zero) shows once as stock's popup, on any page.
     char popup[popup_bytes];
+    // 0 on entry; at most shown_capacity. Values the pages show for these
+    // parameters this tick, in place of what plays, which doesn't change (a
+    // state being written can show its stored values). Entries for the
+    // machine's own track are ignored, and of two machines showing one
+    // parameter, the later track wins. A knob being turned still shows its edit.
+    u32 shown_count;
+    Entry shown[shown_capacity];
 };
+
+inline void show(Overlay& overlay, u32 track, u32 index, i32 value) {
+    if (overlay.shown_count >= shown_capacity || track >= all_tracks || index >= track_parameters) return;
+    Entry& entry = overlay.shown[overlay.shown_count++];
+    entry.track = static_cast<u8>(track);
+    entry.index = static_cast<u8>(index);
+    entry.reserved = 0;
+    entry.value = value;
+}
 
 // GUI side, for a display: how many tracks hold the same machine as `track`,
 // `track` included. A unique machine runs only while exactly one does.

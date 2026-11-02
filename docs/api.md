@@ -404,6 +404,16 @@ alone is the machine's. Ask again every tick. Several machines in a build may
 hold the same claim; the first track running one gets it.
 [`ChordTap`](../sdk/include/opxy/chord_tap.hpp) tells a chord from a tap.
 
+A machine can also change what pages show without changing what plays:
+`opxy::control::show(overlay, track, index, value)` adds up to 64 entries
+for this tick, and pages show those values for those parameters in place of
+what plays, whether or not the sequencer plays. A machine writing a state
+silently, for example, shows the state's stored values, so the pages show
+what the state holds. Entries for the machine's own track are ignored; of two
+machines showing one parameter, the later track wins; while a knob is turned,
+its page shows the edit, then the shown value again. Like overlays, shown
+values last one tick and nothing of them applies while the machine is muted.
+
 A machine shows a short popup over any page by writing its text (1 to 31
 characters, then a zero) into `overlay.popup`, which arrives empty; it shows
 once, as stock's own popups do.
