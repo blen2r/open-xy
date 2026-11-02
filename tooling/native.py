@@ -257,7 +257,8 @@ def service_users(machines):
     users += ['capture' for e in extensions_of(machines) if 'capture' in e.actions]
     return (users + ['trackControl' for m in machines if track_control(m)] +
             ['auxTrack' for m in machines if track_control(m) and track_control(m).get('aux')] +
-            ['gesture' for m in machines if track_control(m) and track_control(m).get('claims')])
+            ['gesture' for m in machines if track_control(m) and
+             (track_control(m).get('claims') or track_control(m).get('keyboard'))])
 
 
 def module_bytes(profile):

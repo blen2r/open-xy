@@ -69,7 +69,7 @@ class TrackControl(unittest.TestCase):
         self.assertNotIn('sdk/track_control_table.o', native.object_owners(machines))
         with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
             table = generate_track_controls(folder, machines).read_text(encoding='utf-8')
-        self.assertIn('{nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}, false, 0}', table)
+        self.assertIn('{nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}, false, 0, false}', table)
         self.assertNotIn('probesynth', table)
 
     def test_a_machine_that_keeps_data_exports_save_and_load(self):
@@ -104,7 +104,13 @@ class TrackControl(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='track-control-') as folder:
             table = generate_track_controls(folder, [claiming]).read_text(encoding='utf-8')
             bit = 1 << list(extensions.registry()[0]).index('metronome_chord')
-            self.assertIn(f', false, {bit:#x}u}},', table)
+            self.assertIn(f', false, {bit:#x}u, false}},', table)
+            keyboard = dataclasses.replace(synth, definition=with_control(synth.definition, {**base, 'keyboard': True}))
+            self.assertIn(', false, 0x0u, true},', generate_track_controls(folder, [keyboard]).read_text(encoding='utf-8'))
+        self.assertIn('keys', native.active_services(config(), native.service_users([keyboard])))
+        for bad in ({**base, 'keyboard': 1}, {'stateBytes': 8, 'stateAlignment': 4, 'aux': [12], 'keyboard': True}):
+            with self.subTest(control=bad), self.assertRaises(ValueError):
+                validate_definition(with_control(synth.definition, bad), 'synth')
         # The keys service (the key queue's site) and its unit come with a claim, or with extensions.
         site = next(p for p in config()['patches'] if p.get('symbol') == 'sdk_key_queue')
         self.assertEqual(site['service'], 'keys')

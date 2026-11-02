@@ -408,6 +408,13 @@ alone is the machine's. Ask again every tick. Several machines in a build may
 hold the same claim; the first track running one gets it.
 [`ChordTap`](../sdk/include/opxy/chord_tap.hpp) tells a chord from a tap.
 
+A unique machine can also take the keyboard on its own track, for playing it
+like an instrument (Morphose playing a state while a key is held, say):
+`"keyboard": true` in `trackControl`. While its track is selected and unmuted,
+the keyboard's keys reach `gestures` with `lead` 0, presses and releases, and
+never stock; a chord claim's keys come first. Sequenced notes on its track
+don't arrive this way.
+
 A machine can also change what pages show without changing what plays:
 `opxy::control::show(overlay, track, index, value)` adds up to 64 entries
 for this tick, and pages show those values for those parameters in place of

@@ -54,7 +54,9 @@ struct Entry { u8 track, index; u16 reserved; i32 value; };
 // while the claim's held key (`lead`, opxy/keys.hpp) is down, a chord key
 // pressed (1) or released (0); while the machine takes the held key
 // (Overlay::take), the held key's own press and release too, with key == lead.
-// None of them reach stock.
+// None of them reach stock. A machine that takes the keyboard
+// (resources.trackControl.keyboard) also gets the keyboard's keys while its
+// track is selected and no chord is held, with lead 0.
 struct Gesture { u8 lead, key, pressed, reserved; };
 
 struct Input {

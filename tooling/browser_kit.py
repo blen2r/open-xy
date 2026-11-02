@@ -158,7 +158,8 @@ def export(package, output, tools, preview_cxx='clang++', *, stock_catalog, pers
                 ('sdk_extensions_claim_owner', 'sdk_extensions_gesture', 'sdk_extensions_takes'), 'kit_absent'))
     if 'keys' in active and 'control' in active:
         kit.setdefault('serviceFallbacks', {}).setdefault('control', {}).update(dict.fromkeys(
-            ('sdk_control_claimant', 'sdk_control_queue_gesture', 'sdk_control_takes'), 'kit_absent'))
+            ('sdk_control_claimant', 'sdk_control_queue_gesture', 'sdk_control_takes',
+             'sdk_control_keyboard_track'), 'kit_absent'))
     kit_path = output / 'kit.json'
     kit_path.write_text(json.dumps(kit, separators=(',', ':')), encoding='utf-8')
     # Reference validation exercises every subset against GNU ld. Failure leaves

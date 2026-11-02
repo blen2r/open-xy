@@ -9,6 +9,7 @@
 extern "C" opxy::u32 sdk_control_claimant(opxy::u32) { return 0; }
 extern "C" void sdk_control_queue_gesture(opxy::u32, const opxy::platform::KeyGesture*) {}
 extern "C" opxy::u32 sdk_control_takes(opxy::u32) { return 0; }
+extern "C" opxy::u32 sdk_control_keyboard_track() { return 0; }
 extern "C" opxy::u32 sdk_capture_request(opxy::u32, opxy::u32) { return 0; }
 extern "C" opxy::u32 sdk_capture_holds(opxy::u32) { return 0; }
 extern "C" opxy::u32 sdk_capture_edits(opxy::u32, opxy::extensions::Edit*, opxy::u32) { return 0; }

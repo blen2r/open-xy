@@ -593,8 +593,9 @@ def generate_track_controls(directory, machines):
                 'A machine that takes over aux tracks names its presets in at most 15 characters')
         # Its chord claims, as bits in the registry's order.
         claims = sum(1 << i for i, name in enumerate(registry()[0]) if name in track_control(m).get('claims', ()))
+        keyboard = 'true' if track_control(m).get('keyboard') else 'false'
         rows.append(f'    {{{p}_engine_id, {p}_ready, {p}_control_reset, {p}_control, "{m.id}", {saved}, {callbacks}, '
-                    f'{unique}, {aux:#x}u, {page}, {{{defaults}}}, {shared_lfo}, {claims:#x}u}},')
+                    f'{unique}, {aux:#x}u, {page}, {{{defaults}}}, {shared_lfo}, {claims:#x}u, {keyboard}}},')
     return expand('track_control_table.cpp.in', dict(CONTROL_DECLS='\n'.join(declarations), MACHINES='\n'.join(rows)),
                   Path(directory) / 'track_control_table.cpp')
 

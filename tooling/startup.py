@@ -110,7 +110,9 @@ def render(prefixes, effects=(), stock_page=(), sample_screens=(), effect_screen
                       'extern "C" u32 sdk_control_takes(u32) __asm__("sdk_control_takes");',
                       'u32 sdk_control_claimant(u32) { return 0; }',
                       'void sdk_control_queue_gesture(u32, const void*) {}',
-                      'u32 sdk_control_takes(u32) { return 0; }']
+                      'u32 sdk_control_takes(u32) { return 0; }',
+                      'extern "C" u32 sdk_control_keyboard_track() __asm__("sdk_control_keyboard_track");',
+                      'u32 sdk_control_keyboard_track() { return 0; }']
     if aux:
         require(control, 'The aux service needs the control service')
         declarations.append('void sdk_aux_startup() __asm__("sdk_aux_startup");')

@@ -31,4 +31,7 @@ opxy::u32 sdk_control_claimant(opxy::u32 claim) __asm__("sdk_control_claimant");
 void sdk_control_queue_gesture(opxy::u32 track, const opxy::platform::KeyGesture* gesture)
     __asm__("sdk_control_queue_gesture");
 opxy::u32 sdk_control_takes(opxy::u32 track) __asm__("sdk_control_takes");
+// The track (plus 1) of a running, unmuted machine that takes the keyboard
+// while its track is selected (resources.trackControl.keyboard), or 0.
+opxy::u32 sdk_control_keyboard_track() __asm__("sdk_control_keyboard_track");
 }

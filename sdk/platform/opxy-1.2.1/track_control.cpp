@@ -453,6 +453,10 @@ extern "C" void sdk_control_queue_gesture(u32 track, const KeyGesture* g) {
                                  static_cast<u8>(g->pressed ? 1 : 0), 0};
 }
 extern "C" u32 sdk_control_takes(u32 track) { return track < control::all_tracks && taking[track]; }
+extern "C" u32 sdk_control_keyboard_track() {
+    const u32 t = selected_track();
+    return t < control::all_tracks && hosts[t] && hosts[t]->keyboard && !muted(t) ? t + 1 : 0;
+}
 
 extern "C" void sdk_control_forget() {
     sdk_control_queue_page_key(kNoTrack, 0);

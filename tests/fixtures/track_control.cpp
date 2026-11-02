@@ -169,7 +169,7 @@ const volatile unsigned short* stock_project_tempo() { return &tempo; }
 
 extern "C" {
 const opxy::platform::ControlMachine sdk_control_machines[] = {
-    {reinterpret_cast<const char*>(40), ready, reset, run, nullptr, 0, nullptr, nullptr, true, 1u << 11, nullptr, {}, true, 2u},
+    {reinterpret_cast<const char*>(40), ready, reset, run, nullptr, 0, nullptr, nullptr, true, 1u << 11, nullptr, {}, true, 2u, true},
     {reinterpret_cast<const char*>(41), ready, reset_other, run_other, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}},
     {nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, false, 0, nullptr, {}}};
 const opxy::u32 sdk_control_machine_count = 2;
@@ -722,6 +722,17 @@ int main() {
     tick(0, "End of capture wrote an overlay");
     require(bases[13][2] == 0 && bases[12][1] == 70, "Aux capture not restored, or a held track's edit undone");
     aux_engines[12] = 0;
+
+    // The keyboard on the machine's own track, while that track is selected and unmuted.
+    selected = 11;
+    require(sdk_control_keyboard_track() == 12, "Keyboard not the machine's on its track");
+    selected = 0;
+    require(sdk_control_keyboard_track() == 0, "Keyboard taken on another track");
+    selected = 11;
+    mute_flags(0, 11) = 0x02;
+    require(sdk_control_keyboard_track() == 0, "A muted machine took the keyboard");
+    mute_flags(0, 11) = 0;
+    selected = 0;
 
     // Mark text: the marking machine's, while its marks show.
     capture = 1;

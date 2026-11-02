@@ -4,7 +4,9 @@
 // is known not to start a chord: released alone, or followed by a key that
 // isn't a chord key, its press reaches stock after all; chord keys pressed
 // meanwhile go to the claim's owner, with their releases, and never to stock.
-// Everything else continues to the extensions' wrapper, or stock.
+// A machine that takes the keyboard on its own track gets the keyboard's keys
+// while that track is selected, the same way. Everything else continues to
+// the extensions' wrapper, or stock.
 #include "../keys.hpp"
 #include <opxy/keys.hpp>
 #include "stock.hpp"
@@ -32,8 +34,12 @@ bool takes(const Owner& o) {
     if (o.extension) return sdk_extensions_takes(o.extension) != 0;
     return o.track && sdk_control_takes(o.track - 1);
 }
+// The keyboard taken on a machine's own track: no claim and no held key.
+const u32 kKeyboard = kChordCount, kNoClaim = ~0u;
 void deliver(const Owner& o, u32 chord, u32 key, bool pressed) {
-    KeyGesture g = {kChordClaims[chord].claim, kChordClaims[chord].lead, key, pressed ? 1u : 0u, 0};
+    const bool claim = chord < kChordCount;
+    KeyGesture g = {claim ? kChordClaims[chord].claim : kNoClaim, claim ? kChordClaims[chord].lead : 0, key,
+                    pressed ? 1u : 0u, 0};
     // The clock writes a full 64-bit microsecond value through its argument.
     stock<void(__UINT64_TYPE__*)>(0x8d5be3a0)(&g.time);
     if (o.extension) sdk_extensions_gesture(o.extension, &g);
@@ -63,7 +69,7 @@ void dispatch(const u32* event) {
     if (key < kKeys && !pressed && kept[key].kept) {
         const Kept k = kept[key];
         kept[key].kept = false;
-        if (key == kChordClaims[k.chord].lead) leads[k.chord].down = false;
+        if (k.chord < kChordCount && key == kChordClaims[k.chord].lead) leads[k.chord].down = false;
         deliver(k.owner, k.chord, key, false);
         return;
     }
@@ -110,6 +116,13 @@ void dispatch(const u32* event) {
             sdk_extensions_key(l.event);
         }
     }
+    if (pressed && keys::keyboard(key) && byte(kInputEnabled))
+        if (const u32 track = sdk_control_keyboard_track()) {
+            const Owner o = {0, track};
+            keep(key, kKeyboard, o);
+            deliver(o, kKeyboard, key, true);
+            return;
+        }
     sdk_extensions_key(event);
 }
 }

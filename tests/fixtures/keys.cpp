@@ -31,6 +31,8 @@ void sdk_control_queue_gesture(u32 track, const KeyGesture* g) {
     heard_track = track + 1;
 }
 u32 sdk_control_takes(u32 track) { return track + 1 == machine_track && machine_takes; }
+u32 keyboard_track;
+u32 sdk_control_keyboard_track() { return keyboard_track; }
 }
 namespace opxy { namespace platform {
 Address host_stock_address(Address address) {
@@ -110,5 +112,19 @@ int main() {
     reset(); extension_owner = 1; machine_takes = 0;
     key(1, true); key(40, true); key(40, false); key(1, false);
     CHECK(heard_by_extension == 1 && heard_track == 0);
+    // A machine taking the keyboard on its selected track gets keyboard keys, lead 0;
+    // other keys, and a chord, are as before.
+    reset(); extension_owner = 0; machine_track = 0; keyboard_track = 12;
+    key(30, true); key(14, true); key(14, false); key(30, false);
+    const u32 others[] = {29, 28};
+    CHECK(stocked_is(others, 2) && heard_count == 2 && heard_track == 12 && heard[0].lead == 0 &&
+          heard[0].key == 30 && heard[0].claim == ~0u && !heard[1].pressed);
+    reset(); input_enabled = 0;
+    key(30, true); key(30, false); input_enabled = 1;
+    CHECK(stock_count == 2 && heard_count == 0);
+    reset(); machine_track = 12;
+    key(1, true); key(30, true); key(30, false); key(1, false);
+    CHECK(stock_count == 0 && heard_count == 2 && heard[0].lead == 1);
+    keyboard_track = 0;
     return 0;
 }
