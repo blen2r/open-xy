@@ -119,7 +119,15 @@ flowchart LR
 
 [`tooling/native.py`](../tooling/native.py) chooses the services from the
 selection (`service_users`) and the units each one links (`UNIT_SERVICES`);
-the browser builder does the same from the kit. A feature that needs new sites
+the browser builder does the same from the kit.
+
+A site belongs to exactly one service. When several features need the same
+site, it gets a small shared service of its own, used by each of them, with a
+dispatcher that calls each user the build links, in a fixed order. Prefer small
+mechanisms that each feature switches on when it needs them over one feature
+that every build must carry.
+
+A feature that needs new sites
 adds a service, or extends the one it belongs to, rather than editing builds
 that don't use it.
 
@@ -216,6 +224,29 @@ The details, including the startup label and the catalog, are in the
 Keep the docs at their owning layer: this page links rather than repeats them.
 When a change adds a layer, a service or a runtime path, update the diagrams
 here.
+
+## In progress
+
+Being built on `sdk/states` (#336), not in `staging` yet:
+
+- **A shared GUI tick.** The GUI tick's site becomes a small `tick` service,
+  used by track control and by extensions; its dispatcher makes stock's call,
+  then track control's, then the extensions' new `gui_tick` event.
+- **A parameter's layers.** Track control decides what plays in one place, in
+  a fixed order:
+
+```mermaid
+flowchart BT
+    stored["Stored value<br/>(saved; encoder turns)"]
+    live["Stock's live value<br/>(steps and parameter locks)"]
+    hold["Silent capture's hold<br/>(what plays without the capture's edits)"]
+    overlay["Machines' overlays<br/>(by track; the later track wins)"]
+    plays["What plays and the page shows"]
+    stored --> live --> hold --> overlay --> plays
+```
+
+Proposed elsewhere, to be described here once agreed: LFO types (#334) and
+several LFOs per track (#325), as separate layers.
 
 ## Glossary
 
